@@ -694,7 +694,7 @@ export class Game {
       integrite: this.pilote.integrite,
       apex: this.apex.filter((a) => a.vivant).length,
       apexMax: this.stats.apexMax,
-      substrat: ech.substrat.nom, boucle: ech.boucle,
+      substrat: ech.substrat.court || ech.substrat.nom, boucle: ech.boucle,
       aw: Math.round(ech.aw * 1000) / 1000,
       temp: Math.round(ech.temp * 10) / 10,
       af: ech.af, charge: this.charge,

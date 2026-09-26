@@ -52,7 +52,7 @@ export function hud(scr, g, cmd) {
 
   /* --- bandeau haut : le milieu -------------------------------------- */
   bande(scr, 0, 0, W, 9, 0.66);
-  drawText(scr, e.substrat.toUpperCase().slice(0, 12), 2, 2, UI.text);
+  drawText(scr, e.substrat.toUpperCase().slice(0, 13), 2, 2, UI.text);
   let x = 2 + 58;
   if (e.boucle > 0) { drawText(scr, 'x' + (e.boucle + 1), x, 2, UI.textHot); x += 12; }
   /* aw : trois decimales, parce que 0,88 et 0,86 ne sont pas le meme jeu. */

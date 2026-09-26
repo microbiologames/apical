@@ -72,7 +72,12 @@ export class Input {
   }
 
   _down(e) {
-    if (e.pointerType === 'mouse') return;
+    /* La souris ne pilote pas le jeu, mais elle doit pouvoir le DEMARRER :
+       l'ecran de titre n'attendait qu'une touche, donc sur une page ouverte
+       d'un clic (un artifact, un iframe) on cliquait sans rien obtenir et on
+       concluait que le jeu ne marchait pas. Un clic compte donc comme une
+       pression, et seul le pilotage reste reserve au tactile. */
+    if (e.pointerType === 'mouse') { this.anyPress = true; return; }
     e.preventDefault();
     this.anyPress = true;
     const { u, r } = this._local(e);

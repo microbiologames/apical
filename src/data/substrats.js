@@ -45,10 +45,14 @@ export const AW_MIN_BASE = 0.88;
    une boucle d'a peu pres huit minutes. Les premieres longueurs, posees a
    1400 px a l'estime, faisaient qu'aucune manche sur 96 ne voyait le second
    substrat : les trois quarts du contenu n'existaient pas. */
+/* `court` est le nom affiche par le HUD. La fonte fait 3 px de large et la
+   colonne en tient douze caracteres : « Pellicule du fruit » s'y affichait
+   « PELLICULE DU », ce qui se lit comme un bug d'affichage. Un nom long et un
+   nom court valent mieux qu'un nom tronque. */
 export const SUBSTRATS = [
   {
     id: 'pellicule',
-    nom: 'Pellicule du fruit',
+    nom: 'Pellicule du fruit', court: 'PELLICULE',
     /* Une cuticule est riche en eau mais pauvre en sucre accessible : le
        sucre est DEDANS, la cuticule est une barriere ciree. D'ou le premier
        arbitrage du jeu : traverser vite vers la chair, ou brouter la surface. */
@@ -64,7 +68,7 @@ export const SUBSTRATS = [
   },
   {
     id: 'mesocarpe',
-    nom: 'Mesocarpe',
+    nom: 'Mesocarpe', court: 'MESOCARPE',
     /* La chair : le substrat le plus genereux du jeu, et le plus encombre.
        Les parois cellulaires vegetales forment un reseau polygonal ou l'on
        circule dans les interstices. C'est la que la ramification paie. */
@@ -83,7 +87,7 @@ export const SUBSTRATS = [
   },
   {
     id: 'confiture',
-    nom: 'Confiture',
+    nom: 'Confiture', court: 'CONFITURE',
     /* 68 Brix : le sucre est ENORME et l'eau introuvable. Le substrat
        retourne les deux ressources l'une contre l'autre, et c'est le seul
        du jeu a le faire. Sans osmotolerance on n'y entre pas. */
@@ -101,7 +105,7 @@ export const SUBSTRATS = [
   },
   {
     id: 'grain',
-    nom: 'Grain stocke',
+    nom: 'Grain stocke', court: 'GRAIN',
     /* Ble a 14 % d'humidite : aw 0.70, la zone des Aspergillus et Eurotium.
        Le sucre est en AMIDON, donc inaccessible sans amylase — le substrat
        qui transforme un gene d'hydrolase en cle de porte. Et un silo
