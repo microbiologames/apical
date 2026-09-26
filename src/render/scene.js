@@ -22,8 +22,7 @@
 --------------------------------------------------------------------------- */
 
 import { clamp, lerp, hash2 } from '../core/util.js';
-import { mix32, fade32, bayer, hexToRgba } from '../core/pixel.js';
-import { CONIDIES } from '../data/palette.js';
+import { mix32, fade32, bayer } from '../core/pixel.js';
 
 /* Pas de la grille d'echantillonnage du fond. 6 px : 43 x 59 echantillons pour
    un champ de 256 x 352, soit 2 500 appels de bruit par image au lieu de
@@ -42,10 +41,11 @@ const TEINTE_AF = { azole: 'azole', echino: 'echino', polyene: 'polyene', sorbat
 export function fond(scr, pal, champ, cam) {
   scr.clip = false;
   const W = scr.w, H = scr.h;
+  const zz = cam.z || 1;
   let somme = 0, n = 0;
   for (let sy = 0; sy < H; sy += PAS_FOND) {
     for (let sx = 0; sx < W; sx += PAS_FOND) {
-      const wx = cam.x + (sx - cam.cx), wy = cam.y - (sy - cam.cy);
+      const wx = cam.x + (sx - cam.cx) / zz, wy = cam.y - (sy - cam.cy) / zz;
       const ech = champ.echantillon(wx, wy);
       somme += ech.sucre; n++;
       /* Base : le fond du substrat, assombri quand l'eau se retire. Une aw de
@@ -68,7 +68,11 @@ export function fond(scr, pal, champ, cam) {
           const x = sx + i, y = sy + j;
           if (x >= W || y >= H) continue;
           let cc = c;
-          const h = hash2((x >> 1) * 3 + 7, (y >> 1) * 5 + 11);
+          /* Taille du grain indexee sur le ZOOM : a z = 2,4 un granule de
+             milieu mesure 2 a 3 px et non 1, sinon il redevient du bruit de
+             capteur des qu'on se rapproche. */
+          const q = Math.max(1, Math.round(zz * 0.9));
+          const h = hash2(Math.floor(x / q) * 3 + 7, Math.floor(y / q) * 5 + 11);
           if (g > 0.08 && h < g * 0.16) {
             cc = mix32(cc, pal.sucre, 0.26 + g * 0.26);
           } else if (sec > 0.3 && h > 1 - sec * 0.10) {
@@ -99,51 +103,69 @@ export function fond(scr, pal, champ, cam) {
  * objets du plan 0 arretent l'apex, et c'est game.js qui l'applique.
  */
 export function decor(scr, pal, champ, cam) {
-  const x0 = cam.x - cam.cx - 24, x1 = cam.x + (scr.w - cam.cx) + 24;
-  const y0 = cam.y - (scr.h - cam.cy) - 24, y1 = cam.y + cam.cy + 24;
+  const z = cam.z || 1;
+  const x0 = cam.x - (cam.cx + 24) / z, x1 = cam.x + (scr.w - cam.cx + 24) / z;
+  const y0 = cam.y - (scr.h - cam.cy + 24) / z, y1 = cam.y + (cam.cy + 24) / z;
   for (const o of champ.dansRect(x0, y0, x1, y1)) {
-    const sx = cam.cx + (o.x - cam.x), sy = cam.cy - (o.y - cam.y);
+    const sx = cam.cx + (o.x - cam.x) * z, sy = cam.cy - (o.y - cam.y) * z;
     if (o.type === 'obstacle') {
       if (o.mort) continue;
-      dessinerObstacle(scr, pal, o, sx, sy);
+      dessinerObstacle(scr, pal, o, sx, sy, z);
+    } else if (o.type === 'sel') {
+      /* CRISTAL DE SEL. Il ne fait rien par lui-meme : il rend visible le puits
+         d'activite de l'eau qu'il cree autour de lui. Cubique, incolore,
+         refringent — c'est son arete qu'on voit et non sa masse, donc on le rend
+         en carré a bord dur avec un angle brillant. La poche s'annonce ainsi
+         AVANT d'etre traversee, ce qui en fait un choix de trajectoire. */
+      const r = o.r * z;
+      const ca = Math.cos(o.ang), sa = Math.sin(o.ang);
+      scr.layer(0);
+      for (let a = -r; a <= r; a += 0.7) {
+        for (let b = -r; b <= r; b += 0.7) {
+          const bord = Math.abs(a) > r - z * 0.7 || Math.abs(b) > r - z * 0.7;
+          scr.plot(sx + a * ca - b * sa, sy + a * sa + b * ca, bord ? pal.selRim : pal.sel);
+        }
+      }
+      scr.plot(sx - r * 0.4 * ca + r * 0.4 * sa, sy - r * 0.4 * sa - r * 0.4 * ca, pal.phase);
     } else if (o.type === 'granule' && !o.pris) {
       /* Un granule de reserve est REFRINGENT : clair, a bord marque, avec un
          point brillant. C'est ce qu'on voit d'un grain d'amidon ou d'une
          gouttelette lipidique en fond clair comme en fluorescence. */
       scr.layer(0);
-      scr.disc(sx, sy, o.r, pal.grain, pal.sucreRim);
-      scr.plot(sx - o.r * 0.3, sy - o.r * 0.3, pal.phase);
+      scr.disc(sx, sy, o.r * z, pal.grain, pal.sucreRim);
+      scr.plot(sx - o.r * z * 0.3, sy - o.r * z * 0.3, pal.phase);
       if (o.amidon) {
         /* Le hile : la croix de Malte d'un grain d'amidon. Elle SIGNALE au
            joueur qu'il lui faut une amylase, sans aucun texte. */
-        for (let k = -o.r + 1; k <= o.r - 1; k += 1) {
+        for (let k = -o.r * z + 1; k <= o.r * z - 1; k += 0.8) {
           scr.plot(sx + k, sy, pal.sucreRim);
           scr.plot(sx, sy + k, pal.sucreRim);
         }
       }
       scr.layer(5);
-      scr.disc(sx, sy, o.r + 1.6, fade32(pal.sucre, 0.16));
+      scr.disc(sx, sy, o.r * z + 1.6 * z, fade32(pal.sucre, 0.16));
     } else if (o.type === 'goutte' && !o.pris) {
       scr.layer(0);
-      scr.disc(sx, sy, o.r, fade32(pal.eau, 0.55), pal.eauRim);
-      scr.ring(sx, sy, o.r - 1, 1, pal.phase);
+      scr.disc(sx, sy, o.r * z, fade32(pal.eau, 0.55), pal.eauRim);
+      scr.ring(sx, sy, o.r * z - z, Math.max(1, z * 0.7), pal.phase);
       scr.layer(6);
-      scr.disc(sx, sy, o.r + 2.4, fade32(pal.eau, 0.20));
+      scr.disc(sx, sy, (o.r + 2.4) * z, fade32(pal.eau, 0.20));
     } else if (o.type === 'locus' && !o.pris) {
       /* Un locus n'est pas un objet du milieu : c'est un signal. Il a donc le
          droit de PULSER, ce qui est refuse a tout le reste du decor. */
       scr.layer(0);
       const k = 0.6 + 0.4 * Math.sin(performance.now() / 260);
-      scr.disc(sx, sy, o.r, pal.locus, pal.locusRim);
-      scr.ring(sx, sy, o.r + 1.5 + k, 1, fade32(pal.locus, 0.5 + 0.4 * k));
+      scr.disc(sx, sy, o.r * z, pal.locus, pal.locusRim);
+      scr.ring(sx, sy, o.r * z + (1.5 + k) * z, Math.max(1, z * 0.7), fade32(pal.locus, 0.5 + 0.4 * k));
       scr.layer(5);
-      scr.disc(sx, sy, o.r + 4, fade32(pal.locus, 0.14));
+      scr.disc(sx, sy, (o.r + 4) * z, fade32(pal.locus, 0.14));
     }
   }
   scr.layer(0);
 }
 
-function dessinerObstacle(scr, pal, o, sx, sy) {
+function dessinerObstacle(scr, pal, o, sx, sy, z) {
+  const R = o.r * z, RY = o.ry * z;
   /* Le plan vient de la DONNEE (champ.js), jamais d'un hachage local : le rendu
      et la collision doivent lire le meme chiffre, sinon le flou mentirait sur ce
      qui bloque. Sept objets sur dix sont hors du plan de l'hyphe et se
@@ -158,19 +180,19 @@ function dessinerObstacle(scr, pal, o, sx, sy) {
     case 'amidon':
       /* Un grain d'amidon de ble est LENTICULAIRE et porte un hile central. Le
          dessiner rond en fait une bulle et l'amande de ble devient une mousse. */
-      scr.ellipse(sx, sy, o.r, o.ry, o.ang, fill, rim);
-      scr.ringE(sx, sy, o.r, o.ry, o.ang, 1, pal.phase);
-      scr.disc(sx, sy, 1, rim);
+      scr.ellipse(sx, sy, R, RY, o.ang, fill, rim);
+      scr.ringE(sx, sy, R, RY, o.ang, Math.max(1, z * 0.7), pal.phase);
+      scr.disc(sx, sy, Math.max(1, z * 0.6), rim);
       break;
     case 'cristal':
       /* Un cristal de saccharose est ANGULEUX. On l'approche par un losange :
          a cette taille, quatre aretes suffisent a le distinguer d'une goutte. */
-      for (let k = -o.r; k <= o.r; k += 0.7) {
-        const w = (1 - Math.abs(k) / o.r) * o.ry;
+      for (let k = -R; k <= R; k += 0.7) {
+        const w = (1 - Math.abs(k) / R) * RY;
         for (let m = -w; m <= w; m += 0.7) {
           const ca = Math.cos(o.ang), sa = Math.sin(o.ang);
           scr.plot(sx + k * ca - m * sa, sy + k * sa + m * ca,
-            Math.abs(k) > o.r - 1.2 || Math.abs(m) > w - 1 ? rim : fill);
+            Math.abs(k) > R - 1.2 * z || Math.abs(m) > w - z ? rim : fill);
         }
       }
       break;
@@ -178,62 +200,17 @@ function dessinerObstacle(scr, pal, o, sx, sy) {
       /* Une paroi cellulaire vegetale est une CLOISON, pas une boule : c'est
          elle qui fait les couloirs du mesocarpe. On la dessine comme un arc
          epais, ce qui donne au champ sa lecture de reseau polygonal. */
-      const n = 7;
+      const n = Math.max(7, Math.round(7 * z * 0.6));
       for (let i = 0; i < n; i++) {
         const a = o.ang + (i / (n - 1) - 0.5) * 1.9;
-        const px = sx + Math.cos(a) * o.r, py = sy + Math.sin(a) * o.r;
-        scr.disc(px, py, 2.1, fill, rim);
+        const px = sx + Math.cos(a) * R, py = sy + Math.sin(a) * R;
+        scr.disc(px, py, 2.1 * z, fill, rim);
       }
       break;
     }
     default:
       /* Ecaille de cire : basse, allongee, mate. */
-      scr.ellipse(sx, sy, o.r, o.ry * 0.7, o.ang, fill, rim);
-  }
-  scr.layer(0);
-}
-
-/**
- * Les concurrents.
- *
- * Ils sont rendus PLUS PALES ET LEGEREMENT FLOUS, sur le calque 1. Ce n'est pas
- * une hierarchie graphique : un autre mycelium pousse a une autre profondeur
- * dans le substrat, et c'est exactement comme cela qu'on le voit. Cela rend
- * aussi le champ lisible quand trois fronts se croisent — le joueur reste le
- * seul objet parfaitement net de l'image.
- */
-export function rivaux(scr, pal, competiteurs, rival, cam) {
-  const conidies = {};
-  for (const c of competiteurs) {
-    if (!conidies[c.espece]) {
-      const k = CONIDIES[c.espece] || CONIDIES.penicillium;
-      conidies[c.espece] = { fill: hexToRgba(k.fill), rim: hexToRgba(k.rim) };
-    }
-  }
-  scr.layer(1);
-  for (const b of rival.branches) {
-    const pts = b.pts;
-    for (let i = 1; i < pts.length; i++) {
-      const a = pts[i - 1], p = pts[i];
-      const ax = cam.cx + (a.x - cam.x), ay = cam.cy - (a.y - cam.y);
-      const px = cam.cx + (p.x - cam.x), py = cam.cy - (p.y - cam.y);
-      if ((ax < -12 && px < -12) || (ax > scr.w + 12 && px > scr.w + 12)) continue;
-      if ((ay < -12 && py < -12) || (ay > scr.h + 12 && py > scr.h + 12)) continue;
-      scr.seg(ax, ay, px, py, 3.4, pal.paroiMince, pal.paroiRim);
-    }
-  }
-  /* Les apex rivaux portent la couleur de conidies de leur espece. C'est la
-     seule information dont le joueur a besoin : elle dit a quelle vitesse le
-     front avance et donc s'il faut passer devant ou renoncer. */
-  for (const c of competiteurs) {
-    const col = conidies[c.espece];
-    for (const t of c.tips) {
-      const sx = cam.cx + (t.x - cam.x), sy = cam.cy - (t.y - cam.y);
-      scr.layer(1);
-      scr.disc(sx, sy, 2.6, col.fill, col.rim);
-      scr.layer(5);
-      scr.disc(sx, sy, 5, fade32(col.fill, 0.18));
-    }
+      scr.ellipse(sx, sy, R, RY * 0.7, o.ang, fill, rim);
   }
   scr.layer(0);
 }
@@ -247,14 +224,16 @@ export function rivaux(scr, pal, competiteurs, rival, cam) {
  * elles le fond paraissait peint derriere une vitre.
  */
 export function poussiere(scr, pal, cam, t) {
+  const zp = cam.z || 1;
   for (let nappe = 0; nappe < 2; nappe++) {
     const z = nappe === 0 ? 7 : 3;
     const par = nappe === 0 ? 0.55 : 1.25;   // parallaxe
     scr.layer(z);
     const pas = 44;
     const ox = cam.x * par, oy = cam.y * par;
-    const cx0 = Math.floor((ox - 140) / pas), cx1 = Math.floor((ox + 140) / pas);
-    const cy0 = Math.floor((oy - 200) / pas), cy1 = Math.floor((oy + 200) / pas);
+    const vx = (scr.w / zp) * 0.6 + 40, vy = (scr.h / zp) * 0.6 + 40;
+    const cx0 = Math.floor((ox - vx) / pas), cx1 = Math.floor((ox + vx) / pas);
+    const cy0 = Math.floor((oy - vy) / pas), cy1 = Math.floor((oy + vy) / pas);
     for (let cy = cy0; cy <= cy1; cy++) {
       for (let cx = cx0; cx <= cx1; cx++) {
         const h = hash2(cx * 31 + nappe * 977, cy * 17 + nappe * 131);
@@ -264,9 +243,9 @@ export function poussiere(scr, pal, cam, t) {
            ne file pas : elle tremble. */
         const dx = Math.sin(t * 0.35 + h * 40) * 2.2;
         const dy = Math.cos(t * 0.28 + h * 27) * 2.2;
-        const sx = cam.cx + (wx + dx - ox), sy = cam.cy - (wy + dy - oy);
-        if (sx < -6 || sx > scr.w + 6 || sy < -6 || sy > scr.h + 6) continue;
-        scr.disc(sx, sy, 0.9 + h * 2.2, fade32(pal.grain, 0.45), fade32(pal.grainRim, 0.5));
+        const sx = cam.cx + (wx + dx - ox) * zp, sy = cam.cy - (wy + dy - oy) * zp;
+        if (sx < -8 || sx > scr.w + 8 || sy < -8 || sy > scr.h + 8) continue;
+        scr.disc(sx, sy, (0.9 + h * 2.2) * zp, fade32(pal.grain, 0.45), fade32(pal.grainRim, 0.5));
       }
     }
   }

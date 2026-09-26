@@ -29,10 +29,21 @@ export class Thalle {
     this.noeuds = [];          // anastomoses : {x,y,t}
     this.longueur = 0;         // um cumules, tous apex confondus
     this.mailles = new Set();  // empreinte : une maille occupee = 256 um2
+    /* TRACE COMPLETE, jamais purgee : c'est la memoire du thalle entier, et
+       elle n'existe que pour la CARTE DE FIN DE MANCHE. La geometrie fine, elle,
+       est purgee derriere la camera (voir `purger`) parce qu'elle ne sert qu'a
+       la collision et au rendu de proximite.
+       Echantillonnee tous les 4 um : une manche de dix minutes a huit apex
+       produit environ 96 000 um de tube, soit 24 000 points, soit 200 ko. La
+       stocker au pas de la geometrie fine en aurait coute vingt fois plus pour
+       une carte qui tient dans 200 px de large. */
+    this.trace = [];           // {x, y, b} tous les 4 um
+    this._resteTrace = 0;
   }
 
   nouvelleBranche(parent, x, y) {
-    const b = { id: this.branches.length, parent, pts: [{ x, y, e: 1, t: 0, septum: false }], depuisSeptum: 0 };
+    const b = { id: this.branches.length, parent, pts: [{ x, y, e: 1, t: 0, septum: false }],
+      depuisSeptum: 0, longueur: 0 };
     this.branches.push(b);
     return b;
   }
@@ -50,16 +61,35 @@ export class Thalle {
     const d = Math.hypot(x - p0.x, y - p0.y);
     if (d < 0.9) return null;
     b.depuisSeptum += d;
+    b.longueur += d;
     let septum = false;
     if (b.depuisSeptum >= 44) { septum = true; b.depuisSeptum = 0; }
     const p = { x, y, e, t, septum };
     b.pts.push(p);
     this.longueur += d;
+    this._resteTrace += d;
+    if (this._resteTrace >= 4) {
+      this._resteTrace = 0;
+      /* Borne dure : au-dela de 60 000 points la carte de fin ne gagne plus
+         rien en lisibilite et le tableau commence a peser. On echantillonne
+         alors un point sur deux en jetant les plus anciens. */
+      if (this.trace.length > 60000) this.trace = this.trace.filter((_, i) => i & 1);
+      this.trace.push({ x, y, b: b.id });
+    }
     /* Le segment est enregistre dans TOUTES les mailles qu il traverse, par
        echantillonnage au pas de 6 px. Un simple enregistrement aux extremites
        laissait passer les croisements obliques : c est la premiere cause de
        faux negatif d un hachage spatial. */
-    const seg = { x0: p0.x, y0: p0.y, x1: x, y1: y, e, t, b: b.id };
+    /* `s` est l'abscisse curviligne DANS SA BRANCHE. Elle sert a exclure du test
+       de contact la paroi qu'on vient soi-meme de poser, et cette exclusion doit
+       etre en DISTANCE et non en temps — c'est un defaut qui a casse le jeu.
+       L'ancienne regle ignorait la paroi de moins d'une seconde : cale sur une
+       vitesse de croisiere de 20 um/s, elle protegeait les 20 um derriere
+       l'apex. Au regime lent (3 um/s) elle n'en protegeait plus que trois, donc
+       l'apex se declarait en contact avec son propre tube des la premiere
+       seconde et fusionnait. Mesure : 24 manches sur 24 mortes a 4,5 s.
+       En abscisse curviligne, la protection ne depend plus de l'allure. */
+    const seg = { x0: p0.x, y0: p0.y, x1: x, y1: y, e, t, b: b.id, s: b.longueur };
     const n = Math.max(1, Math.ceil(d / 6));
     for (let i = 0; i <= n; i++) {
       const u = i / n;
@@ -81,7 +111,7 @@ export class Thalle {
    * distance : a vitesse variable, un seuil de distance laissait l apex lent
    * se toucher tout seul et l apex rapide traverser une vraie boucle.
    */
-  proche(x, y, rayon, t, ageMin = 0.85) {
+  proche(x, y, rayon, t, ageMin = 0.85, bid = -1, bLen = 0, arcMin = 34) {
     let best = null, bd = rayon;
     const c0x = Math.floor((x - rayon) / MAILLE), c1x = Math.floor((x + rayon) / MAILLE);
     const c0y = Math.floor((y - rayon) / MAILLE), c1y = Math.floor((y + rayon) / MAILLE);
@@ -93,6 +123,11 @@ export class Thalle {
         for (const s of l) {
           if (vus.has(s)) continue;
           vus.add(s);
+          /* Sa propre paroi toute proche en abscisse : on ne peut pas se
+             toucher soi-meme a moins d'un rayon de braquage, qui vaut au
+             minimum 57 um a vitesse de croisiere. 34 um de protection est donc
+             large sans jamais masquer un vrai croisement. */
+          if (s.b === bid && bLen - s.s < arcMin) continue;
           if (t - s.t < ageMin) continue;
           const d = distSeg(x, y, s.x0, s.y0, s.x1, s.y1);
           if (d < bd) { bd = d; best = s; }

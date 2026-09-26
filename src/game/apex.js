@@ -68,10 +68,13 @@ export class Apex {
     this.pilote = !!opts.pilote;
     this.vivant = true;
     this.age = 0;
+    this.parcouru = 0;      // um parcourus depuis la naissance
     /* Phase du pulse calcique. Desynchronisee a la naissance : deux apex qui
        pulsent ensemble donnaient un battement visuel qui se lisait comme un
        defaut de rendu. */
-    this.phase = opts.phase !== undefined ? opts.phase : Math.random() * TAU;
+    /* Jamais Math.random : la phase doit venir du generateur de la manche, sinon
+       deux executions de la meme graine divergent et le banc cesse de mesurer. */
+    this.phase = opts.phase !== undefined ? opts.phase : 0;
     this.mort = null;          // cause, pour l ecran de fin
     this.contact = 0;          // proximite de son propre thalle, 0..1 (HUD)
     this.lance = opts.lance || 0;
@@ -94,13 +97,19 @@ export class Apex {
     /* Consolider ferme l apex : cela remonte le seuil de fluage, ce qui est la
        description correcte d une paroi apicale qui se rigidifie. On ne touche
        PAS a Phi : Phi est une propriete du materiau, pas une commande. */
-    /* 0,34 et non 0,22 : mesure au banc, a 0,22 la consolidation complete ne
-       descendait qu a 13 px/s contre 23 en poussee, soit 1,8x d amplitude. La
-       commande ne se SENTAIT pas. A 0,34 l amplitude est de 2,4x, et avec la
-       pulsation la vitesse instantanee couvre 6 a 33 px/s. */
-    const y = stats.yseuil + (drive < 0 ? -drive * 0.34 : 0);
+    /* 0,75 : a fond de consolidation, le seuil de fluage passe AU-DESSUS du
+       plafond de turgor et l'hyphe s'ARRETE net. C'est le regime 0, et c'est
+       une demande explicite : pouvoir s'immobiliser pour regarder devant soi et
+       pour cesser de bruler de la matiere. Physiologiquement c'est un apex qui
+       se ferme — la paroi apicale se rigidifie et ne flue plus — et non une
+       pause : le cytoplasme continue de couler, le turgor remonte, le sucre
+       rentre. La valeur precedente (0,34) laissait 4,4 um/s au regime le plus
+       bas, ce qui n'est pas un arret. */
+    const y = stats.yseuil + (drive < 0 ? -drive * 0.75 : 0);
     const base = Math.max(0, stats.phi * (P - y));
-    return base * ft * this.facteurPulse(stats);
+    /* `germ` porte la germination : une spore ne demarre pas a pleine vitesse.
+       Voir Game.facteurGerm. */
+    return base * ft * (stats.germ === undefined ? 1 : stats.germ) * this.facteurPulse(stats);
   }
 
   /** 0,62 a 1,38 : les paliers sont VISIBLES, jamais des a-coups. */
@@ -128,7 +137,25 @@ export class Apex {
        chiffre d animation : c est la vraie horloge de l organite. */
     this.phase = (this.phase + dt * 1.55 * TAU) % TAU;
 
-    const v = this.vitesse(P, stats, drive, ft);
+    let v = this.vitesse(P, stats, drive, ft);
+    /* RETROACTION DE DISETTE. Un apex a court de materiau de paroi ne fonce pas
+       vers sa propre rupture : il SE FERME. L'extension ralentit jusqu'a ce que
+       le materiau disponible suffise a maintenir une paroi viable. C'est une
+       vraie boucle de regulation — la synthese parietale et le fluage sont
+       couples a l'apex — et c'etait le chainon manquant du modele.
+       Sans elle, manquer de sucre tuait TOUJOURS, et par la meme mort : 23
+       manches sur 24 en « carence puis lyse », une table des causes uniforme, et
+       un jeu ou la famine ne laissait aucune fenetre pour reagir ou pour
+       encaisser.
+       Elle est VOLONTAIREMENT IMPARFAITE : elle ne peut retirer que 82 % de la
+       vitesse demandee. Aux regimes bas, cela suffit a rester au-dessus du seuil
+       de rupture, donc la disette se traduit par un ARRET et non par une mort.
+       Aux regimes hauts, la demande residuelle depasse encore ce que la paroi
+       peut encaisser : FORCER EN PLEINE DISETTE reste mortel, et c'est la seule
+       facon de mourir de lyse. La famine retire la vitesse, le joueur retire
+       sa vie. */
+    const vViable = stats.jmaxEff / (E_CRIT * 1.2);
+    if (v > vViable) v = Math.max(vViable, v * 0.18);
     this.v = v;
 
     /* --- barre : on tourne le SPK -------------------------------------
@@ -137,7 +164,18 @@ export class Apex {
        borne par la geometrie du cone apical, donc plus il avance vite, plus la
        courbe est large. C est le coeur de l arbitrage du jeu — la vitesse
        achete de la distance et vend de la precision. */
-    const omega = stats.agilite / (1 + v / 22);
+    /* RAYON DE BRAQUAGE, refait apres essai a la manette.
+       L'ancien reglage (agilite 1,9 rad/s, chute en 1 + v/22) donnait a vitesse
+       de croisiere omega = 1,0 rad/s pour v = 20 um/s, soit un rayon de courbure
+       de 20 um — UN DIAMETRE ET DEMI DE TUBE. Une hyphe faisait des epingles a
+       cheveux, ce qu'aucune hyphe ne fait : elles s'incurvent sur des dizaines
+       a des centaines de micrometres.
+       Avec agilite 0,55 et une chute en 1 + v/34 : a 20 um/s, omega = 0,35 rad/s
+       donc R = 57 um (quatre diametres) ; a 35 um/s, R = 129 um. Le virage
+       devient une DECISION QUI S'ANTICIPE, ce qui est precisement ce qu'on veut
+       comme source de difficulte, et la ramification redevient le seul moyen de
+       changer de cap vite. */
+    const omega = stats.agilite / (1 + v / 34);
     this.spk.ang = Apex.borner(this.spk.ang + barre * omega * dt);
     this.spk.x += Math.cos(this.spk.ang) * v * dt;
     this.spk.y += Math.sin(this.spk.ang) * v * dt;
@@ -189,6 +227,7 @@ export class Apex {
     }
 
     if (d > 0.02) thalle.deposer(this.branche, this.x, this.y, this.e, t);
+    this.parcouru += d;
     return d;
   }
 

@@ -32,6 +32,17 @@ central du jeu n'existe pas, et **aucune quantité de contenu ne le remplacera**
 
 C'est la partie utile de ce document.
 
+### 0. Le banc n'était pas reproductible
+
+La phase du pulse du premier apex venait de `Math.random()`. Deux exécutions sur
+les **mêmes graines** donnaient des médianes variant du simple au septuple —
+240 µm contre 1 700 µm de profondeur pour la même politique — et les verdicts
+basculaient au hasard d'une exécution à l'autre.
+
+**Une mesure non reproductible ne mesure rien**, et surtout : on ne peut pas
+distinguer un réglage d'un bruit. C'est le défaut le plus coûteux de la liste,
+parce qu'il invalidait rétroactivement tout ce qu'on croyait avoir mesuré.
+
 ### 1. `hash2` ne rendait jamais que [0 ; 0,5[
 
 Hérité de Cell Dungeon. Le mélange final `n ^ (n >> 16)` utilise un décalage
@@ -128,42 +139,83 @@ lente survive plus longtemps en rapportant moins.
 
 ---
 
-## Chantier ouvert : la carence arrive avant la paroi
+### 10. L'exclusion de contact était en temps, pas en distance
 
-Le seul verdict qui a résisté, et il vaut d'être écrit plutôt que contourné.
+Calée sur une vitesse de croisière de 20 µm/s, la règle « ignorer la paroi de
+moins d'une seconde » protégeait les 20 µm derrière l'apex. Au régime lent
+(3 µm/s) elle n'en protégeait plus que trois : l'apex se déclarait en contact
+avec son propre tube dès la première seconde et fusionnait. **24 manches sur 24
+mortes à 4,5 s**, le jour même où le régime 0 a été ajouté.
 
-L'arbitrage central du jeu est **vitesse contre épaisseur de paroi**. Il est
-mesurable en croisière — 15 % du temps sous le seuil de lyse en poussée continue
-contre 0 % en modulant — mais **il n'est pas ce qui tue à plein régime** : sur
-24 manches menées pleins gaz avec une construction de vitesse, 15 meurent de
-**carence** et 6 seulement de lyse franche. La poussée coûte 0,055 de sucre par
-seconde, en plus du volume et de la paroi ; sur une carte déficitaire, le stock
-part avant la paroi.
+Elle est maintenant en **abscisse curviligne** : 34 µm de tube derrière l'apex,
+quelle que soit l'allure. C'est défendable géométriquement — on ne peut pas se
+toucher soi-même à moins d'un rayon de braquage, qui vaut au minimum 57 µm.
 
-Conséquence gênante : les gènes de synthase **épaississent bien la paroi**
-(0,63 → 0,80 en croisière, +27 %) et **font reculer la lyse**, mais ils
-n'allongent pas une manche à plein régime, parce qu'une paroi plus épaisse coûte
-un peu plus de sucre. Un gène de sécurité ne doit pas abréger la partie.
+### 11. La famine tuait toujours, et par la même mort
 
-Trois pistes, non tranchées :
+23 manches sur 24 en « carence puis lyse ». Il manquait deux mécanismes, tous
+deux réels, et les ajouter a rendu au jeu six causes de mort distinctes :
 
-1. **baisser le coût de la poussée** (0,055 → 0,03) pour que la carence cesse de
-   devancer systématiquement la paroi ;
-2. **découpler le prix du matériau de l'épaisseur** au-delà de l'épaisseur
-   nominale, ce qui serait défendable : une paroi plus épaisse coûte surtout au
-   dépôt initial ;
-3. **donner aux synthases un second effet** qui ne passe pas par le sucre, par
-   exemple une réparation d'intégrité plus rapide.
+- la **rétroaction de disette** : un apex à court de matériau ne fonce pas vers
+  sa propre rupture, il **se ferme**. Elle est volontairement imparfaite (elle
+  ne peut retirer que 82 % de la vitesse demandée), ce qui laisse **forcer en
+  pleine disette** comme seule façon de lyser ;
+- l'**autophagie** : un mycélium affamé **se mange**. La longueur du thalle,
+  donc le score, se met à descendre. La famine devient un compte à rebours
+  visible au lieu d'une mort sèche.
 
-À trancher en jouant, pas au banc : le banc dit que le problème existe, il ne
-dit pas laquelle des trois est la bonne.
+Le rendement de l'autophagie a dû être mesuré deux fois : à 0,004 par µm, se
+manger soi-même était si rentable que **foncer en permanence devenait la
+meilleure stratégie** (1 529 µm de profondeur contre 1 361 à une politique qui
+module). L'autophagie doit être un sursis, pas un carburant.
+
+### 12. La sporulation était impossible au moment où il faut la prendre
+
+Elle exigeait 0,35 de sucre, or la décision se prend quand le thalle commence à
+se manger, donc à stock au plancher. La politique de référence ne parvenait
+jamais à encaisser, et le banc ne mesurait donc **jamais l'extraction** — c'est
+pourtant l'affirmation la plus importante du jeu.
+
+C'est aussi un contresens biologique : chez les champignons filamenteux, c'est
+**la limitation en nutriments qui induit la conidiation**. Seuil ramené à 0,04.
+
+Une fois corrigé, le verdict d'extraction dit ce qu'on voulait entendre :
+**33 spores en sporulant à temps contre 15 en poussant jusqu'à la mort**, sur
+les mêmes graines.
+
+### 13. Deux verdicts affirmaient des choses devenues fausses
+
+- « la poussée ne peut pas être un régime de croisière, donc elle atteint moins
+  de profondeur » : **faux** depuis la rétroaction de disette — pleins gaz
+  atteint 1 700 µm contre 1 116 en modulant. La poussée *achète* de la distance ;
+  ce qu'elle vend, c'est de la paroi (1,11 contre 1,41) et du temps pour lire le
+  champ. Le verdict affirme maintenant cela ;
+- « les synthases font reculer la lyse » : la lyse est devenue trop rare
+  (4 manches sur 24 même avec une construction de vitesse) pour que
+  l'échantillon distingue quoi que ce soit. **Un verdict qui tranche sur quatre
+  événements ne garde rien.** Il ne compare plus que les épaisseurs de paroi.
+
+---
+
+## Chantier ouvert : la paroi fait-elle encore peur ?
+
+La rétroaction de disette a réglé un vrai problème et en a créé un plus petit :
+**la lyse est devenue rare**. L'arbitrage vitesse / paroi reste mesurable dans
+l'épaisseur (1,11 en poussant contre 1,41 en consolidant) et dans la durée de
+manche, mais il ne se paie plus guère d'une mort.
+
+À rejuger à la manette, pas au banc : si la jauge de paroi cesse de faire peur,
+il faudra rendre la rétroaction plus imparfaite — elle retire aujourd'hui 82 %
+de la vitesse demandée, et c'est ce chiffre qui décide.
 
 ---
 
 ## Ce que le banc ne couvre pas encore
 
-- **Le rendu.** Aucune capture, aucune vérification de lisibilité à la taille
-  réelle. C'est le chantier le plus urgent : `npm run visual`.
+- **Fait : le rendu.** `npm run visual` existe, avec neuf verdicts, des captures
+  portrait et paysage, une **capture macro ×4 centrée sur l'apex** (la seule qui
+  permette de juger un organite de deux pixels dans un tube de trente-quatre) et
+  une capture de l'**écran de bilan**, pour que la carte du thalle soit testée.
 - **Le tactile.** Les zones et les seuils de tap n'ont jamais été mesurés sur un
   vrai doigt.
 - **La page livrée.** La leçon de Cell Dungeon — « vérifier la page qu'on LIVRE,

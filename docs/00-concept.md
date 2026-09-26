@@ -57,6 +57,35 @@ Et l'avertissement est lui aussi réel : les hyphes d'un même thalle
 **s'évitent activement** (autotropisme négatif). Un liseré s'allume à 8 px sans
 aucun gène, et un gène achète la distance à laquelle on le reçoit.
 
+### 2 bis. La vitesse devait être un réglage, pas un réflexe
+
+La question posée était : la croissance ne devrait-elle pas être **manuelle**,
+pour que le joueur gère sa vitesse et comprenne que ralentir économise la
+matière ?
+
+Réponse retenue : **cinq crans de régime, et le réglage reste.** Un bouton à
+maintenir donne bien ce contrôle, mais il le fait payer par le doigt — sur une
+manche de huit minutes on tient la touche 95 % du temps, donc l'appui cesse
+d'être une décision et redevient un état par défaut, avec de la fatigue en plus.
+Un cran qui reste donne le même arbitrage en faisant de chaque changement
+d'allure un **geste volontaire**.
+
+| Cran | Ce qui se passe |
+|---|---|
+| **0 ARRÊT** | le seuil de fluage passe au-dessus du turgor : l'hyphe **s'arrête vraiment**. On regarde devant, le turgor remonte, le sucre rentre, le cytoplasme continue de couler |
+| **1 LENT** | ≈ 11 µm/s, la sortie de spore |
+| **2 CROISIÈRE** | ≈ 19 µm/s |
+| **3 POUSSÉE** | accumulation d'osmolytes, brûle du sucre |
+| **4 FORÇAGE** | le seul régime où forcer en disette peut faire éclater l'apex |
+
+### 2 ter. Le départ manquait : on germe
+
+Une spore ne démarre pas à pleine vitesse. Elle **s'imbibe et gonfle** (les
+2,3 premières secondes ne produisent rien), un **tube germinatif** émerge, puis
+l'extension devient linéaire. La spore reste ensuite à l'origine du monde,
+visible derrière soi. Les cinq premières secondes ne demandent rien d'autre que
+de regarder — le meilleur moment pour apprendre à lire un champ.
+
 ### 3. Des contraintes sans agentivité ne sont que du terrain
 
 Une contrainte statique se mémorise et cesse d'exister. Trois étages ont donc été
@@ -64,11 +93,17 @@ posés :
 
 - **des champs continus** (aw, température, sucre, antifongique) qu'on
   **traverse** et qui se lisent **dans le fond**, avant d'y entrer ;
-- **des fronts mycéliens concurrents**, qui ne sont pas des mobs : ils prennent
-  de l'**espace**, et l'espace ne revient pas. Ils créent une course, pas un
-  combat ;
-- **des événements aigus** : une plume de fongicide, un front de dessiccation,
-  un silo qui s'échauffe.
+- **des poches de sel**, qui creusent l'aw localement et **tirent l'eau hors de
+  l'hyphe** par osmose — dangereuses même à turgor plein, puisque l'absorption,
+  elle, sature quand P est haut. Les cristaux les annoncent, donc elles se
+  contournent : c'est un choix de trajectoire, pas une pénalité de zone ;
+- **des événements diffus** : une plume de fongicide, le dessèchement
+  progressif, un silo qui s'échauffe.
+
+> **Les fronts mycéliens concurrents ont été retirés** (décision de l'auteur,
+> après essai). Ils se lisaient comme des mobs à trajectoire rectiligne, ce
+> qu'ils n'étaient pas censés être, et ils encombraient un champ dont toute la
+> difficulté doit venir du choix de trajectoire. Ne pas les remettre.
 
 Et la règle qui rend six dangers apprenables sans tutoriel : **chaque contrainte
 attaque un terme de l'équation, et un seul** — un azole n'est pas « des dégâts »,
@@ -100,6 +135,52 @@ nourriture :
 Le compteur `RATE` affiche les granules définitivement laissés derrière — la
 caméra n'y retourne pas. Ce n'est pas une punition, c'est le chiffre qui donne
 envie de refaire la manche plus lentement.
+
+### 5 bis. Un thalle n'est pas une hyphe : il se ramifie tout seul
+
+La ramification n'est plus seulement un verbe : elle **arrive d'elle-même**,
+tous les 110 µm de tube produits. C'est l'**unité de croissance hyphale** de
+Trinci — le rapport longueur totale / nombre d'apex reste constant, et c'est ce
+qui rend la croissance d'un mycélium exponentielle alors qu'aucun apex
+n'accélère.
+
+On voit donc l'hyphe sœur partir de son côté, et **elle continue sa route en
+direct**, hors champ, sur son propre tropisme : fuir le thalle, puis remonter le
+gradient de sucre. Le thalle final n'est pas une décoration, c'est le produit de
+quatre trajectoires simultanées dont on n'en pilotait qu'une.
+
+Un cran reste **toujours libre** sous le plafond, pour que le joueur garde un
+emplacement quand il veut ramifier volontairement — sinon la ramification
+spontanée lui confisquait son seul virage serré.
+
+### 5 ter. La carte du thalle, à la fin
+
+C'est le seul moment du jeu où la caméra a le droit de reculer, et c'est pour
+cela qu'il compte : pendant toute la manche on ne voit qu'un apex dans une
+fenêtre de cent micromètres, **sans jamais savoir à quoi ressemble ce qu'on
+construit**. La carte est la récompense de cette cécité — le chemin parcouru,
+les détours, les impasses, les fronts qu'on a laissés filer, et le réseau qu'ils
+ont dessiné.
+
+Elle est tracée depuis un relevé échantillonné tous les 4 µm et **jamais
+purgé** ; la géométrie de jeu, elle, est oubliée derrière la caméra.
+
+### 5 quater. La visibilité est une ressource que la vitesse consomme
+
+La caméra est resserrée sur l'apex : à l'arrêt le champ montre 100 µm de large,
+à pleine vitesse 138 µm — mais la **surface parcourue par seconde double**. Le
+résultat se sent comme un rétrécissement : plus on va vite, moins on a le temps
+de lire ce qui arrive.
+
+Trois conséquences :
+
+- **ralentir n'est plus seulement économique, c'est ce qui permet de voir** ;
+- le rayon de braquage étant devenu large (57 µm à vitesse de croisière,
+  129 µm à pleine vitesse — une hyphe ne fait pas d'épingle à cheveux), la
+  caméra **vise devant**, dans la direction où pointe le Spitzenkörper, et
+  d'autant plus loin qu'on va vite ;
+- **voir plus loin devient une amélioration** : le récepteur GPR-4 recule la
+  caméra, et le légendaire « Récepteurs de gradient » beaucoup plus.
 
 ### 6. La caméra et les apex multiples se contredisaient
 
@@ -149,14 +230,38 @@ physiologie.
 | Verbe | Clavier | Ce que c'est vraiment |
 |---|---|---|
 | **Barrer** | `A` / `D` | on oriente le **Spitzenkörper**, l'apex suit avec 70 ms de retard |
-| **Poussée** | `W` | accumulation d'osmolytes : le plafond de turgor monte, et **ça brûle du sucre** (le glycérol est du carbone) |
-| **Consolider** | `S` | on ferme l'apex : le seuil de fluage monte, la paroi épaissit, l'absorption augmente |
+| **Accélérer** | `W` | un **cran** de régime en plus. Le réglage reste |
+| **Ralentir** | `S` | un cran en moins ; au cran 0 l'hyphe **s'arrête** |
 | **Ramifier** | `Espace` | un nouvel apex à 62–88° derrière soi : le seul virage sans rayon de braquage, et une vie de secours |
 | **Sporuler** | `Entrée` | encaisser et arrêter |
 
-Cinq verbes, dont deux sur un même axe analogique. C'est jouable au pouce.
+Cinq verbes, dont deux sur un même axe **cranté**. C'est jouable au pouce.
 
 ---
+
+## La fin d'une manche, et pourquoi elle existe
+
+Trois termes ajoutés après mesure, et ils tiennent ensemble :
+
+1. **l'entretien suit la biomasse.** Un mycélium doit entretenir tout ce qu'il a
+   construit. Sans ce terme, revenus et dépenses croissaient tous deux avec le
+   nombre d'apex, donc grandir était neutre et rien ne poussait jamais à
+   s'arrêter ;
+2. **le substrat s'épuise localement.** Brouter sur place cesse de payer au bout
+   de quelques secondes, et **la zone broutée se voit** — la trace de son propre
+   passage devient une information ;
+3. **un thalle affamé se mange.** L'autophagie est réelle et vitale chez les
+   champignons filamenteux : le cytoplasme se retire des compartiments distaux
+   et la matière remonte vers les apex. En jeu, la longueur du thalle — donc le
+   score — **se met à descendre**. C'est un compte à rebours visible.
+
+D'où la question que chaque fin de manche pose : **continuer ou encaisser ?**
+Mesuré au banc sur les mêmes graines : **33 spores en sporulant à temps contre
+15 en poussant jusqu'à la mort.**
+
+Et c'est la biologie qui ferme la boucle : chez les champignons filamenteux,
+c'est **la limitation en nutriments qui induit la conidiation**. Une moisissure
+ne sporule pas quand tout va bien, elle sporule quand le substrat s'épuise.
 
 ## Le rythme d'une manche
 
@@ -186,11 +291,11 @@ Toutes les 620 µm de thalle cumulé, un **palier** propose trois gènes. Les
 
 | Mort | Mécanisme | Leçon |
 |---|---|---|
-| **Lyse apicale** | paroi sous le seuil critique, le turgor l'emporte | on allait trop vite pour son flux |
-| **Carence puis lyse** | plus de sucre, donc plus de flux, donc plus de paroi | on a choisi le mauvais itinéraire |
+| **Lyse apicale** | paroi sous le seuil critique, le turgor l'emporte. Rare : il faut **forcer en pleine disette** | la rétroaction de disette ferme l'apex, le joueur l'a rouverte |
+| **Thalle autodigéré** | l'autophagie a consommé tout le thalle | il fallait sporuler il y a trente secondes |
 | **Plasmolyse** | l'aw est passée sous la limite du génotype | il fallait de l'osmotolérance, ou contourner |
 | **Apex fusionné** | anastomose, dernier apex | on ne regardait pas son propre thalle |
-| **Apex détruit** | écrasement sur un obstacle net, ou interférence hyphale | on n'a pas vu ce qui était dans son plan |
+| **Apex détruit** | écrasement sur un obstacle **net** — les flous se traversent | on n'a pas vu ce qui était dans son plan |
 | **Sporulation** | choisie | ce n'est pas une mort, c'est la victoire |
 
 Six morts distinctes, chacune sur un terme différent, chacune avec son gène qui

@@ -11,12 +11,19 @@
      azole           -> l'ABSORPTION (membrane percee)     -> le turgor tombe
      polyene         -> une FUITE directe de turgor        -> chute brutale
      acide faible    -> la MAINTENANCE (pompage de protons) -> le sucre brule
-     competiteur     -> l'ESPACE, et le contact detruit l'apex
+     poche de sel    -> l'ABSORPTION D'EAU, localement et brutalement
 
    C'est cette table qui rend les dangers lisibles sans tutoriel : le joueur
    apprend six pannes distinctes, chacune avec sa jauge qui bouge et son gene
    qui la corrige. Un septieme danger qui taperait sur les memes termes
    n'apprendrait rien de neuf, et ne doit pas etre ajoute.
+
+   LES FRONTS MYCELIENS CONCURRENTS ONT ETE RETIRES (decision de l'auteur). Ils
+   se lisaient comme des mobs a trajectoire rectiligne, ce qu'ils n'etaient pas
+   censes etre, et ils encombraient un champ dont toute la difficulte doit venir
+   du CHOIX DE TRAJECTOIRE dans un milieu heterogene. Le milieu ne contient donc
+   plus que des elements de milieu : ressources, obstacles, antifongiques
+   diffusibles et poches de sel. Ne pas les remettre sans nouvelle instruction.
 
    ECHELLE, posee une fois pour tout le jeu :
      1 pixel        = 1 micrometre
@@ -62,7 +69,7 @@ export const SUBSTRATS = [
     /* Les ecailles de cire sont des obstacles bas et nombreux : elles genent
        la barre sans jamais fermer un passage. Role : apprendre a barrer. */
     obstacle: { type: 'cire', densite: 0.35, taille: [3, 7] },
-    competiteurs: [{ espece: 'botrytis', pression: 0.25 }],
+    sel: 0,
     antifongique: null,
     longueur: 600,
   },
@@ -76,10 +83,7 @@ export const SUBSTRATS = [
     temp: 20,
     sucre: 0.72, sucreEchelle: 120,
     obstacle: { type: 'paroiveg', densite: 0.62, taille: [10, 26] },
-    competiteurs: [
-      { espece: 'botrytis', pression: 0.45 },
-      { espece: 'fusarium', pression: 0.30 },
-    ],
+    sel: 0.12,
     /* pH 3,4 : l'acide organique du fruit est deja un acide faible. Faible
        dose, juste de quoi faire sentir le terme de maintenance. */
     antifongique: { type: 'sorbate', intensite: 0.18, echelle: 200 },
@@ -95,10 +99,7 @@ export const SUBSTRATS = [
     temp: 18,
     sucre: 0.95, sucreEchelle: 150,
     obstacle: { type: 'cristal', densite: 0.44, taille: [5, 14] },
-    competiteurs: [
-      { espece: 'xeromyces', pression: 0.40 },
-      { espece: 'penicillium', pression: 0.22 },
-    ],
+    sel: 0.45,
     /* Sorbate de potassium, la conservation reelle d'une confiture peu sucree. */
     antifongique: { type: 'sorbate', intensite: 0.55, echelle: 160 },
     longueur: 1300,
@@ -114,10 +115,7 @@ export const SUBSTRATS = [
     temp: 36,
     sucre: 0.88, sucreEchelle: 130, amidon: true,
     obstacle: { type: 'amidon', densite: 0.58, taille: [8, 20] },
-    competiteurs: [
-      { espece: 'aspergillus', pression: 0.55 },
-      { espece: 'cladosporium', pression: 0.25 },
-    ],
+    sel: 0.30,
     /* Traitement de conservation des grains : un imidazole de synthese. */
     antifongique: { type: 'azole', intensite: 0.5, echelle: 180 },
     longueur: 1500,
@@ -136,10 +134,25 @@ export const SUBSTRATS = [
 export function coefBoucle(n) {
   return {
     aw: -0.035 * n,            // l'eau se retire : 4 boucles = -0,14 d'aw
-    pression: 1 + 0.45 * n,    // les concurrents arrivent plus vite
     antifongique: 1 + 0.30 * n,
+    sel: 1 + 0.35 * n,
   };
 }
+
+/**
+ * UNITE DE CROISSANCE HYPHALE, en um de tube par apex.
+ *
+ * C'est le chiffre qui fait qu'un thalle EST ramifie. Trinci a montre que la
+ * croissance totale d'un mycelium est exponentielle non parce qu'un apex
+ * accelere — un apex isole s'allonge a vitesse constante — mais parce que le
+ * NOMBRE D'APEX croit : le rapport longueur totale / nombre de tips reste a peu
+ * pres constant, et c'est lui qu'on appelle l'unite de croissance hyphale.
+ * Elle vaut typiquement 50 a 200 um. A 110 um, un thalle atteint son quatrieme
+ * apex vers 330 um de tube, soit une trentaine de secondes de jeu : assez tot
+ * pour que le joueur voie son thalle se ramifier, assez tard pour qu'il ait
+ * compris le pilotage d'un seul apex avant.
+ */
+export const UCH = 110;
 
 /** Substrat et boucle pour une distance parcourue donnee, en px. */
 export function substratPour(distance) {

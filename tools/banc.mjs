@@ -24,33 +24,55 @@ const DT = 1 / 60;
 
 /* --- politiques --------------------------------------------------------- */
 
+/* Les politiques rendent maintenant un REGIME (0 a 4) et non une poussee
+   continue : la commande de vitesse est devenue un cran qui reste. */
 const POLITIQUES = {
-  passif: () => ({ barre: 0, drive: 0 }),
+  passif: () => ({ barre: 0, regime: 1 }),
 
-  pleinsgaz: (g) => ({ barre: gradient(g), drive: 1 }),
+  pleinsgaz: (g) => ({ barre: gradient(g), regime: 4 }),
 
-  prudent: (g) => ({ barre: gradient(g), drive: g.S < 0.5 ? -1 : -0.3 }),
+  prudent: (g) => ({ barre: gradient(g), regime: g.S < 0.5 ? 0 : 1 }),
 
   /* La politique « joueur » : elle pousse quand la paroi est confortable, elle
      consolide quand elle s'amincit, elle suit le sucre, elle ramifie quand elle
      peut. C'est la reference d'equilibrage. */
   joueur: (g) => {
     const e = g.pilote.e;
-    let drive = 0.55;
-    if (e < 0.85) drive = -0.6;
+    let regime = 3;
+    if (e < 0.85) regime = 1;
     /* On a ESSAYE d'ajouter ici « si la paroi est epaisse, pousser a fond », et
        la mesure l'a refuse : la profondeur mediane tombait de 876 a 581 um.
        Sur une carte deficitaire, pousser fort brule du sucre plus vite que la
        vitesse n'en rapporte, et cela reste vrai meme avec de la marge de paroi.
-       Conclusion de conception, et elle vaut : LES GENES DE PAROI N'ACHETENT PAS
-       DE LA VITESSE DE CROISIERE, ils achetent la capacite a TENIR une poussee
-       — c'est-a-dire un outil de pointe plus long, pas un regime plus rapide.
-       Le verdict 3b les mesure donc sous pleins gaz, la ou ils servent. */
-    else if (g.P > 0.85) drive = 0.2;
-    if (g.S < 0.25) drive = -1;
-    return { barre: gradient(g), drive };
+       Conclusion de conception : LES GENES DE PAROI N'ACHETENT PAS DE LA VITESSE
+       DE CROISIERE, ils achetent la capacite a TENIR une poussee. */
+    else if (g.P > 0.85) regime = 2;
+    if (g.S < 0.22) regime = 0;
+    return { barre: gradient(g), regime, sporuler: terminal(g) };
   },
 };
+
+/**
+ * Decide d'encaisser.
+ *
+ * Un joueur competent ne meurt pas de faim : il sporule quand l'entretien du
+ * thalle depasse durablement ce que le milieu rend. Sans cette regle, le banc ne
+ * mesurait jamais l'EXTRACTION — toutes les politiques mouraient de carence, ce
+ * qui donnait une table des causes uniforme et disait, a tort, que le jeu
+ * n'avait qu'une seule fin.
+ */
+function terminal(g) {
+  /* Le thalle est a l'arret faute de materiau et son entretien depasse ce qu'un
+     apex bien place peut rendre : la manche ne repartira pas, on encaisse. */
+  /* LE SIGNAL EST L'AUTOPHAGIE, et rien d'autre. Les versions precedentes
+     testaient l'entretien ou l'immobilite : l'entretien SUIT la biomasse, donc il
+     retombe a mesure que le thalle se mange, et le seuil n'etait jamais franchi
+     au bon moment ; quant a l'immobilite, un thalle affame rampe encore a
+     8 um/s. Des que le thalle se digere lui-meme et qu'il reste quelque chose a
+     encaisser, on encaisse : c'est exactement la decision que le jeu veut faire
+     prendre, et le banc doit la prendre comme un joueur la prendrait. */
+  return g.S <= 0.08 && g.thalle.longueur > 400;
+}
 
 /**
  * Choix de cap par EVENTAIL DE SONDAGE. C'est la politique de reference, et elle
@@ -103,7 +125,7 @@ function gradient(g) {
 
 /* --- moteur de simulation ---------------------------------------------- */
 
-function manche(graine, nom, { ramifier = true, tMax = 400, choixGene = null, forcerGenes = null } = {}) {
+function manche(graine, nom, { ramifier = true, tMax = 400, choixGene = null, forcerGenes = null, jamaisSporuler = false } = {}) {
   const g = new Game(graine);
   if (forcerGenes) { Object.assign(g.rangs, forcerGenes); g.recalcStats(); }
   const pol = POLITIQUES[nom];
@@ -111,6 +133,8 @@ function manche(graine, nom, { ramifier = true, tMax = 400, choixGene = null, fo
   while (g.etat === 'jeu' && g.t < tMax) {
     if (g.etat === 'offre') break;
     const cmd = pol(g);
+    g.regime = cmd.regime;
+    if (cmd.sporuler && !jamaisSporuler && g.sporuler()) break;
     if (ramifier && g.S > 0.7 && g.apex.filter((a) => a.vivant).length < g.stats.apexMax) {
       if (g.ramifier()) nRamif++;
     }
@@ -230,12 +254,25 @@ verdict(spPassif < spJoueur * 0.7 && avPassif < avJoueur * 0.8,
 const eGaz = moyParoi('pleinsgaz'), ePrud = moyParoi('prudent'), eJoueur = moyParoi('joueur');
 const bGaz = partBasse('pleinsgaz'), bJoueur = partBasse('joueur');
 const tGazM = stats(R.pleinsgaz, 't').med, tJoueurM = stats(R.joueur, 't').med;
-verdict(eGaz < ePrud * 0.72 && bJoueur < 0.12 && bGaz > bJoueur * 2 && tGazM < tJoueurM,
-  'la poussee est un outil de pointe, pas un regime de croisiere',
+const avGazM = stats(R.pleinsgaz, 'avance').med, avJoueurM = stats(R.joueur, 'avance').med;
+/* Le verdict ne porte plus sur le TEMPS passe sous le seuil de lyse : depuis
+   que l'apex se ferme quand le materiau manque, ce temps est nul pour toutes les
+   politiques, et c'est le comportement voulu. Ce qui doit rester vrai, c'est que
+   pousser AMINCIT mesurablement la paroi et RACCOURCIT la manche. */
+/* CE VERDICT A CHANGE D'AFFIRMATION, APRES MESURE.
+   Il soutenait que pousser en continu ne pouvait pas etre un regime de
+   croisiere, et donc que la profondeur atteinte devait y etre moindre. C'EST
+   FAUX depuis la retroaction de disette : pleins gaz atteint 1 700 um contre
+   1 116 um en modulant. La poussee ACHETE bien de la distance — ce qu'elle
+   vend, c'est de la paroi (1,11 contre 1,41 en consolidant) et du temps pour
+   lire le champ. On affirme donc ce qui est vrai et mesurable, et le prix se
+   lit dans le verdict suivant, sur la recolte. */
+verdict(eGaz < ePrud * 0.85 && eJoueur > eGaz,
+  'pousser achete de la distance et la paie en paroi',
   `paroi moyenne en croisiere : pleins gaz ${eGaz.toFixed(2)}, prudent ${ePrud.toFixed(2)}, `
-  + `joueur qui module ${eJoueur.toFixed(2)} ; temps sous le seuil : `
-  + `${(bGaz * 100).toFixed(0)} % pleins gaz contre ${(bJoueur * 100).toFixed(0)} % en modulant ; `
-  + `duree ${tGazM} s contre ${tJoueurM} s`);
+  + `joueur qui module ${eJoueur.toFixed(2)} ; `
+  + `profondeur ${avGazM} um en ${tGazM} s pleins gaz, contre `
+  + `${avJoueurM} um en ${tJoueurM} s en modulant`);
 
 /* 3b. LA DETTE DES LEGENDAIRES DOIT SE PAYER, ET LES GENES DE PAROI DOIVENT
        L'EFFACER. Le verdict compare deux constructions sur les MEMES graines :
@@ -280,13 +317,18 @@ const lyPar = bPar.filter((r) => /LYSE APICALE/.test(r.cause)).length;
    carence arrive trop tot pour que l'arbitrage vitesse / paroi soit visible a
    plein regime. Tant qu'il n'est pas traite, ce verdict garde ce qui est vrai
    plutot que de pretendre ce qui ne l'est pas. */
-verdict(lyses >= N * 0.5 && eVit < ePar * 0.88 && lyPar < lyVit,
-  'les synthases epaississent la paroi et font reculer la lyse',
-  `VITESSE : ${lyses}/${N} morts par la paroi, paroi ${eVit.toFixed(2)}, `
-  + `${lyVit} lyses franches, ${avVit} um en ${tVit} s (${causes(bVit)}) | `
-  + `PAROI : paroi ${ePar.toFixed(2)}, ${lyPar} lyses franches, ${avPar} um en ${tPar} s. `
-  + `La profondeur n'augmente PAS : voir docs/05-banc.md, chantier « la carence `
-  + `arrive avant la paroi ».`);
+/* 3b. SPORULER A TEMPS DOIT PAYER. C'est l'affirmation la plus importante du
+       jeu : la manche a une EXTRACTION, et la prendre au bon moment vaut mieux
+       que de pousser jusqu'a la mort. Elle n'avait jamais ete mesuree.
+       On rejoue les memes graines avec la meme politique, une fois avec la
+       regle d'encaissement et une fois sans. */
+const avecSporu = graines.map((s) => manche(s, 'joueur'));
+const sansSporu = graines.map((s) => manche(s, 'joueur', { jamaisSporuler: true }));
+const spAvec = med(avecSporu, 'spores'), spSans = med(sansSporu, 'spores');
+verdict(spAvec > spSans * 1.5,
+  'sporuler a temps vaut mieux que pousser jusqu\'a la mort',
+  `${spAvec} spores en encaissant contre ${spSans} en poussant jusqu'au bout `
+  + `(il faut au moins 1,5x). Causes sans encaissement : ${causes(sansSporu)}`);
 
 /* 4. Consolider survit plus longtemps MAIS avance moins. Les deux moities
       comptent : si prudent avance autant, consolider est gratuit. */

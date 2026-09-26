@@ -12,7 +12,7 @@ Tous les chiffres vivent dans `src/data/substrats.js`, et nulle part ailleurs.
 
 ### 1. Pellicule du fruit — 600 µm
 
-`aw 0,98 · 22 °C · sucre 0,42 · écailles de cire · Botrytis`
+`aw 0,98 · 22 °C · sucre 0,42 · écailles de cire · pas de sel`
 
 Une cuticule est **riche en eau mais pauvre en sucre accessible** : le sucre est
 dedans, la cuticule est une barrière cirée. D'où le premier arbitrage du jeu —
@@ -24,7 +24,7 @@ barrer.
 
 ### 2. Mésocarpe — 1 100 µm
 
-`aw 0,99 · 20 °C · sucre 0,72 · parois végétales · Botrytis + Fusarium · sorbate 0,18`
+`aw 0,99 · 20 °C · sucre 0,72 · parois végétales · sel 0,12 · sorbate 0,18`
 
 Le substrat le plus **généreux** et le plus **encombré**. Les parois cellulaires
 végétales forment un réseau polygonal où l'on circule dans les interstices :
@@ -37,7 +37,7 @@ désirable, l'enzyme avec laquelle *Botrytis* fait réellement pourrir les fruit
 
 ### 3. Confiture — 1 300 µm
 
-`aw 0,76 · 18 °C · sucre 0,95 · cristaux · Xeromyces + Penicillium · sorbate 0,55`
+`aw 0,76 · 18 °C · sucre 0,95 · cristaux · sel 0,45 · sorbate 0,55`
 
 68 Brix : **le sucre est énorme et l'eau introuvable**. C'est le seul substrat du
 jeu à retourner les deux ressources l'une contre l'autre, et sans osmotolérance
@@ -45,12 +45,12 @@ on n'y entre pas. Le sorbate de potassium est la conservation réelle d'une
 confiture peu sucrée : il fait brûler le sucre à l'arrêt, ce qui est exactement
 le pire endroit pour ça.
 
-Le concurrent est *Xeromyces bisporus*, l'organisme le plus xérophile connu. Il
-est lent (8 px/s) mais il est **chez lui**.
+C'est aussi le substrat le plus salé du jeu : les poches y sont partout, et sans
+osmotolérance elles vident l'hyphe plus vite que le milieu ne la remplit.
 
 ### 4. Grain stocké — 1 500 µm
 
-`aw 0,70 · 36 °C · amidon 0,88 · granules d'amidon · Aspergillus + Cladosporium · azole 0,5`
+`aw 0,70 · 36 °C · amidon 0,88 · granules d'amidon · sel 0,30 · azole 0,5`
 
 Blé à 14 % d'humidité : la zone des *Aspergillus* et *Eurotium*. Trois
 contraintes se cumulent, et c'est voulu :
@@ -74,13 +74,12 @@ réelles, et elles existent pour une raison mesurée : **sans horloge, lambiner
    Après cinq minutes, un génotype sans osmotolérance est sous sa limite dans les
    substrats secs. Un produit stocké perd son eau libre, et une colonie épuise
    celle de son propre substrat.
-2. **Les concurrents arrivent sur une date, pas sur une distance.** Une
-   moisissure concurrente a germé au même instant que vous et pousse que vous
-   bougiez ou non. Intervalle de 34 s à 13 s selon la pression du substrat et la
-   boucle.
-
-> La version précédente déclenchait les fronts sur l'avancée, donc un joueur lent
-> en rencontrait **moins** : la lenteur était récompensée deux fois.
+2. **L'entretien du thalle croît avec sa biomasse.** Plus on a construit, plus
+   il faut de sucre pour le tenir. C'est l'horloge qui décide de la fin de la
+   manche, et c'est elle qui rend la sporulation nécessaire. Détail dans
+   `docs/00-concept.md`, section « la fin d'une manche ».
+3. **Le substrat s'épuise là où on broute.** Il ne se régénère jamais, et la
+   caméra n'y revient pas.
 
 ---
 
@@ -90,43 +89,43 @@ Le jeu ne s'arrête pas au quatrième substrat : il **recommence la série en la
 durcissant**, comme Risk of Rain. **Deux durcissements seulement** :
 
 - l'eau se retire : `aw −0,035` par boucle ;
-- les concurrents arrivent plus vite : `× (1 + 0,45 n)` sur la pression, et
-  `× (1 + 0,30 n)` sur l'intensité des antifongiques.
+- les poches de sel se creusent : `× (1 + 0,35 n)` ;
+- les antifongiques montent : `× (1 + 0,30 n)`.
 
 Durcir aussi le sucre a été écarté : la paroi devenait infabricable et **toutes
-les morts se ressemblaient**. Deux durcissements qui menacent des termes
-différents valent mieux que trois qui tapent au même endroit.
+les morts se ressemblaient**. Trois durcissements qui menacent des termes
+différents valent mieux que quatre qui tapent au même endroit.
 
 ---
 
-## Les concurrents
+## Le sel, et l'hétérogénéité de l'aw
 
-Ce ne sont pas des mobs : ce sont des **fronts mycéliens**. Ils prennent de
-l'**espace**, et l'espace ne revient pas.
+L'activité de l'eau d'un milieu n'est pas homogène. Un sel qui cristallise
+localement creuse un **puits d'aw** bien plus profond que le bruit de fond, sur
+quelques dizaines de micromètres.
 
-- ils apparaissent **devant et de côté**, jamais dans le dos — 130 à 240 px, soit
-  6 à 12 s pour décider de passer ou de contourner. Un danger qu'on ne peut pas
-  voir venir n'enseigne rien ;
-- ils visent l'avant **plus une attraction faible vers le pilote** (poids 0,35).
-  Un front qui viserait l'apex en permanence serait un mob, pas un mycélium ;
-- le contact est une **interférence hyphale** : le simple contact suffit, sans
-  pénétration, et la zone sensible est l'apex ;
-- ils sont rendus **plus pâles et légèrement flous** (calque 1), parce qu'un autre
-  mycélium pousse à une autre profondeur dans le substrat. Le joueur reste le
-  seul objet parfaitement net de l'image.
+En jeu, une poche de sel fait deux choses distinctes, et la seconde est la plus
+dangereuse :
 
-La couleur d'un front est celle de ses **conidies**, parce que c'est un vrai
-caractère d'identification : *Penicillium* vert-bleu, *Aspergillus niger* noir,
-*Botrytis* gris souris, *Fusarium* rose saumon, *Trichoderma* vert vif,
-*Cladosporium* brun olive, *Xeromyces* crème. On ne les invente pas et on ne les
-échange pas.
+- elle **abaisse l'aw** du terme d'absorption, comme une zone sèche ;
+- elle **tire l'eau hors de l'hyphe** par osmose, à un débit proportionnel au
+  gradient. C'est ce qui la rend mortelle même à turgor plein — l'absorption,
+  elle, sature quand la pression est haute.
+
+Les poches sont **rares, nettes et contournables** (seuil haut sur le bruit :
+seuls les sommets deviennent des poches), et les **cristaux les annoncent** :
+ils sont dessinés exactement là où le terme salin est fort. Le décor explique le
+champ, donc la poche est un choix de trajectoire et non une pénalité de zone.
+
+Densité par substrat : nulle sur la pellicule, 0,12 dans le mésocarpe, 0,30 dans
+le grain, **0,45 dans la confiture** — où elle s'ajoute à une aw déjà basse.
 
 ---
+
 
 ## Le cinquième candidat
 
 **Croûte de fromage** : sel, aw 0,90, lipides et protéines. Il demande **lipase**
 et **protéase**, donc il rendrait indispensables deux familles d'hydrolases
-aujourd'hui décoratives. Concurrents : *Penicillium* (celui du camembert est chez
-lui), *Cladosporium*, acariens exclus. Il attend d'abord que les quatre premiers
-aient été joués pour de vrai.
+aujourd'hui décoratives. Il attend d'abord que les quatre premiers aient été
+joués pour de vrai.

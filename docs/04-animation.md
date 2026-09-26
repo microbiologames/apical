@@ -16,6 +16,26 @@ Quatre mots, quatre contraintes techniques. Chacune a dicté une décision.
 
 ---
 
+## 0. Le cadrage : la caméra est serrée, et la visibilité se paie
+
+À l'arrêt le champ montre **100 µm de large**, à pleine vitesse 138 µm — mais la
+surface parcourue par seconde double. On voit donc **moins en allant vite**,
+et c'est le contraire d'une caméra de course : la visibilité est une ressource
+que la vitesse consomme.
+
+Le tube fait 14 µm de diamètre, soit **34 px de large** dans un champ de 256 :
+13 % de la largeur. C'est ce resserrement qui fait exister l'animation — à
+l'échelle précédente il ne restait pas assez de pixels pour montrer à la fois
+deux parois, un cytoplasme et un organite.
+
+Deux corollaires :
+
+- la caméra **vise devant**, dans la direction où pointe le Spitzenkörper et
+  d'autant plus loin qu'on va vite. Sans cela, un rayon de braquage de 57 µm
+  était impossible à anticiper dans une fenêtre de 110 µm ;
+- **voir plus loin devient une amélioration** (le récepteur GPR-4 recule la
+  caméra), ce qui est la traduction exacte du chimiotropisme.
+
 ## 1. « Paroi rigide » → on rastérise par sections, pas en traits épais
 
 Un trait épais coloré donne un **ruban** : la paroi et le cytoplasme y ont la
@@ -70,6 +90,22 @@ bloquant. Plans 1 à 3 = flous **et traversables**.
 > faisait écraser par un grain visiblement flou, donc visiblement hors de son
 > plan. Mesure : 14 morts sur 20 par écrasement, et aucune n'était
 > compréhensible à l'écran.
+
+## 3 bis. La calotte apicale : une demi-ellipse, pas un dôme
+
+Le premier profil donnait un bout court et très bombé, qui se lisait comme un
+**bourgeon posé sur un tube**. Deux causes cumulées : la calotte était trop
+courte pour son rayon, et elle était en plus **gonflée** par le turgor et par le
+pulse.
+
+Le profil est maintenant une **demi-ellipse de demi-axes R et 1,55 R**. Elle a
+deux vertus : elle raccorde le tube avec une tangente exactement perpendiculaire
+à l'axe (donc aucune cassure visible à la base), et elle est une fois et demie
+plus longue que large, ce qui est la silhouette d'un apex fongique en croissance.
+
+Et surtout : **le pulse allonge le bout, il ne l'enfle pas.** Une bouffée de Ca²⁺
+apporte de la membrane et de la paroi à la pointe — l'apex avance par paliers.
+Gonfler le rayon faisait battre la silhouette et contribuait au bourgeon.
 
 ## 4. « Construction progressive de la paroi » → chaque section porte sa date
 
@@ -186,10 +222,23 @@ au lieu de 90 000. Le rendu étant déjà tramé, la différence ne se voit pas.
 
 ---
 
-## Les montages, et pourquoi il y en a deux
+## Le montage : bleu coton lactophénol, partout
 
-Ce ne sont pas deux thèmes graphiques, ce sont les deux montages réellement
-utilisés en mycologie :
+Deux montages sont écrits dans le code, tous deux réels et tous deux justes.
+**Un seul est utilisé** : le bleu coton, donc le fond clair. Le calcofluor
+reste défini pour un usage futur.
+
+La raison est une décision de l'auteur, après essai : le fond clair *« donne
+l'impression d'être directement dans une gélose »*, et c'est l'effet recherché.
+Mais surtout, alterner les deux faisait **basculer le fond du noir au clair en
+cours de manche**, au passage d'un substrat à l'autre — un basculement qu'on lit
+comme une panne d'affichage, pas comme un changement de milieu.
+
+Les quatre substrats se distinguent donc par la **teinte de leur gélose**, et
+chacune est celle du milieu réel : pâle et verdie pour une cuticule, crème pour
+une chair de fruit, ambre pour un sirop, ocre pour une amande de céréale.
+
+Les deux montages, pour mémoire :
 
 - **bleu coton lactophénol** — fond clair, paroi teintée en **bleu**. Le colorant
   se fixe sur la **chitine de la paroi**, pas sur le cytoplasme : c'est pour ça

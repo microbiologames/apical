@@ -24,8 +24,9 @@ import { drawTextCentered } from './core/font.js';
 import { SUBSTRATS_PALETTE, RARETE_HEX, UI } from './data/palette.js';
 import { Game } from './game/game.js';
 import { Cytoplasme } from './game/cytoplasme.js';
-import { fond, decor, rivaux, poussiere, vignette } from './render/scene.js';
-import { branche as dessinerBranche, noeuds as dessinerNoeuds } from './render/hyphe.js';
+import { fond, decor, poussiere, vignette } from './render/scene.js';
+import { branche as dessinerBranche, noeuds as dessinerNoeuds, spore as dessinerSpore }
+  from './render/hyphe.js';
 import { hud, fin } from './render/hud.js';
 
 const canvas = document.getElementById('jeu');
@@ -64,7 +65,7 @@ function ecrireBanque(v) {
 function semer() {
   g = new Game();
   cyto = new Cytoplasme(g.graine);
-  cam = { x: 0, y: 0, cx: scr.w >> 1, cy: Math.round(scr.h * 0.62) };
+  cam = { x: 0, y: 0, z: 2.4, cx: scr.w >> 1, cy: Math.round(scr.h * 0.62) };
   elOffre.classList.remove('on');
   elTitre.classList.remove('on');
   elPause.classList.remove('on');
@@ -133,9 +134,11 @@ function image(ms) {
   if (!g) { titre(); return; }
 
   if (g.etat === 'jeu' && !enPause) {
+    const dr = input.takeRegime();
+    if (dr) g.changerRegime(dr);
     if (input.takeRamifier()) g.ramifier();
     if (input.takeSporuler()) g.sporuler();
-    g.pas(dt, { barre: input.barre, drive: input.drive });
+    g.pas(dt, { barre: input.barre });
     g.arbitrer();
     if (g.etat === 'offre') montrerOffre();
     if (g.etat === 'mort' || g.etat === 'sporule') {
@@ -147,26 +150,52 @@ function image(ms) {
     return;
   }
 
-  /* Camera : poursuite du premier ordre en x, monotone en y. */
+  /* --- camera ---------------------------------------------------------
+     Trois comportements, et chacun repond a une contrainte de conception.
+
+     1. ZOOM VARIABLE : on voit PLUS QUAND ON VA LENTEMENT. C'est le contraire
+        d'une camera de course, et c'est voulu — la visibilite devient une
+        ressource que la vitesse consomme. Ralentir n'est donc pas seulement
+        economique, c'est ce qui permet de LIRE le champ avant de s'engager.
+        De 2,55 px/um a l'arret (le champ montre 100 um de large) a 1,85 a
+        pleine vitesse (138 um) : contre-intuitif dit comme ca, mais a l'ecran
+        c'est la SURFACE PARCOURUE PAR SECONDE qui decide, et elle double.
+     2. VISEE DEVANT : la camera vise un point situe devant l'apex, dans la
+        direction ou le Spitzenkorper pointe, et d'autant plus loin qu'on va
+        vite. Sans elle, un rayon de braquage de 60 um etait impossible a
+        anticiper dans un champ de 110 um.
+     3. `y` RESTE MONOTONE : on ne revient jamais en arriere. */
   const a = g.pilote;
-  cam.x = lerp(cam.x, a.x, 1 - Math.exp(-dt / 0.16));
-  const cible = a.y;
-  cam.y = Math.max(cam.y, lerp(cam.y, cible, 1 - Math.exp(-dt / 0.10)));
+  const vNorm = clamp(a.v / 26, 0, 1);
+  const zCible = (2.55 - 0.70 * vNorm) / (1 + (g.stats.vue || 0) / 120);
+  cam.z = lerp(cam.z, zCible, 1 - Math.exp(-dt / 0.7));
+  const avant = 8 + 30 * vNorm;
+  const tx = a.x + Math.cos(a.spk.ang) * avant;
+  const ty = a.y + Math.sin(a.spk.ang) * avant;
+  cam.x = lerp(cam.x, tx, 1 - Math.exp(-dt / 0.28));
+  cam.y = Math.max(cam.y, lerp(cam.y, ty, 1 - Math.exp(-dt / 0.22)));
   /* Secousse : elle ne sert qu'aux evenements de paroi (lyse, contact,
      ramification). Jamais au decor, sinon on ne sait plus ce qui l'a declenchee. */
   const sec = g.secousse;
-  const ox = sec > 0 ? (Math.random() - 0.5) * sec * 5 : 0;
-  const oy = sec > 0 ? (Math.random() - 0.5) * sec * 5 : 0;
-  const vue = { x: cam.x + ox, y: cam.y + oy, cx: cam.cx, cy: cam.cy };
+  const ox = sec > 0 ? (Math.random() - 0.5) * sec * 5 / cam.z : 0;
+  const oy = sec > 0 ? (Math.random() - 0.5) * sec * 5 / cam.z : 0;
+  const vue = { x: cam.x + ox, y: cam.y + oy, z: cam.z, cx: cam.cx, cy: cam.cy };
 
   const ech = g.champ.echantillon(a.x, a.y);
   const pal = SUBSTRATS_PALETTE[ech.substrat.id] || SUBSTRATS_PALETTE.mesocarpe;
 
   /* --- cytoplasme : avance meme en pause d'offre ---------------------- */
-  const vivants = new Set();
-  for (const ap of g.apex) if (ap.vivant) vivants.add(ap.branche.id);
+  const porteeCyto = Math.max(scr.w, scr.h) / cam.z + 320;
   for (const b of g.thalle.branches) {
     if (!b.pts.length) continue;
+    const dernier = b.pts[b.pts.length - 1];
+    if (Math.abs(dernier.x - cam.x) > porteeCyto || Math.abs(dernier.y - cam.y) > porteeCyto) {
+      /* Hors de portee : on oublie ses organites plutot que de les faire vivre
+         pour personne. Ils seront repeuples si la branche revient a l'ecran, ce
+         qui n'arrive jamais vu la camera monotone. */
+      cyto.oublier(b.id);
+      continue;
+    }
     const ap = g.apex.find((z) => z.vivant && z.branche === b);
     let lon = 0;
     for (let i = b.pts.length - 1; i > 0 && lon < 470; i--) {
@@ -180,8 +209,10 @@ function image(ms) {
   fond(scr, pal, g.champ, vue);
   poussiere(scr, pal, vue, t);
   decor(scr, pal, g.champ, vue);
-  rivaux(scr, pal, g.competiteurs, g.rival, vue);
-  dessinerNoeuds(scr, pal, g.thalle.noeuds, vue, g.t);
+  dessinerNoeuds(scr, pal, g.thalle.noeuds, vue);
+  /* La spore de depart reste a l'origine du monde : on la voit derriere soi
+     pendant les premieres secondes, et elle dit d'ou l'on vient. */
+  dessinerSpore(scr, pal, 0, 0, g.rayonSpore(), vue, clamp(g.t / 5.5, 0, 1));
   const opts = {
     woronin: (g.rangs.woronin || 0) > 0,
     pulse: g.stats.pulse || 0,
@@ -190,9 +221,18 @@ function image(ms) {
   /* Les branches sans apex d'abord : le pilote doit etre dessine EN DERNIER,
      donc par-dessus, sinon une hyphe ancienne le recouvre a un croisement et
      on perd de vue ce qu'on pilote. */
+  /* Portee de rendu : une branche dont le BOUT est hors de cette portee est
+     entierement derriere, puisque le cap de tout apex est borne a l'avant et que
+     la camera ne recule pas. Ce test evite de parcourir la geometrie de
+     quarante branches mortes a chaque image — avec la ramification spontanee,
+     une manche longue en accumule beaucoup. */
+  const porteeRendu = Math.max(scr.w, scr.h) / cam.z + 320;
   for (const b of g.thalle.branches) {
     const ap = g.apex.find((z) => z.vivant && z.branche === b);
     if (ap) continue;
+    const fin2 = b.pts[b.pts.length - 1];
+    if (!fin2) continue;
+    if (Math.abs(fin2.x - cam.x) > porteeRendu || Math.abs(fin2.y - cam.y) > porteeRendu) continue;
     dessinerBranche(scr, pal, b, null, vue, g.t, g.P, cyto, { ...opts, lum: 0.55 });
   }
   for (const ap of g.apex) {

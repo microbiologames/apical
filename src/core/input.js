@@ -4,20 +4,21 @@
 
    Cinq verbes, pas plus :
      - BARRER      gauche/droite : on oriente le SPITZENKORPER, pas l'apex.
-     - POUSSEE     haut          : on pompe des osmolytes, le turgor monte.
-     - CONSOLIDER  bas           : on ferme l'apex, la paroi epaissit.
+     - ACCELERER   haut          : un CRAN de regime en plus. Le reglage reste.
+     - RALENTIR    bas           : un cran en moins ; au cran 0, l'hyphe s'arrete.
      - RAMIFIER    espace        : un nouvel apex derriere soi, a 60-90 deg.
      - SPORULER    entree        : on encaisse la manche.
 
    Tactile : moitie gauche = barre horizontale, moitie droite = glissement
-   vertical (poussee / consolidation) et TAP = ramifier. Sporuler passe par
-   le bouton du HUD, jamais par un geste : c'est une decision irreversible.
+   vertical PAR CRANS (un cran tous les 7 % de la hauteur) et TAP = ramifier.
+   Sporuler passe par le bouton du HUD, jamais par un geste : c'est une
+   decision irreversible.
 --------------------------------------------------------------------------- */
 
 import { clamp } from './util.js';
 
 const BARRE = { KeyA: -1, KeyD: 1, ArrowLeft: -1, ArrowRight: 1 };
-const DRIVE = { KeyW: 1, KeyS: -1, ArrowUp: 1, ArrowDown: -1 };
+const REGIME = { KeyW: 1, KeyS: -1, ArrowUp: 1, ArrowDown: -1 };
 
 /* Au-dela de ce deplacement du doigt la barre est a fond. 22 % de la largeur
    affichee : plus court, le pouce sortait de la zone gauche en virage serre ;
@@ -33,7 +34,7 @@ export class Input {
     this.canvas = canvas;
     this.keys = new Set();
     this.barre = 0;          // -1 .. 1, maintenu
-    this.drive = 0;          // -1 (consolider) .. 1 (poussee), maintenu
+    this.regime = 0;         // crans accumules, consommes chaque image
     this.ramifier = false;   // impulsion, consommee
     this.sporuler = false;   // impulsion, consommee
     this.pause = false;
@@ -53,7 +54,8 @@ export class Input {
       if (e.code === 'Space') { this.ramifier = true; e.preventDefault(); }
       if (e.code === 'Enter' || e.code === 'NumpadEnter') { this.sporuler = true; e.preventDefault(); }
       if (e.code === 'Escape' || e.code === 'KeyP') this.pause = true;
-      if (BARRE[e.code] || DRIVE[e.code]) e.preventDefault();
+      if (REGIME[e.code]) { this.regime += REGIME[e.code]; e.preventDefault(); }
+      if (BARRE[e.code]) e.preventDefault();
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
@@ -86,7 +88,7 @@ export class Input {
       role, ox: e.clientX, oy: e.clientY, r, t0: performance.now(), moved: 0,
     });
     if (role === 'barre') { this.pad.barre = true; this.pad.bx = 0; }
-    else { this.pad.drive = true; this.pad.dy = 0; }
+    else { this.pad.drive = true; this.pad.dy = 0; t.crans = 0; }
     try { this.canvas.setPointerCapture?.(e.pointerId); } catch { /* sans effet */ }
   }
 
@@ -98,8 +100,14 @@ export class Input {
     if (t.role === 'barre') {
       this.pad.bx = clamp((e.clientX - t.ox) / (t.r.width * BARRE_COURSE), -1, 1);
     } else {
-      /* Vers le haut = poussee, donc signe inverse de l'axe ecran. */
-      this.pad.dy = clamp(-(e.clientY - t.oy) / (t.r.height * 0.14), -1, 1);
+      /* Vers le haut = accelerer, donc signe inverse de l'axe ecran. Le
+         glissement est CRANTE : un cran tous les 7 % de la hauteur affichee.
+         Un mappage continu ne pouvait pas piloter un reglage discret sans
+         osciller entre deux crans des que le doigt tremblait. */
+      const d = -(e.clientY - t.oy) / (t.r.height * 0.07);
+      const n = Math.trunc(d) - (t.crans || 0);
+      if (n) { this.regime += n; t.crans = (t.crans || 0) + n; }
+      this.pad.dy = clamp(d / 4, -1, 1);
     }
   }
 
@@ -118,16 +126,14 @@ export class Input {
 
   /** A appeler une fois par image, avant la logique. */
   sample() {
-    let b = 0, d = 0;
-    for (const code of this.keys) {
-      if (BARRE[code]) b += BARRE[code];
-      if (DRIVE[code]) d += DRIVE[code];
-    }
+    let b = 0;
+    for (const code of this.keys) if (BARRE[code]) b += BARRE[code];
     if (this.pad.barre) b += this.pad.bx;
-    if (this.pad.drive) d += this.pad.dy;
     this.barre = clamp(b, -1, 1);
-    this.drive = clamp(d, -1, 1);
   }
+
+  /** Consomme les crans de regime accumules depuis la derniere image. */
+  takeRegime() { const v = this.regime; this.regime = 0; return v; }
 
   takeRamifier() { const v = this.ramifier; this.ramifier = false; return v; }
   takeSporuler() { const v = this.sporuler; this.sporuler = false; return v; }

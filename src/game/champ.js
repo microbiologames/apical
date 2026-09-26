@@ -61,6 +61,39 @@ export class Champ {
        que sur une carte deficitaire aller lentement est toujours moins cher.
        Un roguelite a besoin d'une pression qui rende l'attente couteuse. */
     this.deriveAw = 0;
+    /* EPUISEMENT LOCAL DU SUBSTRAT, par mailles de 8 um.
+       Sans lui, un apex immobile absorbait indefiniment la meme plume : la
+       mesure montrait un stock de sucre colle a son plafond avec trois apex,
+       donc chaque apex supplementaire etait un revenu net et la courbe de
+       difficulte s'inversait. Un mycelium epuise reellement le substrat qu'il
+       occupe — c'est meme pour cela qu'il explore.
+       Deux consequences de jeu, toutes deux voulues : brouter sur place cesse
+       de payer au bout de quelques secondes, et LA ZONE BROUTEE SE VOIT, parce
+       que le fond est dessine a partir du meme echantillon. La trace de son
+       propre passage devient une information. */
+    this.epuise = new Map();
+  }
+
+  static cleE(x, y) { return (Math.floor(x / 8) * 92837111) ^ (Math.floor(y / 8) * 689287499); }
+
+  /** Fraction de reserve restante en un point, 0 a 1. */
+  reste(x, y) {
+    const v = this.epuise.get(Champ.cleE(x, y));
+    return v === undefined ? 1 : v;
+  }
+
+  /** Preleve `q` de reserve a un point. */
+  consommer(x, y, q) {
+    const k = Champ.cleE(x, y);
+    const v = this.epuise.get(k);
+    this.epuise.set(k, Math.max(0, (v === undefined ? 1 : v) - q));
+    /* Purge grossiere : la camera ne revient jamais, donc au-dela de 40 000
+       mailles memorisees (2,5 mm2 de substrat) les plus anciennes ne seront
+       plus jamais relues. */
+    if (this.epuise.size > 40000) {
+      let n = 0;
+      for (const cle of this.epuise.keys()) { this.epuise.delete(cle); if (++n > 8000) break; }
+    }
   }
 
   /** A appeler une fois par image : le substrat se desseche avec le temps. */
@@ -90,7 +123,19 @@ export class Champ {
        varierait pixel par pixel serait illisible et injouable : le joueur doit
        pouvoir voir venir une zone seche et decider de la contourner. */
     const naw = bruit2(g + 11, x, y, 180) - 0.5;
-    const aw = clamp(s.aw + ctx.k.aw + this.deriveAw + naw * s.awBruit * 2.4, 0.45, 1);
+    /* POCHES DE SEL. Une aw de milieu n'est pas homogene : un sel qui cristallise
+       localement creuse un puits d'activite de l'eau bien plus profond que le
+       bruit de fond, sur quelques dizaines de micrometres. On le modelise par une
+       troisieme octave a SEUIL HAUT (0,70) : seuls les sommets du bruit
+       deviennent des poches, donc elles sont rares, nettes et contournables —
+       ce qui en fait un choix de trajectoire et non une penalite de zone.
+       Le decor dessine des cristaux exactement la ou ce terme est fort, donc la
+       poche s'ANNONCE : voir cellule(). */
+    const sel = s.sel
+      ? clamp((bruit2(g + 131, x, y, 110) - 0.70) / 0.16, 0, 1) * s.sel * ctx.k.sel
+      : 0;
+    const aw = clamp(s.aw + ctx.k.aw + this.deriveAw + naw * s.awBruit * 2.4
+      - sel * 0.30, 0.45, 1);
     /* sucre : plumes a l echelle du substrat, avec un seuil qui cree de vrais
        vides. Sans seuil le champ etait partout a 0,4 et la carte n avait plus
        de relief : on ne cherchait plus rien. */
@@ -111,7 +156,7 @@ export class Champ {
        brulant son stock, s'attarder dans les plumes pour le refaire — et c'est
        exactement la strategie de recherche de nourriture d'un mycelium reel. */
     su = clamp((su - 0.40) / 0.34, 0, 1);
-    const sucre = su * s.sucre;
+    const sucre = su * s.sucre * this.reste(x, y);
     /* temperature : un gradient lent, plus une derive de boucle. Un silo
        s auto-echauffe, il ne clignote pas. */
     const temp = s.temp + (bruit2(g + 43, x, y, 320) - 0.5) * 7 + ctx.boucle * 1.2;
@@ -122,7 +167,7 @@ export class Champ {
       v = clamp((v - 0.42) / 0.45, 0, 1);
       if (v > 0.02) af = { type: a.type, v: v * a.intensite * ctx.k.antifongique };
     }
-    return { aw, sucre, temp, af, substrat: s, boucle: ctx.boucle };
+    return { aw, sucre, temp, af, sel, substrat: s, boucle: ctx.boucle };
   }
 
   /** Facteur thermique au point, avec le decalage de cardinales des genes. */
@@ -199,6 +244,19 @@ export class Champ {
         type: 'goutte', x: x0 + rng() * MAILLE, y: y0 + rng() * MAILLE,
         r: lerp(3.2, 5.4, rng()), valeur: lerp(0.18, 0.34, rng()), pris: false,
       });
+    }
+
+    /* Cristaux de sel, dessines LA OU le terme salin est fort. Ils n'ont aucun
+       effet propre : ils rendent visible un puits d'aw qui, sinon, ne se
+       decouvrirait qu'en le traversant. Le decor explique le champ. */
+    if (ech.sel > 0.25) {
+      const n = 2 + Math.round(ech.sel * 4);
+      for (let i = 0; i < n; i++) {
+        liste.push({
+          type: 'sel', x: x0 + rng() * MAILLE, y: y0 + rng() * MAILLE,
+          r: lerp(1.6, 3.4, rng()), ang: rng() * Math.PI,
+        });
+      }
     }
 
     /* Locus d expression : la carte a piocher. 6 % par cellule, soit environ

@@ -69,6 +69,12 @@ async function session(nom, viewport) {
   /* On germe, puis on joue : barre a droite, poussee, une ramification. */
   await page.keyboard.press('Space');
   await page.waitForTimeout(1500);
+  /* Deux crans de regime : la germination occupe les 5,5 premieres secondes et
+     le cran de depart est LENT, donc sans cela une session de quatorze secondes
+     ne produit presque pas de thalle et le banc conclut a tort que la
+     simulation ne tourne pas. Cela verifie aussi la commande crantee. */
+  await page.keyboard.press('KeyW');
+  await page.keyboard.press('KeyW');
   const t2 = await page.evaluate(STATS);
   await page.screenshot({ path: `captures/${nom}-02s.png` });
 
@@ -109,6 +115,14 @@ async function session(nom, viewport) {
   })()`);
   await page.screenshot({ path: `captures/${nom}-macro.png`, clip: cadre });
 
+  /* ECRAN DE FIN : on sporule pour l'atteindre a coup sur. C'est le seul moyen
+     de verifier la CARTE DU THALLE, qui n'apparait nulle part ailleurs et qui
+     est le bilan de la manche. Un bilan jamais rendu est un bilan jamais teste. */
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: `captures/${nom}-bilan.png` });
+  const bilan = await page.evaluate(STATS);
+
   /* Deux images consecutives : le champ doit CHANGER. Un rendu figé est le
      defaut le plus facile a ne pas voir, parce qu'il est joli. */
   const a = await page.evaluate(`(() => {
@@ -124,7 +138,7 @@ async function session(nom, viewport) {
   /* Etat interne, expose pour le banc. */
   const etat = await page.evaluate('window.__apical ? window.__apical() : null');
   await page.close();
-  return { titre, t2, t14, bouge: a !== b, etat };
+  return { titre, t2, t14, bilan, bouge: a !== b, etat };
 }
 
 console.log('\n=== APICAL : banc visuel ===\n');
@@ -161,10 +175,20 @@ if (port.etat) {
      le banc a chaque reglage d'equilibrage sans rien dire du rendu. Ce qu'on
      garde, c'est qu'un rendu superbe sur une simulation gelee ne doit pas
      passer : 100 um de thalle, c'est une dizaine de secondes de croissance. */
-  verdict(e.longueur > 100 && e.avance > 60,
+  /* Seuils bas et volontairement larges : ce banc depend du temps REEL d'un
+     navigateur, donc une session de quatorze secondes ne produit pas la meme
+     longueur d'une execution a l'autre. Il verifie que la simulation tourne
+     derriere le rendu, pas qu'elle tourne a une vitesse donnee — cela, c'est le
+     travail du banc de logique, qui lui est reproductible. */
+  verdict(e.longueur > 110 && e.avance > 38,
     'la simulation a reellement tourne derriere le rendu',
     `longueur ${e.longueur} um, avance ${e.avance} um, ${e.apex} apex, etat ${e.etat}`);
 }
+
+verdict(port.bilan.couleurs > 30 && pays.bilan.couleurs > 30,
+  'la carte du thalle est tracee sur l\'ecran de fin',
+  `couleurs du bilan : portrait ${port.bilan.couleurs}, paysage ${pays.bilan.couleurs} `
+  + `(un ecran de texte seul en donne moins de 20)`);
 
 verdict(port.t2.w === 256, 'la disposition portrait fait 256 px de large',
   `${port.t2.w} x ${port.t2.h} en portrait, ${pays.t2.w} x ${pays.t2.h} en paysage`);

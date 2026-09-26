@@ -47,12 +47,17 @@ ce qui fait que la partie devient difficile **au moment où on devient puissant*
 | **Hyperturgor** | plafond de turgor +0,45, seuil de fluage effondré | la paroi n'a pas changé → l'apex éclate. C'est une échinocandine à l'envers |
 | **Croissance apicale multiple** | +2 apex, autonomes plus rapides | le thalle devient un réseau, et le réseau devient le danger |
 | **Conversion xérophile** | aw minimale à 0,62 : plus aucun substrat n'est trop sec | −18 % d'absorption : un xérophile extrême est un spécialiste, pas un généraliste |
-| **Gènes mycoparasites** | le contact d'un concurrent le **digère** au lieu de blesser | aucun coût direct, mais il ne fait rien contre les cinq autres morts |
+| **Récepteurs de gradient** | on **voit beaucoup plus loin**, et les hyphes sœurs trouvent le sucre seules | rien d'autre : il achète de la perception, pas de la puissance |
 
-Le banc vérifie la dette : avec *hyperturgor + ATPase + flux de masse*, **la
-majorité des manches meurt de lyse apicale franche**. Si cette mort n'arrivait
-pas, le catalogue pourrait être empilé sans réfléchir et le jeu n'aurait plus de
-courbe.
+> **« Gènes mycoparasites » a été remplacé** le jour où les fronts concurrents
+> ont été retirés : un gène dont la cible n'existe plus est une carte morte dans
+> le paquet, et une carte morte légendaire est pire encore. Le remplaçant sert la
+> nouvelle source de difficulté, qui est le choix de trajectoire.
+
+Le banc vérifie la dette : avec *hyperturgor + ATPase + flux de masse*, la
+construction roule avec une **paroi mesurablement plus mince** (0,83 contre 0,92
+avec les synthases) et meurt plus tôt. La lyse elle-même est devenue rare depuis
+que l'apex se ferme quand le matériau manque — voir `docs/05-banc.md`.
 
 ---
 
@@ -63,7 +68,7 @@ courbe.
 | **paroi** | chitine synthases CHS, glucane synthase FKS1, hydrophobines, mélanine DHN | de la marge avant la lyse |
 | **turgor** | glycérol-3-P déshydrogénase, voie HOG1, aquaporines, H⁺-ATPase PMA1 | de la vitesse et de l'osmotolérance |
 | **spk** | myosine V, exocyste SEC6, canal calcique CCH1, kinésine-1 | du flux et du rayon de braquage |
-| **tropisme** | récepteurs GPCR, polarisome Cdc42, autotropisme négatif, thigmotropisme | de la précision et de la perception |
+| **tropisme** | récepteurs GPCR, polarisome Cdc42, autotropisme négatif, thigmotropisme | de la précision et, littéralement, **du champ de vision** |
 | **ramification** | NADPH oxydase NoxA, dominance apicale, septines AspB | des fronts, donc des vies |
 | **hydrolase** | α-amylase, polygalacturonase, invertase, transporteur MstA | l'accès à des substrats fermés |
 | **transport** | flux de masse, corps de Woronin, anastomose | de la logistique et de la survie au dégât |
@@ -77,6 +82,10 @@ chiffre :
   **fusionne** et crée un nœud qui donne du flux permanent. C'est une vraie
   transformation d'un arbre en réseau, et ça retourne complètement la gestion de
   l'espace ;
+- **Récepteur GPR-4** (commune) : il **recule la caméra**. C'est le seul gène du
+  jeu qui n'achète aucune statistique — il achète de l'information, et sur une
+  carte où l'on ne voit que cent micromètres devant soi, c'est souvent le
+  meilleur achat de la main ;
 - **α-amylase** (peu commune, rang unique) : **l'amidon devient du sucre**. Sans
   elle, le grain stocké — le substrat le plus riche du jeu — est un désert. Une
   carte commune devient une clé de porte, et c'est le meilleur argument du

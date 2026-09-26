@@ -56,17 +56,24 @@ const COTON = {
   paroi: hexToRgba('#2f4f9e'),
   paroiRim: hexToRgba('#16265a'),
   paroiMince: hexToRgba('#7d8ec4'),
-  cyto: hexToRgba('#c8d2e8'),
+  cyto: hexToRgba('#ccd6ea'),
   /* Le Spitzenkorper est un amas de vesicules : refringent, tres net. */
   spk: hexToRgba('#101f4a'),
   spkGlow: hexToRgba('#6d86d6'),
-  vesicule: hexToRgba('#4a63ab'),
+  /* Organites RECLAIRCIS apres capture macro : a #4a63ab ils formaient, dans un
+     tube devenu large par le zoom, un amas franchement sombre qui se lisait
+     comme une tache et non comme un cytoplasme granuleux. Un montage au bleu
+     coton colore la PAROI ; le contenu y reste pale et seulement contraste. */
+  vesicule: hexToRgba('#8b9cc9'),
   septum: hexToRgba('#0e1c44'),
   woronin: hexToRgba('#8a6a22'),
   noeud: hexToRgba('#1d7d6a'),
 
   /* Ressources du milieu. */
   sucre: hexToRgba('#b06a08'), sucreRim: hexToRgba('#5e3603'),
+  /* Le sel est un cristal cubique incolore : c'est son ARETE qui se voit, pas
+     sa masse. On le rend donc presque blanc a bord dur et bleute. */
+  sel: hexToRgba('#f2f6ff'), selRim: hexToRgba('#6b7f9e'),
   eau: hexToRgba('#2d7ea8'), eauRim: hexToRgba('#12415a'),
   locus: hexToRgba('#7a2fb0'), locusRim: hexToRgba('#3d1159'),
   /* Un antifongique est un HALO diffusible, jamais un objet net. */
@@ -99,6 +106,7 @@ const CALCO = {
   noeud: hexToRgba('#6affc8'),
 
   sucre: hexToRgba('#ffc24a'), sucreRim: hexToRgba('#9a6f12'),
+  sel: hexToRgba('#eaf2ff'), selRim: hexToRgba('#7f93b5'),
   eau: hexToRgba('#6ec6ff'), eauRim: hexToRgba('#2a6a96'),
   locus: hexToRgba('#c07bff'), locusRim: hexToRgba('#6a3aa0'),
   azole: hexToRgba('#b98cff', 120),
@@ -126,15 +134,29 @@ export const CONIDIES = {
   xeromyces: { fill: '#d8cfae', rim: '#7d7355' },
 };
 
+/* ---------------------------------------------------------------------------
+   TOUS LES SUBSTRATS SONT MONTES AU BLEU COTON, donc en fond clair.
+
+   Decision de l'auteur apres essai : le fond clair « donne l'impression d'etre
+   directement dans une gelose », et c'est exactement l'effet recherche. Le
+   montage au calcofluor reste ecrit plus haut et reste juste, mais il faisait
+   alterner fond noir et fond clair EN COURS DE MANCHE, au passage d'un substrat
+   a l'autre — un basculement qu'on lit comme une panne d'affichage, pas comme
+   un changement de milieu. Un seul montage pour toute la manche.
+
+   Les quatre substrats se distinguent donc par la TEINTE de leur gelose, et
+   chacune est celle du milieu reel : pale et verdie pour une cuticule, creme
+   pour une chair de fruit, ambre pour un sirop, ocre pour une amande de
+   cereale. Ne pas remettre de fond noir sans nouvelle instruction.
+--------------------------------------------------------------------------- */
 export const SUBSTRATS_PALETTE = {
   pellicule: {
     nom: 'PELLICULE',
-    ...CALCO,
-    bg: hexToRgba('#05080b'),
-    /* La cuticule est cireuse : des plaques de cire qui renvoient la lumiere
-       en ecailles, et non un fond uni. */
-    grain: hexToRgba('#14232b'), grainRim: hexToRgba('#2f4d5c'),
-    voile: hexToRgba('#0a141a', 70),
+    ...COTON,
+    /* Cuticule : une gelose pale, a peine verdie par les cires. */
+    bg: hexToRgba('#e6e9d8'),
+    grain: hexToRgba('#f6f8ea'), grainRim: hexToRgba('#8a9276'),
+    voile: hexToRgba('#cdd2b9', 88),
   },
   mesocarpe: {
     nom: 'MESOCARPE',
@@ -157,13 +179,12 @@ export const SUBSTRATS_PALETTE = {
   },
   grain: {
     nom: 'GRAIN STOCKE',
-    ...CALCO,
-    /* Amande de cereale : les granules d'amidon dominent le champ et la
-       fluorescence les fait sortir, parce que le calcofluor marque aussi la
-       cellulose des parois du peripserme. */
-    bg: hexToRgba('#080704'),
-    grain: hexToRgba('#2a2415'), grainRim: hexToRgba('#6b5a2e'),
-    voile: hexToRgba('#141005', 70),
+    ...COTON,
+    /* Amande de cereale : ocre, dense, et les granules d'amidon y dominent le
+       champ — ce sont eux qu'on voit d'abord dans une coupe de ble. */
+    bg: hexToRgba('#d8c79a'),
+    grain: hexToRgba('#fdf6e0'), grainRim: hexToRgba('#8a7038'),
+    voile: hexToRgba('#bfa971', 95),
   },
 };
 

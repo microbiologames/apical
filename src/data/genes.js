@@ -44,7 +44,7 @@ export const BASE = {
   spkDist: 6,         // px : distance Spitzenkorper - apex. Petit = tourne court
   kSucre: 1.0,        // rendement d'absorption du sucre
   rayonAbs: 9,        // px : rayon de la zone subapicale absorbante
-  apexMax: 2,         // apex simultanes (1 pilote + 1 secours)
+  apexMax: 4,         // apex simultanes. Un thalle EST ramifie : voir UCH
   coutBranche: 0.30,  // sucre par ramification
   maintenance: 0.030, // sucre/s brule a l'entretien
   integrite: 0.55,    // reparation de paroi par seconde
@@ -145,7 +145,7 @@ export const GENES = [
     id: 'spkserre', nom: 'Spitzenkorper resserre', famille: 'spk', rarete: 'rare', rang: 2,
     desc: 'Le SPK colle a l apex : on tourne beaucoup plus court, au prix de 8 % de vitesse.',
     fondement: 'La forme de l hyphe est la trace geometrique du deplacement du Spitzenkorper. Un centre de distribution plus proche de l apex decrit une courbe plus serree.',
-    effet: { spkDist: -2.2, phi: -3.8, agilite: 0.3 },
+    effet: { spkDist: -2.2, phi: -3.8, agilite: 0.09 },
   },
   {
     id: 'pulse', nom: 'Canal calcique CCH1', famille: 'spk', rarete: 'peucommune', rang: 3,
@@ -163,15 +163,15 @@ export const GENES = [
   /* --- FAMILLE TROPISME : sentir ou aller ------------------------------ */
   {
     id: 'gpcr', nom: 'Recepteur GPR-4', famille: 'tropisme', rarete: 'commune', rang: 3,
-    desc: 'Chimiotropisme : les plumes de sucre se voient de plus loin.',
-    fondement: 'Les hyphes d Aspergillus nidulans font vraiment du chimiotropisme vers les nutriments et vers le pH, par recepteurs couples aux proteines G.',
-    effet: { portee: 26 },
+    desc: 'Chimiotropisme : la camera se recule, on VOIT plus loin devant.',
+    fondement: 'Les hyphes d Aspergillus nidulans font vraiment du chimiotropisme vers les nutriments et vers le pH, par recepteurs couples aux proteines G. Percevoir plus loin, c est litteralement ce que ce recepteur achete.',
+    effet: { vue: 22, portee: 18 },
   },
   {
     id: 'agilite', nom: 'Polarisome CDC42', famille: 'tropisme', rarete: 'commune', rang: 4,
-    desc: 'Barre plus vive : +22 % de vitesse de virage.',
+    desc: 'Barre plus vive : +18 % de vitesse de virage.',
     fondement: 'Le module Cdc42/Rac fixe et deplace le site de polarite. Deplacer ce site, c est litteralement tourner.',
-    effet: { agilite: 0.42 },
+    effet: { agilite: 0.10 },
   },
   {
     id: 'autotropisme', nom: 'Autotropisme negatif', famille: 'tropisme', rarete: 'peucommune', rang: 3,
@@ -323,10 +323,15 @@ export const GENES = [
     effet: { awMin: -0.26, kEau: -0.18 },
   },
   {
-    id: 'trichoderma', nom: 'Genes mycoparasites', famille: 'detox', rarete: 'legendaire', rang: 1,
-    desc: 'Le contact d un concurrent ne vous blesse plus : vous le DIGEREZ (sucre + territoire).',
-    fondement: 'Trichoderma s enroule sur l hyphe hote, la lyse par chitinases et glucanases, et occupe sa place. C est du remplacement, pas du partage.',
-    effet: { mycoparasite: 1 },
+    /* A REMPLACE « Genes mycoparasites », devenu sans objet le jour ou les fronts
+       concurrents ont ete retires : un gene dont la cible n'existe plus est une
+       carte morte dans le paquet, et une carte morte legendaire est pire encore.
+       Le remplacant sert la meme famille (percevoir et exploiter le milieu) et
+       la nouvelle source de difficulte, qui est le choix de trajectoire. */
+    id: 'gradient', nom: 'Recepteurs de gradient', famille: 'tropisme', rarete: 'legendaire', rang: 1,
+    desc: 'On voit BEAUCOUP plus loin, et les hyphes soeurs trouvent le sucre toutes seules.',
+    fondement: 'Le chimiotropisme fongique passe par des recepteurs couples aux proteines G et des canaux calciques : un apex remonte reellement un gradient de nutriments. Un thalle qui le fait bien n explore pas, il choisit.',
+    effet: { vue: 45, flair: 1.6, portee: 30 },
   },
 ];
 
@@ -347,7 +352,7 @@ export function appliquer(rangs) {
     detox: { ...BASE.detox },
     hydrolases: { ...BASE.hydrolases },
     portee: 0, glisse: 0, perce: 0, woronin: 0, anastomose: 0,
-    mycoparasite: 0, secours: 0, pulse: 0, brancheVit: 0, brancheAngle: 0,
+    secours: 0, pulse: 0, brancheVit: 0, brancheAngle: 0, flair: 0,
   };
   for (const [id, rang] of Object.entries(rangs || {})) {
     const g = GENE_PAR_ID[id];

@@ -75,6 +75,13 @@ pilotée par quatre politiques caricaturales. Onze verdicts.
 
 Ce que le banc a trouvé, et qu'aucune relecture n'aurait trouvé :
 
+0. **Le banc n'était pas reproductible.** La phase du pulse du premier apex
+   venait de `Math.random()`. Deux exécutions sur les mêmes graines donnaient
+   des médianes variant du simple au septuple (240 µm contre 1 700 µm de
+   profondeur pour la même politique), et les verdicts basculaient au hasard.
+   **Une mesure non reproductible ne mesure rien.** Tout aléa de simulation
+   vient du générateur de la manche.
+
 1. **`hash2` ne rendait jamais que [0 ; 0,5[.** Un décalage arithmétique au lieu
    de logique annulait le bit de signe contre lui-même. Inoffensif pour du
    tramage (son usage dans Cell Dungeon), **fatal ici** : le champ de sucre moyen
@@ -96,8 +103,20 @@ Ce que le banc a trouvé, et qu'aucune relecture n'aurait trouvé :
    sur trois distances.
 6. **Mesurer le minimum d'épaisseur de paroi ne distinguait rien** : il est
    toujours atteint pendant l'effondrement final, donc il valait 0,02 pour les
-   trois politiques. On mesure la **moyenne en croisière** et le **temps passé
-   sous le seuil**.
+   trois politiques. On mesure la **moyenne en croisière**.
+7. **L'exclusion de contact avec sa propre paroi était en TEMPS.** Calée sur
+   20 µm/s, elle protégeait les 20 µm derrière l'apex ; au régime lent (3 µm/s)
+   elle n'en protégeait plus que trois, et l'apex fusionnait avec son propre
+   tube dès la première seconde. **24 manches sur 24 mortes à 4,5 s.** Elle est
+   maintenant en **abscisse curviligne**, donc indépendante de l'allure.
+8. **La famine tuait toujours, et par la même mort** : 23 manches sur 24 en
+   « carence puis lyse ». Il manquait deux mécanismes réels — la **rétroaction
+   de disette** (un apex à court de matériau se ferme au lieu de foncer vers sa
+   rupture) et l'**autophagie** (un mycélium affamé se mange). Avec eux, la
+   famine devient un compte à rebours visible et six causes de mort coexistent.
+9. **La sporulation exigeait du sucre**, donc était impossible au moment exact
+   où il faut la prendre. C'est aussi un contresens biologique : c'est **la
+   limitation en nutriments qui induit la conidiation**. Seuil ramené à 0,04.
 
 Corollaire de 4 et 5 : **un banc dont tous les verdicts passent du premier coup
 ne garde rien.** Vérifier qu'un verdict attrape le défaut qu'il prétend garder,
@@ -134,9 +153,26 @@ en remettant le défaut.
   continue : c'est ce qui fait qu'un apex bloqué a l'air vivant et non en pause.
 - **Une seule chose clignote dans tout le jeu** : la jauge de paroi sous le seuil
   de lyse. Si autre chose clignote, l'alerte ne veut plus rien dire.
-- **Le tube est rastérisé par sections transversales**, pas en segments épais. Un
-  trait épais coloré donne un ruban, et l'hyphe cesse d'être un objet rigide
-  contenant un liquide.
+- **Le tube est rastérisé par CHAMP DE DISTANCE**, pas en segments épais ni
+  section par section. Un trait épais coloré donne un ruban ; un tracé section
+  par section fait **onduler la paroi**, et une paroi qui ondule n'est pas
+  rigide.
+- **Le plan de contact avec sa propre paroi s'exclut en DISTANCE D'ARC**, jamais
+  en temps. Voir la mesure 7 ci-dessus.
+- **Aucun `Math.random()` dans la simulation.** Tout aléa vient de `game.rng`,
+  sinon le banc ne mesure plus rien (mesure 0).
+- **Les ressources sont globales, mais l'ENTRETIEN suit la BIOMASSE.** C'est ce
+  terme qui donne une fin à la manche et qui rend la sporulation nécessaire.
+  Sans lui, revenus et dépenses croissaient tous deux avec le nombre d'apex et
+  ouvrir des fronts était neutre.
+- **Le substrat s'épuise localement** (mailles de 8 µm). Brouter sur place cesse
+  de payer, et **la zone broutée se voit** puisque le fond est dessiné à partir
+  du même échantillon.
+- **Tous les substrats sont montés au bleu coton**, donc en fond clair. Un
+  basculement fond clair / fond noir en cours de manche se lit comme une panne
+  d'affichage. Ne pas remettre de fond noir.
+- **Pas de concurrents.** Décision de l'auteur : ils se lisaient comme des mobs
+  à trajectoire rectiligne. Le milieu ne contient que des éléments de milieu.
 
 ---
 
@@ -159,12 +195,12 @@ commentés en profondeur.
 
 ## Chantiers ouverts
 
-- **La carence arrive avant la paroi.** C'est le chantier d'équilibrage le plus
-  net, et il est mesuré : à plein régime, 15 manches sur 24 meurent de carence
-  contre 6 de lyse franche, et les gènes de synthase n'allongent donc pas la
-  manche bien qu'ils épaississent la paroi de 27 %. Un gène de sécurité ne doit
-  pas abréger la partie. Trois pistes dans `docs/05-banc.md` — **à trancher en
-  jouant, pas au banc.**
+- **La lyse est devenue rare** (4 manches sur 24 même avec une construction de
+  vitesse), conséquence assumée de la rétroaction de disette. L'arbitrage
+  vitesse / paroi se lit maintenant dans l'**épaisseur** et dans la **durée de
+  manche**, plus dans une mort. À rejuger à la manette : si la paroi cesse de
+  faire peur, il faudra rendre la rétroaction plus imparfaite.
+- **Le méta.** Les spores s'accumulent mais n'achètent rien.
 - **Le son.** Rien pour l'instant. La piste évidente est de faire entendre le
   **pulse calcique** : c'est déjà l'horloge du jeu, à 1,55 Hz.
 - **Souches jouables.** Une seule. Candidates dans `docs/00-concept.md`.
@@ -173,6 +209,6 @@ commentés en profondeur.
   exprimés à la germination, pas des statistiques.
 - **Le bilan de fin de manche** mérite une carte du thalle vue de loin. C'est le
   seul moment où l'on a le droit de reculer la caméra.
-- **Banc visuel.** `npm run visual` n'existe pas encore : il faut des captures en
-  jeu, portrait et paysage, pour vérifier **la page qu'on livre** et pas celle
-  qu'on garde.
+- **La carte de fin de manche** existe mais reste brute : pas de densité de
+  réseau, pas de comparaison avec les manches précédentes. C'est pourtant le
+  seul écran où l'on a le droit de reculer la caméra.

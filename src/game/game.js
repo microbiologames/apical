@@ -24,7 +24,7 @@
 
 import { clamp, lerp, mulberry32, TAU } from '../core/util.js';
 import { appliquer, tirerMain } from '../data/genes.js';
-import { AW_MIN_BASE } from '../data/substrats.js';
+import { AW_MIN_BASE, UCH } from '../data/substrats.js';
 import { Champ } from './champ.js';
 import { Thalle, distSeg } from './thalle.js';
 import { Apex, CAP_MAX, AVANT, E_CRIT } from './apex.js';
@@ -65,8 +65,94 @@ const GAIN_SUCRE = 1.40;
 const COUT_POUSSEE = 0.055;
 /* Fuite de turgor d un polyene, qui perce la membrane au lieu d inhiber. */
 const FUITE_POLYENE = 0.35;
+/**
+ * ENTRETIEN PROPORTIONNEL A LA BIOMASSE, en sucre par seconde et par um de tube.
+ *
+ * C'est le terme qui donne au jeu sa fin, et il manquait. Le raisonnement, tire
+ * de la mesure : revenus et depenses croissaient TOUS DEUX avec le nombre
+ * d'apex — chaque apex absorbe son champ et paie sa paroi — donc ouvrir des
+ * fronts etait neutre, et le stock de sucre restait colle a son plafond avec
+ * trois apex. Un thalle qui grandit sans jamais que cela lui coute n'a aucune
+ * raison de s'arreter, donc la sporulation n'a plus d'enjeu et le roguelite
+ * perd son extraction.
+ *
+ * Un mycelium, lui, doit entretenir TOUT ce qu'il a construit : maintenir le
+ * gradient de protons, renouveler les proteines, tenir le turgor sur des
+ * milliers de micrometres de tube. La depense suit donc la biomasse et non le
+ * nombre de pointes.
+ *
+ * A 0,00006 : 2 000 um de thalle coutent 0,12/s, 6 000 um en coutent 0,36/s —
+ * l'ordre de grandeur du revenu de trois apex bien nourris. Le thalle atteint
+ * donc son plafond de viabilite vers 6 000 a 9 000 um, et c'est la que la
+ * question « continuer ou encaisser » se pose vraiment.
+ */
+const ENTRETIEN_PAR_UM = 0.00006;
+/**
+ * AUTOPHAGIE : sucre rendu par micrometre de thalle recycle.
+ *
+ * Un mycelium a court de carbone ne meurt pas tout de suite : il SE MANGE. Le
+ * cytoplasme se retire des compartiments distaux, les parois y sont lysees, et
+ * la matiere remonte vers les apex. C'est un mecanisme documente et vital chez
+ * les champignons filamenteux, et c'est aussi ce qui manquait au jeu.
+ *
+ * Sans lui, un stock de sucre a zero coupait le flux vesiculaire, donc la
+ * paroi, donc l'apex : 24 manches sur 24 mouraient de « carence puis lyse » et
+ * la famine ne laissait aucune fenetre pour reagir. Avec lui, la famine devient
+ * un COMPTE A REBOURS VISIBLE — la longueur du thalle, donc le score, se met a
+ * descendre — et c'est exactement le signal qui doit pousser a sporuler.
+ *
+ * RENDEMENT RAMENE DE 0,004 A 0,0018 APRES MESURE, et la mesure vaut d'etre
+ * gardee : a 0,004, se manger soi-meme etait si rentable que FONCER EN
+ * PERMANENCE devenait la meilleure strategie — la politique pleins gaz
+ * atteignait 1 529 um de profondeur contre 1 361 a une politique qui module,
+ * parce qu'elle payait sa vitesse avec un thalle dont la perte ne coutait
+ * presque rien au score. L'autophagie doit etre un SURSIS, pas un carburant.
+ * A 0,0018 : un deficit de 0,25/s consomme 139 um de tube par seconde, donc un
+ * thalle de 4 000 um disparait en une demi-minute. Et comme l'entretien suit la
+ * biomasse, le declin ralentit au lieu de s'emballer — il reste une chance de
+ * retrouver une plume, mais il n'y a plus de quoi s'installer dedans.
+ */
+const AUTOPHAGIE_PAR_UM = 0.0018;
 /* Longueur cumulee entre deux paliers d expression genique. */
 export const PALIER = 620;
+
+/**
+ * LES CINQ REGIMES. La croissance n'est plus une consigne maintenue mais un
+ * REGLAGE QUI RESTE, comme un chadburn de passerelle : on le change, il tient.
+ *
+ * Pourquoi pas un bouton a maintenir. La question posee etait « la croissance
+ * ne doit-elle pas etre manuelle plutot qu'automatique, pour que le joueur
+ * gere sa vitesse ». Un bouton a maintenir donne bien ce controle, mais il le
+ * fait payer par le doigt : sur une manche de huit minutes on tient la touche
+ * 95 % du temps, donc l'appui cesse d'etre une decision et redevient un etat
+ * par defaut — avec de la fatigue en plus. Un cran qui reste donne exactement le
+ * meme arbitrage (ralentir economise, pousser coute) en faisant de chaque
+ * changement d'allure un GESTE VOLONTAIRE, donc lisible, donc memorable.
+ *
+ * Le regime 0 arrete VRAIMENT : au fond de la consolidation le seuil de fluage
+ * passe au-dessus du plafond de turgor. On s'immobilise pour regarder devant
+ * soi, refaire son turgor et cesser de bruler du sucre. Le cytoplasme, lui,
+ * continue de couler : un apex arrete n'est pas un apex en pause.
+ */
+export const REGIMES = [
+  { nom: 'ARRET', drive: -1 },
+  { nom: 'LENT', drive: -0.45 },
+  { nom: 'CROISIERE', drive: 0 },
+  { nom: 'POUSSEE', drive: 0.5 },
+  { nom: 'FORCAGE', drive: 1 },
+];
+
+/**
+ * Duree de germination, en secondes de jeu.
+ *
+ * Une spore ne demarre pas a pleine vitesse : elle s'imbibe et GONFLE d'abord,
+ * puis un tube germinatif emerge, puis l'extension devient lineaire. Les deux
+ * premieres phases ne produisent aucune longueur. C'est la vraie ouverture du
+ * jeu, et elle a une vertu de conception : les cinq premieres secondes ne
+ * demandent rien d'autre que de regarder, ce qui est le meilleur moment pour
+ * apprendre a lire un champ.
+ */
+export const T_GERM = 5.5;
 
 export class Game {
   constructor(graine = (Math.random() * 1e9) | 0) {
@@ -74,8 +160,10 @@ export class Game {
     this.rng = mulberry32(this.graine ^ 0x5bf03635);
     this.champ = new Champ(this.graine);
     this.thalle = new Thalle();
-    this.rival = new Thalle();
     this.t = 0;
+    /* Regime de croissance, cran 1 (LENT) au demarrage : on sort de la spore au
+       ralenti, ce qui laisse le temps de lire le champ avant d'accelerer. */
+    this.regime = 1;
 
     this.rangs = {};
     /* Flux gagne par les noeuds d anastomose. Il vit HORS de `rangs` parce que
@@ -91,17 +179,17 @@ export class Game {
     this.charge = { azole: 0, echino: 0, polyene: 0, sorbate: 0 };
 
     const b = this.thalle.nouvelleBranche(-1, 0, 0);
-    this.apex = [new Apex(b, 0, 0, AVANT, { pilote: true })];
+    /* La phase du pulse vient du GENERATEUR DE LA MANCHE et non de Math.random.
+       Defaut trouve par le banc lui-meme : les verdicts basculaient d'une
+       execution a l'autre sur les memes graines, avec des medianes qui
+       variaient du simple au septuple (240 um contre 1 700 um de profondeur pour
+       la meme politique). Une mesure non reproductible ne mesure rien, et on ne
+       peut pas distinguer un reglage d'un bruit. */
+    this.apex = [new Apex(b, 0, 0, AVANT, { pilote: true, phase: this.rng() * Math.PI * 2 })];
     this.pilote = this.apex[0];
 
-    this.competiteurs = [];
-    /* HORLOGE DES CONCURRENTS, ET C'EST UNE DATE, PAS UNE DISTANCE.
-       La version precedente declenchait les fronts sur `avance`, donc un joueur
-       lent en rencontrait MOINS : la lenteur etait recompensee deux fois. Une
-       moisissure concurrente a germe au meme instant que vous et pousse que vous
-       bougiez ou non. Le declenchement est donc temporel, et c'est la seconde
-       horloge du jeu avec le dessechement. */
-    this.prochainComp = 14;       // secondes avant le premier front
+    /* Prochaine ramification SPONTANEE, en um de thalle cumules. Voir UCH. */
+    this.prochaineBranche = UCH;
     this.avance = 0;              // le plus grand y atteint : la profondeur
     this.prochainPalier = PALIER;
     this.etat = 'jeu';            // jeu | offre | mort | sporule
@@ -120,6 +208,24 @@ export class Game {
   recalcStats() {
     this.stats = appliquer(this.rangs);
     this.stats.jmax += this.bonusFlux;
+  }
+
+  /**
+   * Avancement de la germination, 0 a 1.
+   *
+   * Les 42 premiers pour cent du temps sont le GONFLEMENT de la spore : elle
+   * s'imbibe, son volume double, et rien ne sort. Le tube germinatif emerge
+   * ensuite et prend sa vitesse en puissance 1,5, donc doucement d'abord.
+   */
+  facteurGerm() {
+    if (this.t >= T_GERM) return 1;
+    const u = this.t / T_GERM;
+    return Math.pow(clamp((u - 0.42) / 0.58, 0, 1), 1.5);
+  }
+
+  /** Rayon apparent de la spore de depart, en um. Elle gonfle puis reste. */
+  rayonSpore() {
+    return lerp(4.2, 6.8, clamp(this.t / (T_GERM * 0.5), 0, 1));
   }
 
   /** Flux vesiculaire effectif : borne par le stock ET par les echinocandines. */
@@ -144,7 +250,12 @@ export class Game {
 
     const st = this.stats;
     st.jmaxEff = this.fluxEffectif();
+    st.germ = this.facteurGerm();
     this.champ.majDerive(this.t);
+    /* Le regime est un ETAT du thalle, pas une commande d'image : il se lit ici
+       et vaut pour le pilote comme pour les apex autonomes (ceux-ci n'ont pas de
+       poussee propre, ils suivent la consigne generale a leur vitesse reduite). */
+    const drivePilote = REGIMES[clamp(this.regime, 0, REGIMES.length - 1)].drive;
 
     let absEau = 0, absSucre = 0, coutVol = 0, coutParoi = 0, expo = null;
     let produit = 0;
@@ -155,7 +266,9 @@ export class Game {
       const ft = this.champ.facteurTemp(ech.temp, st.tempDec);
       const estPilote = a === this.pilote;
       const barre = estPilote ? cmd.barre : this.autoBarre(a, ech);
-      const drive = estPilote ? cmd.drive : 0;
+      /* Un apex autonome subit le regime comme les autres mais ne beneficie
+         jamais de la poussee : la poussee est un acte de pilotage. */
+      const drive = estPilote ? drivePilote : Math.min(0, drivePilote);
       /* Un apex autonome pousse moins fort : la dominance apicale n est pas
          levee, seulement relachee. `autoVit` est ce que les genes achetent. */
       const ralenti = estPilote ? 1 : clamp(st.autoVit, 0.2, 1);
@@ -182,6 +295,12 @@ export class Game {
       let eau = st.kEau * marge * (1 - this.P / pmaxEff) * ft * azole;
       if (marge < 0) eau = st.kEau * marge * 1.4;   // le retrait est plus rapide
       if (estPilote && drive > 0) eau *= 1 + 0.9 * drive;
+      /* DRAIN SALIN. Une poche de sel ne se contente pas d'abaisser l'aw du
+         terme d'absorption : elle TIRE l'eau hors de l'hyphe, par osmose, et
+         d'autant plus vite que le gradient est raide. C'est le mecanisme
+         demande, et c'est ce qui rend une poche dangereuse meme a turgor plein
+         — l'absorption, elle, sature quand P est haut. */
+      if (ech.sel > 0.02) absEau -= ech.sel * 0.55;
       absEau += eau;
       if (estPilote) this.pmaxEff = pmaxEff;
 
@@ -190,10 +309,12 @@ export class Game {
          fait qu on absorbe ce qu on vient de traverser. Quatre points derriere
          l apex suffisent ; huit ne changeaient pas la valeur a 3 % pres. */
       let champSucre = 0;
+      const pts = [];
       for (let i = 1; i <= 4; i++) {
         const r = (i / 4) * st.rayonAbs;
-        const e2 = this.champ.echantillon(a.x - Math.cos(a.dir) * r, a.y - Math.sin(a.dir) * r);
-        champSucre += e2.sucre;
+        const px2 = a.x - Math.cos(a.dir) * r, py2 = a.y - Math.sin(a.dir) * r;
+        pts.push([px2, py2]);
+        champSucre += this.champ.echantillon(px2, py2).sucre;
       }
       champSucre /= 4;
       /* L amidon n est pas du sucre sans amylase. Le substrat le plus riche du
@@ -206,24 +327,60 @@ export class Game {
       if (a.creux) gain *= 1.35;
       if (estPilote && drive < 0) gain *= 1 - drive * 0.45;
       absSucre += gain;
+      /* On preleve ce qu'on absorbe, reparti sur les quatre points de la zone
+         subapicale. 0,9 par unite absorbee : a un gain de 0,3/s une maille est
+         videe en quatre secondes d'arret, et traversee a vitesse de croisiere
+         elle ne perd qu'un cinquieme de sa reserve. Brouter sur place coute
+         donc la plume ; la traverser la laisse vivante pour les hyphes soeurs. */
+      if (gain > 0) for (const [cx2, cy2] of pts) this.champ.consommer(cx2, cy2, gain * 0.9 * dt);
 
       if (ech.af && (!expo || ech.af.v > expo.v)) expo = ech.af;
 
       /* --- contacts ------------------------------------------------- */
       this.contactObstacles(a, st, dt);
       this.contactSoi(a, st);
-      this.contactRival(a, st, dt);
       this.ramasser(a, st);
     }
 
     /* --- bilan global ------------------------------------------------- */
     let poussee = 0;
-    if (cmd.drive > 0) poussee = COUT_POUSSEE * cmd.drive;
+    if (drivePilote > 0) poussee = COUT_POUSSEE * drivePilote;
     const sorb = 1 + this.charge.sorbate * 2.2;
+    const entretien = (st.maintenance + this.thalle.longueur * ENTRETIEN_PAR_UM) * sorb;
     this.P = clamp(this.P + (absEau - coutVol - this.charge.polyene * FUITE_POLYENE) * dt,
       0, this.pmaxEff || st.pmax);
-    this.S = clamp(this.S + (absSucre - coutParoi - st.maintenance * sorb - poussee) * dt,
-      0, 2.2);
+    /* Plafond de stock ramene de 2,2 a 1,6 : a 2,2 le stock servait de tampon
+       si large que la jauge ne bougeait plus et cessait de porter la derivee,
+       qui est sa seule raison d'exister. */
+    const bilanS = (absSucre - coutParoi - entretien - poussee) * dt;
+    if (this.S + bilanS < 0) {
+      /* Le deficit est couvert par le thalle lui-meme. On retire la longueur
+         recyclee du COMPTEUR, donc du score et de l'entretien — la geometrie
+         deja posee reste a l'ecran, comme dans la realite : ce sont les parois
+         vides qu'on voit, et elles ne redeviennent jamais du cytoplasme. */
+      /* On recycle le deficit ET de quoi garder un FOND DE STOCK. Ce detail
+         decide de tout : a stock exactement nul, le flux vesiculaire tombe a
+         zero, donc la paroi aussi, donc l'apex lyse — et la famine redevenait
+         une mort immediate malgre l'autophagie. Avec un fond de 0,07, le thalle
+         recycle alimente encore la pointe a 5,5 de flux, ce qui autorise une
+         reptation de 8 um/s a paroi viable. Un thalle affame RAMPE, il n'eclate
+         pas : eclater redevient reserve a qui force en pleine disette. */
+      const FOND = 0.07;
+      const manque = -(this.S + bilanS) + FOND;
+      const um = manque / AUTOPHAGIE_PAR_UM;
+      this.thalle.longueur = Math.max(0, this.thalle.longueur - um);
+      this.autophagie = Math.min(1, (this.autophagie || 0) + dt * 2.5);
+      this.S = FOND;
+      if (this.thalle.longueur < 8) {
+        for (const a of this.apex) if (a.vivant) a.tuer('autophagie');
+      }
+    } else {
+      this.S = clamp(this.S + bilanS, 0, 1.6);
+      this.autophagie = Math.max(0, (this.autophagie || 0) - dt * 1.4);
+    }
+    if (this.autophagie > 0.5 && !this._ditAuto) {
+      this._ditAuto = true; this.dire('AUTOPHAGIE', 'mal');
+    } else if (this.autophagie < 0.1) this._ditAuto = false;
 
     /* Charge d antifongique : elle monte dans le milieu, elle redescend
        toujours (efflux constitutif). Le rapport des deux fixe la duree
@@ -240,7 +397,7 @@ export class Game {
     }
 
     this.avance = Math.max(this.avance, ...this.apex.filter((a) => a.vivant).map((a) => a.y));
-    this.majCompetiteurs(dt);
+    this.ramifierSpontane();
     this.moissonner();
     this.thalle.purger(Math.min(...this.apex.filter((a) => a.vivant).map((a) => a.y), this.avance));
 
@@ -262,18 +419,21 @@ export class Game {
    * autonomes revenaient se coller au tube parent en quatre secondes.
    */
   autoBarre(a, ech) {
-    /* 42 px de portee et un gain de 3,4 : mesure au banc, a 30 px et 2,2 les
-       apex autonomes se collaient au tube parent et la fusion emportait 20
-       manches sur 24. Un apex autonome doit survivre SEUL, sinon ramifier n est
-       pas une vie de secours mais une mort differee. */
-    const pr = this.thalle.proche(a.x, a.y, 42, this.t, 1.6);
+    /* PORTEE D'EVITEMENT : 42 um a l'origine, ramenee a 24. A 42 les apex
+       autonomes esquivaient si bien qu'aucune manche sur 96 ne mourait plus par
+       fusion — le danger que l'auteur voulait au coeur du jeu avait disparu de
+       la table des causes. A 24 um ils s'ecartent encore de leur parent mais
+       peuvent se croiser entre eux, et le pilote peut se faire enfermer par son
+       propre reseau. L'autotropisme negatif est un evitement, pas un radar. */
+    const pr = this.thalle.proche(a.x, a.y, 24, this.t, 0.6,
+      a.branche.id, a.branche.longueur, 40);
     if (pr) {
       const m = pr.seg;
       const ang = Math.atan2(a.y - (m.y0 + m.y1) / 2, a.x - (m.x0 + m.x1) / 2);
       let d = ang - a.spk.ang;
       while (d > Math.PI) d -= TAU;
       while (d < -Math.PI) d += TAU;
-      return clamp(d * 3.4, -1, 1);
+      return clamp(d * 2.2, -1, 1);
     }
     /* Gradient de sucre, echantillonne a gauche et a droite du cap. */
     const r = 26;
@@ -299,7 +459,7 @@ export class Game {
          exactement ce que fait Botrytis dans un fruit. */
       if (o.forme === 'paroiveg' && st.perce > 0.4) {
         o.mort = true;
-        this.S = Math.min(2.2, this.S + 0.03);
+        this.S = Math.min(1.6, this.S + 0.03);
         continue;
       }
       /* On repousse l apex ET son SPK : ne repousser que l apex le laissait
@@ -351,12 +511,14 @@ export class Game {
        achete la DISTANCE a laquelle on la recoit — ce qui est aussi ce que fait
        le vrai gradient d evitement entre hyphes d un meme thalle. */
     const portee = 8 + st.autotropisme;
-    const pr = this.thalle.proche(a.x, a.y, portee, this.t, 1.0);
+    const pr = this.thalle.proche(a.x, a.y, portee, this.t, 0.4,
+      a.branche.id, a.branche.longueur);
     a.contact = pr ? clamp(1 - pr.d / portee, 0, 1) : 0;
-    /* Sursis de naissance : une branche neuve sort d'un tube, elle est donc
-       collee a lui par construction. 0,9 s, soit le temps de s'en ecarter d'un
-       diametre a vitesse nominale. */
-    if (a.age < 0.9) return;
+    /* Sursis de naissance, EN DISTANCE et non en duree, pour la meme raison que
+       l'exclusion d'abscisse : une branche neuve sort de la paroi de son parent
+       et doit s'en ecarter d'un diametre avant qu'on la teste. A l'arret elle ne
+       s'en ecarte jamais, donc un sursis en secondes l'aurait condamnee. */
+    if (a.parcouru < 26) return;
     /* 4,6 px et non 3,6 : le contact doit correspondre a ce qu'on VOIT. Deux
        tubes de 7 px de rayon se touchent quand leurs axes sont a 14 px ; a 3,6
        ils se chevauchaient profondement avant que la fusion ne se declenche, et
@@ -382,31 +544,6 @@ export class Game {
     this.secousse = 0.7;
   }
 
-  contactRival(a, st, dt) {
-    const pr = this.rival.proche(a.x, a.y, 4.2, this.t, 0);
-    if (!pr) return;
-    if (st.mycoparasite > 0) {
-      /* Trichoderma : on s enroule, on lyse, on prend la place. La recompense
-         est du sucre ET du territoire, parce que c est ce que gagne un
-         mycoparasite reel — le remplacement, pas le partage. */
-      this.S = Math.min(2.2, this.S + 0.16);
-      this.dire('MYCOPARASITISME', 'bon');
-      const seg = pr.seg;
-      seg.t = -1e9; seg.mort = true;
-      for (const c of this.competiteurs) {
-        for (const t of c.tips) if (Math.hypot(t.x - a.x, t.y - a.y) < 30) t.vivant = false;
-      }
-      return;
-    }
-    /* Interference hyphale : le contact suffit, sans penetration, et c est
-       l APEX qui est la zone sensible. L extension s arrete net, la membrane
-       fuit, le compartiment meurt. Decrit par Webster des les annees 1970. */
-    a.integrite = Math.max(0, a.integrite - 1.9 * dt);
-    this.P = Math.max(0, this.P - 0.35 * dt);
-    if (a.integrite <= 0) a.tuer('interference');
-    this.secousse = Math.max(this.secousse, 0.3);
-  }
-
   ramasser(a, st) {
     for (const o of this.champ.autour(a.x, a.y, 18)) {
       if (o.pris || o.type === 'obstacle') continue;
@@ -415,7 +552,7 @@ export class Game {
       if (o.type === 'granule') {
         if (o.amidon && !st.hydrolases.amylase) continue;   // on passe dessus
         o.pris = true;
-        this.S = Math.min(2.2, this.S + o.valeur * st.kSucre);
+        this.S = Math.min(1.6, this.S + o.valeur * st.kSucre);
         this.granules++;
       } else if (o.type === 'goutte') {
         o.pris = true;
@@ -445,76 +582,74 @@ export class Game {
     }
   }
 
-  /* --- concurrents ------------------------------------------------------ */
-
-  majCompetiteurs(dt) {
-    const ctx = this.champ.contexte(this.avance);
-    const s = ctx.substrat;
-    if (s.competiteurs.length && this.t > this.prochainComp) {
-      /* La pression du substrat et le coefficient de boucle fixent l INTERVALLE
-         d arrivee, pas le nombre : un front qui apparait par paquets se lit
-         comme une vague scriptee, alors qu un mycelium avance en continu. */
-      let p = 0, choix = s.competiteurs[0];
-      for (const c of s.competiteurs) { p += c.pression; if (this.rng() * p < c.pression) choix = c; }
-      const pression = choix.pression * ctx.k.pression;
-      /* De 34 s a 13 s entre deux fronts selon la pression du substrat et la
-         boucle. Un front met environ 10 s a traverser le champ : en dessous de
-         13 s d'intervalle ils se superposent et le champ devient infranchissable. */
-      this.prochainComp = this.t + lerp(34, 13, clamp(pression, 0, 1));
-      this.naitreCompetiteur(choix.espece);
-    }
-    for (const c of this.competiteurs) {
-      for (const tip of c.tips) {
-        if (!tip.vivant) continue;
-        /* Cap : l avant, plus une attraction vers le pilote. Un concurrent qui
-           viserait l apex en permanence serait un mob, pas un mycelium : le
-           poids de l attraction reste faible (0,35) et il continue d avancer
-           meme si le joueur s eloigne. */
-        const vers = Math.atan2(this.pilote.y - tip.y, this.pilote.x - tip.x);
-        const cible = Apex.borner(lerp(AVANT + tip.biais, vers, 0.35));
-        let d = angEcart(tip.ang, cible);
-        tip.ang = Apex.borner(tip.ang + clamp(d, -1, 1) * c.agilite * dt);
-        tip.x += Math.cos(tip.ang) * c.v * dt;
-        tip.y += Math.sin(tip.ang) * c.v * dt;
-        this.rival.deposer(tip.branche, tip.x, tip.y, 0.9, this.t);
-        /* Un front qui se laisse distancer de 400 px est hors jeu : on le
-           retire pour ne pas payer sa geometrie jusqu a la fin de la manche. */
-        if (tip.y < this.avance - 400) tip.vivant = false;
-      }
-      c.tips = c.tips.filter((t) => t.vivant);
-    }
-    this.competiteurs = this.competiteurs.filter((c) => c.tips.length);
-    this.rival.purger(this.avance - 120);
+  /**
+   * RAMIFICATION SPONTANEE, sur l'unite de croissance hyphale.
+   *
+   * Un thalle n'est pas une hyphe : c'est un reseau, et il le devient tout seul.
+   * Tous les UCH micrometres de tube produits, un nouvel apex emerge quelque
+   * part en subapical — c'est la loi de Trinci, et c'est ce qui rend la
+   * croissance totale exponentielle alors qu'aucun apex n'accelere.
+   *
+   * Deux garde-fous de conception :
+   *   - on laisse TOUJOURS un cran libre sous le plafond, pour que le joueur ait
+   *     un emplacement disponible quand il veut ramifier volontairement. Sans
+   *     cela, la ramification spontanee lui confisquait son seul virage serre ;
+   *   - en dessous de 0,12 de sucre, rien ne se ramifie. La ramification est
+   *     reellement dependante des nutriments, et un thalle affame qui continue
+   *     d'ouvrir des fronts se serait suicide sans que le joueur comprenne.
+   */
+  ramifierSpontane() {
+    if (this.thalle.longueur < this.prochaineBranche) return;
+    this.prochaineBranche += UCH;
+    const vivants = this.apex.filter((a) => a.vivant);
+    if (vivants.length >= this.stats.apexMax - 1) return;
+    if (this.S < 0.12) return;
+    const parent = vivants[(this.rng() * vivants.length) | 0];
+    if (!parent) return;
+    this.poserBranche(parent, false);
+    this.dire('RAMIFICATION', 'bon');
   }
 
-  naitreCompetiteur(espece) {
-    /* Il apparait DEVANT et de COTE, jamais dans le dos : un danger qu on ne
-       peut pas voir venir n enseigne rien. 130 a 240 px devant, ce qui laisse
-       entre 6 et 12 s pour decider de passer ou de contourner. */
-    const cote = this.rng() < 0.5 ? -1 : 1;
-    const x = this.pilote.x + cote * lerp(40, 150, this.rng());
-    const y = this.avance + lerp(130, 240, this.rng());
-    const vitesses = {
-      botrytis: 17, penicillium: 12, aspergillus: 15,
-      fusarium: 14, cladosporium: 11, xeromyces: 8, trichoderma: 20,
-    };
-    const c = {
-      espece, v: (vitesses[espece] || 13) * (1 + this.champ.contexte(y).boucle * 0.1),
-      agilite: 0.85, tips: [],
-    };
-    const n = 2 + (this.rng() < 0.45 ? 1 : 0);
-    for (let i = 0; i < n; i++) {
-      const b = this.rival.nouvelleBranche(-1, x, y);
-      c.tips.push({
-        x, y, ang: AVANT + (i - (n - 1) / 2) * 0.5,
-        biais: (this.rng() - 0.5) * 0.8, branche: b, vivant: true,
-      });
+  /**
+   * Pose une branche en subapical d'un apex donne.
+   * `pilotage` dit si la dominance passe a la nouvelle branche.
+   */
+  poserBranche(p, pilotage) {
+    const st = this.stats;
+    /* La branche nait a DOMINANCE um derriere l'apex, jamais a l'apex : un apex
+       en croissance reprime l'emergence de tips dans son voisinage par un
+       gradient de Ca2+ et de radicaux. */
+    const DOMINANCE = 14;
+    const cote0 = this.rng() < 0.5 ? -1 : 1;
+    const px0 = p.x - Math.cos(p.dir) * DOMINANCE;
+    const py0 = p.y - Math.sin(p.dir) * DOMINANCE;
+    /* Elle emerge de la PAROI LATERALE du tube, pas de son axe : sur l'axe, elle
+       fusionnait avec son propre parent des la fin du sursis de naissance. */
+    const bx = px0 + Math.cos(p.dir + cote0 * Math.PI / 2) * 7;
+    const by = py0 + Math.sin(p.dir + cote0 * Math.PI / 2) * 7;
+    /* 62 a 88 degres du cap parent : la plage reellement observee. */
+    const ecart = (62 + this.rng() * 26 + st.brancheAngle) * Math.PI / 180;
+    const ang = Apex.borner(p.dir + cote0 * ecart);
+    const b = this.thalle.nouvelleBranche(p.branche.id, bx, by);
+    const na = new Apex(b, bx, by, ang, { phase: p.phase + Math.PI, lance: st.brancheVit });
+    this.apex.push(na);
+    if (pilotage) {
+      this.pilote.pilote = false;
+      na.pilote = true;
+      this.pilote = na;
     }
-    this.competiteurs.push(c);
-    this.dire(espece.toUpperCase(), 'mal');
+    return na;
   }
 
   /* --- verbes du joueur ------------------------------------------------- */
+
+  /** Change de regime d'un cran. C'est le seul reglage de vitesse du jeu. */
+  changerRegime(d) {
+    const n = clamp(this.regime + d, 0, REGIMES.length - 1);
+    if (n === this.regime) return false;
+    this.regime = n;
+    return true;
+  }
 
   /**
    * Ramifier. Le seul moyen de changer de cap SANS rayon de braquage, et le
@@ -531,33 +666,9 @@ export class Game {
     const vivants = this.apex.filter((a) => a.vivant);
     if (vivants.length >= st.apexMax) { this.dire('DOMINANCE APICALE', 'mal'); return false; }
     if (this.S < st.coutBranche) { this.dire('SUCRE INSUFFISANT', 'mal'); return false; }
-    const p = this.pilote;
-    const DOMINANCE = 14;
-    /* Une branche emerge de la PAROI LATERALE du tube, pas de son axe. Faire
-       naitre l'apex sur l'axe le posait a 0 px de la paroi parente : des que la
-       tolerance d'age de 1 s expirait, il fusionnait avec son propre parent et
-       ramifier etait une mort differee. Mesure : 18 fusions sur 20 manches.
-       On le decale donc d'un rayon de tube, du cote ou il part. */
-    const cote0 = this.rng() < 0.5 ? -1 : 1;
-    const px0 = p.x - Math.cos(p.dir) * DOMINANCE;
-    const py0 = p.y - Math.sin(p.dir) * DOMINANCE;
-    const bx = px0 + Math.cos(p.dir + cote0 * Math.PI / 2) * 7;
-    const by = py0 + Math.sin(p.dir + cote0 * Math.PI / 2) * 7;
-    /* Angle de branchement : 62 a 88 deg du cap parent, ce qui est la plage
-       reellement observee. Les septines l ouvrent encore. */
-    const ecart = (62 + this.rng() * 26 + st.brancheAngle) * Math.PI / 180;
-    const ang = Apex.borner(p.dir + cote0 * ecart);
-    const b = this.thalle.nouvelleBranche(p.branche.id, bx, by);
-    const na = new Apex(b, bx, by, ang, { phase: p.phase + Math.PI, lance: st.brancheVit });
     this.S -= st.coutBranche;
-    this.apex.push(na);
-    /* La dominance passe a la branche : c est elle qu on vient de choisir, et
-       la camera doit suivre la decision du joueur, pas l inertie. Le parent
-       continue en autonome — il reste une vie et une source de revenus. */
-    this.pilote.pilote = false;
-    na.pilote = true;
-    this.pilote = na;
-    this.dire('RAMIFICATION', 'bon');
+    this.poserBranche(this.pilote, true);
+    this.dire('RAMIFICATION DIRIGEE', 'bon');
     this.secousse = 0.35;
     return true;
   }
@@ -573,7 +684,16 @@ export class Game {
    */
   sporuler() {
     if (this.etat !== 'jeu') return false;
-    if (this.S < 0.35) { this.dire('SUCRE INSUFFISANT', 'mal'); return false; }
+    /* 0,04 et non 0,35. Le seuil eleve interdisait de sporuler exactement au
+       moment ou il le faut : le banc a montre que la politique de reference ne
+       parvenait jamais a encaisser, parce que la decision se prend quand le
+       thalle commence a se manger, donc a stock au plancher.
+       Et c'est la realite qui tranche dans le meme sens : chez les champignons
+       filamenteux, c'est LA LIMITATION EN NUTRIMENTS qui induit la conidiation.
+       Une moisissure ne sporule pas quand tout va bien, elle sporule quand le
+       substrat s'epuise. Le seuil ne garde donc qu'un plancher symbolique : il
+       faut de quoi batir le conidiophore, pas de quoi continuer a pousser. */
+    if (this.S < 0.04) { this.dire('SUCRE INSUFFISANT', 'mal'); return false; }
     this.spores = this.recolte(1);
     this.etat = 'sporule';
     this.cause = 'sporulation';
@@ -647,6 +767,8 @@ export class Game {
         this.dire('APEX FUSIONNE', 'mal');
       } else if (a.mort === 'plasmolyse') {
         this.dire('PLASMOLYSE', 'mal');
+      } else if (a.mort === 'autophagie') {
+        this.dire('THALLE AUTODIGERE', 'mal');
       }
     }
     const vivants = this.apex.filter((a) => a.vivant);
@@ -699,6 +821,10 @@ export class Game {
       temp: Math.round(ech.temp * 10) / 10,
       af: ech.af, charge: this.charge,
       noeuds: this.noeuds, granules: this.granules, rates: this.rates,
+      entretien: Math.round((this.stats.maintenance + this.thalle.longueur * ENTRETIEN_PAR_UM) * 1000) / 1000,
+      autophagie: this.autophagie || 0,
+      regime: this.regime, regimeNom: REGIMES[this.regime].nom,
+      germ: this.facteurGerm(), sel: ech.sel || 0,
       spores: this.recolte(1),
       etat: this.etat, cause: this.cause,
     };

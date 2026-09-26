@@ -45,6 +45,23 @@ plastique, donc irréversible. Votre trajectoire devient le mur contre lequel vo
 jouerez dans vingt secondes, et le moment où vous avez sur-poussé reste visible
 derrière vous jusqu'à la fin de la manche.
 
+**On germe, on se ramifie tout seul, et on ne voit qu'un apex sur quatre.**
+
+La manche commence par une **spore qui s'imbibe et gonfle** ; un tube germinatif
+en sort, lentement. Puis, tous les 110 µm de tube produits — l'**unité de
+croissance hyphale** de Trinci — une branche part d'elle-même et **continue sa
+route en direct**, hors champ, sur son propre tropisme. À la fin, la **carte du
+thalle** montre d'un coup ce qu'on n'a jamais vu : les quatre trajectoires dont
+on n'en pilotait qu'une.
+
+**La visibilité est une ressource que la vitesse consomme.**
+
+La caméra est serrée sur l'apex : 100 µm de champ à l'arrêt, 138 µm à pleine
+vitesse — mais la surface parcourue par seconde double. Plus on va vite, moins
+on a le temps de lire ce qui arrive. Et comme une hyphe ne fait pas d'épingle à
+cheveux (rayon de braquage de 57 à 129 µm), un virage se décide très en amont.
+Voir plus loin est une amélioration, pas un acquis.
+
 **On devient puissant en devenant fragile.**
 
 Un mycélium est un seul protoplaste : un turgor, un stock de sucre, quel que soit
@@ -59,14 +76,19 @@ difficulté n'est pas scriptée : c'est votre propre thalle.
 | | Clavier | Tactile |
 |---|---|---|
 | **Barrer** le Spitzenkörper | `A` / `D` / flèches | glissement horizontal, moitié gauche |
-| **Poussée** osmotique | `W` / `↑` | glissement vers le haut, moitié droite |
-| **Consolider** la paroi | `S` / `↓` | glissement vers le bas, moitié droite |
+| **Accélérer** d'un cran | `W` / `↑` | glissement vers le haut, moitié droite |
+| **Ralentir** d'un cran | `S` / `↓` | glissement vers le bas, moitié droite |
 | **Ramifier** | `Espace` | tap, moitié droite |
 | **Sporuler** et encaisser | `Entrée` | — |
 | Pause | `Échap` / `P` | — |
 
 Les touches sont lues par position physique (`event.code`) : AZERTY et QWERTY
 fonctionnent sans réglage.
+
+La vitesse est un **réglage qui reste**, sur cinq crans — `ARRÊT`, `LENT`,
+`CROISIÈRE`, `POUSSÉE`, `FORÇAGE`. Au cran 0 l'hyphe **s'arrête vraiment** : on
+regarde devant, le turgor remonte, le sucre rentre, et le cytoplasme continue de
+couler. C'est le moment où l'on choisit sa trajectoire.
 
 ---
 
@@ -78,15 +100,17 @@ panne précédente**.
 
 | Mort | Ce qui s'est passé |
 |---|---|
-| **Lyse apicale** | la paroi est passée sous le seuil critique, le turgor l'a emporté |
-| **Carence puis lyse** | plus de sucre → plus de flux → plus de paroi |
-| **Plasmolyse** | l'aw est passée sous la limite du génotype |
+| **Lyse apicale** | forcer en pleine disette : l'apex se ferme tout seul, le joueur l'a rouvert |
+| **Thalle autodigéré** | l'autophagie a mangé tout le thalle : il fallait sporuler |
+| **Plasmolyse** | l'aw est passée sous la limite du génotype, ou une poche de sel a vidé l'hyphe |
 | **Apex fusionné** | anastomose sur son propre thalle, et c'était le dernier apex |
-| **Apex détruit** | écrasement sur un obstacle net, ou interférence hyphale d'un concurrent |
+| **Apex détruit** | écrasement sur un obstacle **net** — les flous se traversent |
 | **Sporulation** | choisie. Ce n'est pas une mort, c'est la victoire |
 
 Sporuler encaisse **100 %** des spores et termine la manche. Mourir n'en rend que
-25 %. C'est l'arbitrage de chaque fin de manche : continuer, ou encaisser.
+25 %. C'est l'arbitrage de chaque fin de manche : continuer, ou encaisser —
+mesuré au banc sur les mêmes graines, **33 spores en sporulant à temps contre 15
+en poussant jusqu'à la mort**.
 
 ---
 
@@ -116,10 +140,10 @@ qui le rend lisible.
 - **Le Spitzenkörper dit trois choses** : il se décale du côté du virage avant que
   l'apex ne tourne, il **pâlit quand le sucre manque** (la panne s'annonce), et il
   brille au pic du pulse calcique.
-- **Deux montages, tous deux réels** : bleu coton lactophénol (fond clair, paroi
-  bleue) et blanc de calcofluor sous épifluorescence (fond noir, paroi
-  fluorescente). Les deux colorent la **paroi**, ce qui est précisément ce qu'il
-  fallait.
+- **Monté au bleu coton lactophénol**, le montage classique de la mycologie : le
+  colorant se fixe sur la **chitine de la paroi**, pas sur le cytoplasme — c'est
+  pour cela que l'hyphe se lit comme un tube bordé et non comme un trait plein.
+  Les quatre substrats se distinguent par la teinte de leur gélose.
 
 ---
 

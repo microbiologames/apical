@@ -39,27 +39,30 @@
 import { clamp, lerp, TAU } from '../core/util.js';
 import { mix32, fade32, bayer, Screen } from '../core/pixel.js';
 
-/** Rayon du tube. 7 px = 14 um de diametre : un Rhizopus, pas un Penicillium.
-    Choisi POUR LE RENDU, et remonte apres capture : a 11 um le tube occupait
-    4 % de la largeur du champ et se lisait comme un fil, alors qu'il EST le
-    sujet du jeu. A 14 um il en occupe 5,5 %, et il reste huit pixels de
-    cytoplasme entre les deux parois — de quoi voir un noyau passer. 10 a 15 um
-    est la plage reelle des Mucorales, on est dedans. */
+/** Rayon du tube, EN MICROMETRES. 7 um de rayon = 14 um de diametre : un
+    Rhizopus, pas un Penicillium. 10 a 15 um est la plage reelle des Mucorales.
+    Sa taille a l'ecran depend maintenant du ZOOM de la camera (`cam.z`, en
+    pixels par micrometre) : a z = 2,4 le tube fait 34 px de large dans un champ
+    de 256, soit 13 % de la largeur. C'est ce resserrement qui fait de la
+    VISIBILITE une ressource — on ne voit plus que 107 um de large, donc le
+    choix de trajectoire se fait a l'aveugle et se paie. */
 export const RAYON = 7;
 /** Duree de rigidification apparente de la paroi. */
 const MATURATION = 0.30;
 /** Pas d'echantillonnage des sections. 0,8 px : au-dessus de 1,1 px des
     coutures apparaissent sur les obliques a 45 deg. */
 const PAS = 0.8;
-/** Longueur de tube rendue derriere chaque apex. Au-dela c'est hors champ. */
-const PORTEE = 470;
+/** Longueur de tube rendue derriere chaque apex, en um. Ramenee de 470 a 300
+    avec l'arrivee du zoom : a z = 2,4 le champ ne montre que 110 a 200 um, donc
+    tout ce qui est au-dela de 300 um etait rasterise pour rien. */
+const PORTEE = 300;
 
 /**
  * Sections transversales d'une branche, du bout vers l'arriere.
  * Chaque section porte sa position, sa normale, son epaisseur de paroi et sa
  * date de depot — donc son etat de maturation.
  */
-export function sections(branche, portee = PORTEE) {
+export function sections(branche, portee = PORTEE, pas = PAS) {
   const pts = branche.pts;
   const out = [];
   if (pts.length < 2) return out;
@@ -70,7 +73,7 @@ export function sections(branche, portee = PORTEE) {
     const len = Math.hypot(dx, dy);
     if (len < 1e-5) continue;
     const ux = dx / len, uy = dy / len;
-    for (let d = reste; d < len && total < portee; d += PAS, total += PAS) {
+    for (let d = reste; d < len && total < portee; d += pas, total += pas) {
       const u = 1 - d / len;
       out.push({
         x: p0.x + dx * u, y: p0.y + dy * u,
@@ -79,7 +82,7 @@ export function sections(branche, portee = PORTEE) {
         s: total,
       });
     }
-    reste = Math.max(0, PAS - ((len - reste) % PAS));
+    reste = Math.max(0, pas - ((len - reste) % pas));
   }
   return out;
 }
@@ -98,10 +101,21 @@ export function sections(branche, portee = PORTEE) {
  * un apex en croissance d'un bout casse.
  */
 function calotte(d, R) {
-  const L = R * 1.32;
+  /* PROFIL REVU : le precedent (exposants 1,75 et 0,52 sur L = 1,32 R) donnait
+     un bout court et tres bombe, qui se lisait comme un BOURGEON pose sur un
+     tube — un defaut de silhouette signale a l'essai, et il avait deux causes
+     cumulees : la calotte etait trop courte pour son rayon, et elle etait en
+     plus gonflee par le turgor et par le pulse.
+     On prend maintenant une demi-ellipse de demi-axes R et 1,55 R. Elle a deux
+     vertus : elle raccorde le tube avec une tangente exactement perpendiculaire
+     a l'axe (donc aucune cassure visible a la base), et elle est une fois et
+     demie plus longue que large, ce qui est la silhouette d'un apex fongique en
+     croissance. Le gonflement radial a ete supprime : le pulse allonge le bout,
+     il ne l'enfle pas. */
+  const L = R * 1.55;
   if (d >= L) return 0;
   const u = d / L;
-  return R * Math.pow(Math.max(0, 1 - Math.pow(u, 1.75)), 0.52);
+  return R * Math.sqrt(Math.max(0, 1 - u * u));
 }
 
 /** Direction de la lampe, fixe en haut a gauche pour tout le champ. */
@@ -227,8 +241,14 @@ function troncon(scr, pal, ax, ay, bx, by, ra, rb, epa, epb, cola, colb, cytoFil
  * @param {object} apex  l'apex vivant de cette branche, ou null
  */
 export function branche(scr, pal, b, apex, cam, t, P, cyto, opts = {}) {
-  const secs = sections(b);
+  const z = cam.z || 1;
+  /* Le pas d'echantillonnage est fixe A L'ECRAN, pas dans le monde : c'est la
+     densite de sections PAR PIXEL qui doit rester constante, sinon un zoom
+     avant laisse des coutures et un zoom arriere calcule dix fois trop. */
+  const pas = 0.8 / z;
+  const secs = sections(b, PORTEE, pas);
   if (!secs.length) return;
+  const Rpx = RAYON * z;
   const cytoFillBase = 0.62 + 0.38 * clamp(P / 0.45, 0, 1);
   const lum = opts.lum === undefined ? 1 : opts.lum;
 
@@ -244,18 +264,18 @@ export function branche(scr, pal, b, apex, cam, t, P, cyto, opts = {}) {
   let prec = null;
   for (let i = 0; i < secs.length; i++) {
     const s = secs[i];
-    const sx = cam.cx + (s.x - cam.x);
-    const sy = cam.cy - (s.y - cam.y);
+    const sx = cam.cx + (s.x - cam.x) * z;
+    const sy = cam.cy - (s.y - cam.y) * z;
     /* Maturation : la paroi neuve est plus mince et plus pale. */
     const mat = clamp((t - s.t) / MATURATION, 0, 1);
-    const ep = clamp(s.e * (0.42 + 0.58 * mat) * 1.45, 0.6, 3.4);
+    const ep = clamp(s.e * (0.42 + 0.58 * mat) * 1.45 * z, 0.6, 3.4 * z);
     const col = mix32(pal.paroiMince, pal.paroi, mat);
     /* Plasmolyse : plus marquee loin de l'apex, ou le cytoplasme se retire en
        premier. L'apex garde son turgor le plus longtemps, c'est lui qui pompe. */
     const fill = clamp(cytoFillBase + 0.16 * (1 - clamp(s.s / 120, 0, 1)), 0.2, 1);
     const cur = { sx, sy, ep, col, fill };
     if (prec && (sx > -18 && sx < scr.w + 18 && sy > -18 && sy < scr.h + 18)) {
-      troncon(scr, pal, prec.sx, prec.sy, sx, sy, RAYON, RAYON,
+      troncon(scr, pal, prec.sx, prec.sy, sx, sy, Rpx, Rpx,
         prec.ep, ep, prec.col, col, (prec.fill + fill) / 2, lum,
         /* Le premier troncon ferme l'avant SEULEMENT si la branche n'a plus
            d'apex : sinon c'est la calotte qui ferme, et elle le fait mieux. */
@@ -267,14 +287,14 @@ export function branche(scr, pal, b, apex, cam, t, P, cyto, opts = {}) {
   /* --- septa et corps de Woronin ------------------------------------- */
   for (const p of b.pts) {
     if (!p.septum) continue;
-    const sx = cam.cx + (p.x - cam.x), sy = cam.cy - (p.y - cam.y);
-    if (sx < -8 || sx > scr.w + 8 || sy < -8 || sy > scr.h + 8) continue;
+    const sx = cam.cx + (p.x - cam.x) * z, sy = cam.cy - (p.y - cam.y) * z;
+    if (sx < -10 || sx > scr.w + 10 || sy < -10 || sy > scr.h + 10) continue;
     const i = b.pts.indexOf(p);
     const q = b.pts[Math.max(0, i - 1)];
     const dx = p.x - q.x, dy = -(p.y - q.y);
     const l = Math.hypot(dx, dy) || 1;
     const nx = -dy / l, ny = dx / l;
-    for (let k = -RAYON + 1; k <= RAYON - 1; k += 0.7) {
+    for (let k = -Rpx + z; k <= Rpx - z; k += 0.7) {
       scr.plot(sx + nx * k, sy + ny * k, pal.septum);
     }
     /* Corps de Woronin : deux de chaque cote du pore, refringents. On les
@@ -283,8 +303,8 @@ export function branche(scr, pal, b, apex, cam, t, P, cyto, opts = {}) {
        qu'il a achete. */
     if (opts.woronin) {
       const ax = dx / l, ay = dy / l;
-      for (const s2 of [-1.9, 1.9]) {
-        for (const o of [-1.5, 1.5]) {
+      for (const s2 of [-1.9 * z, 1.9 * z]) {
+        for (const o of [-1.5 * z, 1.5 * z]) {
           scr.plot(sx + ax * s2 + nx * o, sy + ay * s2 + ny * o, pal.woronin);
         }
       }
@@ -294,60 +314,62 @@ export function branche(scr, pal, b, apex, cam, t, P, cyto, opts = {}) {
   /* --- organites ----------------------------------------------------- */
   const orgs = cyto ? cyto.liste(b.id) : [];
   for (const o of orgs) {
-    const pos = surTube(secs, o.s);
+    const pos = surTube(secs, o.s, pas);
     if (!pos) continue;
     const Rint = RAYON - 1.5;
     const wx = pos.x + pos.nx * o.off * Rint;
     const wy = pos.y + pos.ny * o.off * Rint;
-    const sx = cam.cx + (wx - cam.x), sy = cam.cy - (wy - cam.y);
-    if (sx < -8 || sx > scr.w + 8 || sy < -8 || sy > scr.h + 8) continue;
+    const sx = cam.cx + (wx - cam.x) * z, sy = cam.cy - (wy - cam.y) * z;
+    if (sx < -10 || sx > scr.w + 10 || sy < -10 || sy > scr.h + 10) continue;
     /* PROFONDEUR DE CHAMP : la position laterale devient un flou. Un organite
        colle a la paroi est en haut ou en bas du tube, donc hors du plan. */
     const flou = Math.abs(o.off) > 0.5 ? 1 : 0;
     scr.layer(flou);
-    dessinerOrganite(scr, pal, o, sx, sy, pos, cam);
+    dessinerOrganite(scr, pal, o, sx, sy, pos, z);
   }
   scr.layer(0);
 
 }
 
 /** Position et normale a une distance `s` du bout. Interpolation lineaire. */
-function surTube(secs, s) {
+function surTube(secs, s, pas) {
   if (!secs.length) return null;
-  const i = Math.round(s / PAS);
+  const i = Math.round(s / pas);
   if (i < 0 || i >= secs.length) return null;
   return secs[i];
 }
 
-function dessinerOrganite(scr, pal, o, sx, sy, pos, cam) {
+function dessinerOrganite(scr, pal, o, sx, sy, pos, z) {
+  const r = o.r * z;
   const axx = -pos.ny, axy = -pos.nx;   // axe du tube, en ecran
   switch (o.type) {
     case 'vesicule':
-      scr.plot(sx, sy, pal.vesicule);
+      if (z > 1.6) scr.disc(sx, sy, r * 0.9, pal.vesicule);
+      else scr.plot(sx, sy, pal.vesicule);
       break;
     case 'mito':
       /* Une mitochondrie fongique est un FUSEAU aligne sur l'axe du tube : elle
          suit les microtubules. La dessiner ronde donnait des billes et le flux
          perdait sa direction. */
-      scr.cap(sx, sy, o.r * 3.4, o.r * 1.35, Math.atan2(axy, axx), pal.vesicule, pal.paroiRim);
+      scr.cap(sx, sy, r * 3.4, r * 1.35, Math.atan2(axy, axx), pal.vesicule, pal.paroiRim);
       break;
     case 'noyau':
-      scr.ell(sx, sy, o.r * 1.25, o.r, Math.atan2(axy, axx), pal.cyto, pal.paroi);
+      scr.ell(sx, sy, r * 1.25, r, Math.atan2(axy, axx), pal.cyto, pal.paroi);
       break;
     case 'lipide':
       /* Une gouttelette lipidique est tres refringente : c'est l'objet le plus
          clair du cytoplasme, avec un vrai point brillant. */
-      scr.disc(sx, sy, o.r, pal.phase, pal.paroiRim);
-      scr.plot(sx - 0.5, sy - 0.5, pal.phase);
+      scr.disc(sx, sy, r, pal.phase, pal.paroiRim);
+      scr.plot(sx - 0.5 * z, sy - 0.5 * z, pal.phase);
       break;
     case 'vacuole':
       /* Une vacuole n'est pas un disque plein : c'est une poche a membrane fine
          et a contenu plus clair que le cytoplasme. */
-      scr.ring(sx, sy, o.r, 1, pal.paroiMince);
-      scr.disc(sx, sy, Math.max(0.6, o.r - 1), fade32(pal.voile, 0.55));
+      scr.ring(sx, sy, r, Math.max(1, z * 0.7), pal.paroiMince);
+      scr.disc(sx, sy, Math.max(0.6, r - z), fade32(pal.voile, 0.55));
       break;
     default:
-      scr.disc(sx, sy, o.r, pal.vesicule);
+      scr.disc(sx, sy, r, pal.vesicule);
   }
 }
 
@@ -362,16 +384,19 @@ function dessinerOrganite(scr, pal, o, sx, sy, pos, cam) {
  * c'est ce qui le rend maitrisable au lieu de flou.
  */
 function calotteEtSpk(scr, pal, apex, cam, t, P, cyto, opts) {
-  const ax = cam.cx + (apex.x - cam.x);
-  const ay = cam.cy - (apex.y - cam.y);
+  const z = cam.z || 1;
+  const Rpx = RAYON * z;
+  const ax = cam.cx + (apex.x - cam.x) * z;
+  const ay = cam.cy - (apex.y - cam.y) * z;
   const dir = apex.dir;
   const ux = Math.cos(dir), uy = -Math.sin(dir);      // axe, en ecran
   const nx = -uy, ny = ux;
-  /* Le pulse gonfle la calotte. Ce n'est pas un effet : une bouffee de Ca2+
-     declenche l'exocytose, donc un apport de membrane et de paroi, donc
-     l'apex avance par paliers. Le gonflement EST le palier. */
+  /* Le pulse ALLONGE la calotte, il ne l'enfle pas. Une bouffee de Ca2+
+     declenche l'exocytose, donc un apport de membrane et de paroi a la POINTE :
+     l'apex avance par paliers. La version precedente gonflait aussi le rayon,
+     ce qui faisait battre la silhouette et contribuait au bourgeon. */
   const pulse = apex.facteurPulse({ pulse: opts.pulse || 0 });
-  const ep0 = clamp(apex.e * 1.45, 0.55, 3.2);
+  const ep0 = clamp(apex.e * 1.45 * z, 0.55, 3.2 * z);
   const cytoFill = 0.66 + 0.34 * clamp(P / 0.45, 0, 1);
   const mat = clamp(apex.integrite, 0, 1);
 
@@ -380,43 +405,52 @@ function calotteEtSpk(scr, pal, apex, cam, t, P, cyto, opts) {
      paroi DIMINUE vers la pointe : la paroi y est la plus neuve, elle n'a pas
      encore de chitine cristalline. C'est aussi pour ca que c'est LA que les
      echinocandines font eclater les hyphes. */
-  const L = RAYON * 1.32 * lerp(0.94, 1.1, clamp((pulse - 0.62) / 0.76, 0, 1));
+  const etire = lerp(0.96, 1.08, clamp((pulse - 0.62) / 0.76, 0, 1));
+  const L = Rpx * 1.55 * etire;
   const col = mix32(pal.paroiMince, pal.paroi, 0.35 + 0.65 * mat);
-  const PASC = 0.9;
-  for (let d = 0; d + PASC <= L; d += PASC) {
-    const r0 = calotte(d, RAYON) * lerp(1, 1.04, clamp(P, 0, 1));
-    const r1 = calotte(d + PASC, RAYON) * lerp(1, 1.04, clamp(P, 0, 1));
+  /* Le pas est CALCULE pour tomber juste sur L : un pas fixe laissait un reste
+     non couvert, donc un cran d'un ou deux pixels au sommet de la calotte —
+     visible sur capture macro, et il suffisait a casser la courbe. */
+  const nC = Math.max(4, Math.ceil(L / 0.7));
+  const PASC = L / nC;
+  for (let i = 0; i < nC; i++) {
+    const d = i * PASC;
+    const r0 = calotte(d / etire, Rpx);
+    const r1 = calotte((d + PASC) / etire, Rpx);
     if (r0 < 0.4) break;
     troncon(scr, pal, ax + ux * d, ay + uy * d, ax + ux * (d + PASC), ay + uy * (d + PASC),
-      r0, Math.max(r1, 0.4), Math.min(ep0, r0 * 0.8), Math.min(ep0 * 0.45, Math.max(r1, 0.5) * 0.8),
-      col, col, cytoFill, 1, d === 0, d + PASC * 2 > L);
+      r0, Math.max(r1, 0.35), Math.min(ep0, r0 * 0.8), Math.min(ep0 * 0.45, Math.max(r1, 0.5) * 0.8),
+      col, col, cytoFill, 1, i === 0, i === nC - 1);
   }
 
   /* Bourrelet de vesicules apicales : la calotte est LE point le plus dense en
      organites de tout le champignon, et sur un montage au calcofluor c'est le
      point le plus lumineux. On le rend comme une nuee, pas comme un aplat. */
+  /* Reste CONFINE dans le premier tiers de la calotte : etale plus loin, il
+     dessinait un liseré clair tout autour du bout et c'est lui qui donnait au
+     tout la silhouette d'un bulbe. */
   const nVes = 9 + Math.round(pulse * 5);
   for (let i = 0; i < nVes; i++) {
     const a = (i / nVes) * TAU + t * 1.4;
-    const rr = 1.2 + ((i * 7) % 5) * 0.55;
-    const d = 1.4 + ((i * 3) % 4) * 0.9;
+    const rr = (1.2 + ((i * 7) % 5) * 0.45) * z * 0.55;
+    const d = (1.0 + ((i * 3) % 4) * 0.7) * z * 0.62;
     scr.plot(ax + ux * d + nx * Math.sin(a) * rr, ay + uy * d + ny * Math.sin(a) * rr, pal.vesicule);
   }
 
   /* Le Spitzenkorper. Position : `spkDist` en arriere du bout, DECALEE du cote
      ou le joueur barre — c'est exactement ce que fait le vrai organite, et
      c'est l'affichage de l'intention de virage. */
-  const sd = Math.hypot(apex.x - apex.spk.x, apex.y - apex.spk.y);
-  const sx = cam.cx + (apex.spk.x - cam.x);
-  const sy = cam.cy - (apex.spk.y - cam.y);
+  const sd = Math.hypot(apex.x - apex.spk.x, apex.y - apex.spk.y) * z;
+  const sx = cam.cx + (apex.spk.x - cam.x) * z;
+  const sy = cam.cy - (apex.spk.y - cam.y) * z;
   const bril = 0.45 + 0.55 * clamp((pulse - 0.62) / 0.76, 0, 1);
-  scr.disc(sx, sy, 1.5 + bril * 0.9, mix32(pal.spkGlow, pal.spk, 0.5), pal.spk);
+  scr.disc(sx, sy, (1.5 + bril * 0.9) * z * 0.62, mix32(pal.spkGlow, pal.spk, 0.5), pal.spk);
   scr.plot(sx, sy, pal.spk);
   /* Le halo du SPK : sa brillance est la jauge de flux vesiculaire. Un joueur
      a court de sucre voit son Spitzenkorper PALIR avant que la paroi ne
      s'amincisse. La panne s'annonce, elle ne surprend pas. */
   scr.layer(1);
-  scr.disc(sx, sy, 2.4 + bril * 1.5, fade32(pal.spkGlow, 0.30 * bril * (opts.flux || 1)));
+  scr.disc(sx, sy, (2.4 + bril * 1.5) * z * 0.62, fade32(pal.spkGlow, 0.30 * bril * (opts.flux || 1)));
   scr.layer(0);
 
   /* Vesicules en rayonnement du SPK vers la surface de la calotte. Le modele du
@@ -425,7 +459,7 @@ function calotteEtSpk(scr, pal, apex, cam, t, P, cyto, opts) {
   for (let i = 0; i < rays; i++) {
     const a = dir + (i / (rays - 1) - 0.5) * 2.3;
     const u = ((t * 2.6 + i * 0.37) % 1);
-    const dd = sd * 0.4 + u * (sd + RAYON * 0.9);
+    const dd = sd * 0.4 + u * (sd + Rpx * 0.9);
     const px = sx + Math.cos(a) * dd, py = sy - Math.sin(a) * dd;
     scr.plot(px, py, fade32(pal.vesicule, 1 - u * 0.5));
   }
@@ -434,8 +468,8 @@ function calotteEtSpk(scr, pal, apex, cam, t, P, cyto, opts) {
   if (cyto) {
     for (const f of cyto.flashs) {
       const k = f.t / 0.16;
-      const o = f.off * (RAYON - 1.2);
-      scr.plot(ax + ux * 1.5 + nx * o, ay + uy * 1.5 + ny * o, fade32(pal.phase, k));
+      const o = f.off * (Rpx - 1.2 * z);
+      scr.plot(ax + ux * 1.5 * z + nx * o, ay + uy * 1.5 * z + ny * o, fade32(pal.phase, k));
     }
   }
 
@@ -443,20 +477,49 @@ function calotteEtSpk(scr, pal, apex, cam, t, P, cyto, opts) {
      Le gene achete ce liseré, et c'est la seule aide de jeu du rendu — encore
      est-elle un phenomene reel. */
   if (apex.contact > 0.02) {
-    scr.ring(ax, ay, RAYON + 2.5 + apex.contact * 2, 1,
+    scr.ring(ax, ay, Rpx + (2.5 + apex.contact * 2) * z, Math.max(1, z * 0.6),
       fade32(pal.woronin, 0.25 + 0.6 * apex.contact));
   }
 }
 
 /** Les noeuds d'anastomose : un pont entre deux hyphes du meme thalle. */
-export function noeuds(scr, pal, liste, cam, t) {
+export function noeuds(scr, pal, liste, cam) {
+  const z = cam.z || 1;
   scr.layer(0);
   for (const n of liste) {
-    const sx = cam.cx + (n.x - cam.x), sy = cam.cy - (n.y - cam.y);
-    if (sx < -10 || sx > scr.w + 10 || sy < -10 || sy > scr.h + 10) continue;
-    scr.disc(sx, sy, RAYON * 0.85, pal.cyto, pal.noeud);
-    scr.ring(sx, sy, RAYON * 0.85 + 1.4, 1, fade32(pal.noeud, 0.5));
+    const sx = cam.cx + (n.x - cam.x) * z, sy = cam.cy - (n.y - cam.y) * z;
+    if (sx < -14 || sx > scr.w + 14 || sy < -14 || sy > scr.h + 14) continue;
+    scr.disc(sx, sy, RAYON * z * 0.85, pal.cyto, pal.noeud);
+    scr.ring(sx, sy, RAYON * z * 0.85 + 1.4 * z, Math.max(1, z * 0.6), fade32(pal.noeud, 0.5));
   }
+}
+
+/**
+ * LA SPORE. Elle reste a l'origine du monde pendant toute la manche : c'est
+ * d'elle que part le thalle, et la voir derriere soi pendant les premieres
+ * secondes dit d'ou l'on vient sans une ligne de texte.
+ *
+ * Une conidie est refringente, a paroi epaisse et souvent ornementee. Elle
+ * GONFLE pendant l'imbibition — son volume double avant que quoi que ce soit ne
+ * sorte — puis elle ne change plus : elle se vide simplement de ses reserves.
+ */
+export function spore(scr, pal, x, y, r, cam, germ) {
+  const z = cam.z || 1;
+  const sx = cam.cx + (x - cam.x) * z, sy = cam.cy - (y - cam.y) * z;
+  const R = r * z;
+  if (sx < -R - 8 || sx > scr.w + R + 8 || sy < -R - 8 || sy > scr.h + R + 8) return;
+  scr.layer(0);
+  /* Paroi epaisse : deux tiers de disque interieur, un tiers de paroi. */
+  scr.disc(sx, sy, R, pal.paroi, pal.paroiRim);
+  scr.disc(sx, sy, R * 0.66, mix32(pal.cyto, pal.voile, 0.45 * germ));
+  /* Ornementation : quatre verrues, un vrai caractere de conidie. */
+  for (let i = 0; i < 4; i++) {
+    const a = i * (TAU / 4) + 0.5;
+    scr.plot(sx + Math.cos(a) * R * 0.86, sy + Math.sin(a) * R * 0.86, pal.paroiRim);
+  }
+  scr.layer(5);
+  scr.disc(sx, sy, R + 2 * z, fade32(pal.phase, 0.18));
+  scr.layer(0);
 }
 
 export { Screen };
