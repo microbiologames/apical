@@ -40,7 +40,15 @@ export const BASE = {
   kEau: 0.85,         // debit d'absorption d'eau
   awMin: 0.88,        // aw sous laquelle on ne prend plus d'eau
   pmax: 1.0,          // plafond de turgor
-  agilite: 1.9,       // rad/s : vitesse de virage du Spitzenkorper a l'arret
+  /* 0,55 et non 1,9. CETTE LIGNE A DEJA ETE CORRIGEE UNE FOIS, ET LE
+     REMPLACEMENT AVAIT ECHOUE EN SILENCE : la valeur est restee a 1,9 pendant
+     deux passes entieres, pendant lesquelles le rayon de braquage a ete
+     annonce a 57 um alors qu'il valait 17 um — exactement l'epingle a cheveux
+     que la correction pretendait supprimer, et que l'auteur avait signalee.
+     Aucun des onze verdicts ne mesurait cette grandeur : c'est pour cela que le
+     banc mesure desormais le RAYON DE BRAQUAGE. Un chiffre qu'on documente sans
+     le mesurer est un chiffre qu'on croit avoir. */
+  agilite: 0.55,      // facteur de courbure du depot vesiculaire
   spkDist: 6,         // px : distance Spitzenkorper - apex. Petit = tourne court
   kSucre: 1.0,        // rendement d'absorption du sucre
   rayonAbs: 9,        // px : rayon de la zone subapicale absorbante

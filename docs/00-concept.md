@@ -86,7 +86,39 @@ l'extension devient linéaire. La spore reste ensuite à l'origine du monde,
 visible derrière soi. Les cinq premières secondes ne demandent rien d'autre que
 de regarder — le meilleur moment pour apprendre à lire un champ.
 
-### 2 quater. On pilote le cap, pas le Spitzenkörper
+### 2 quater. On pilote le point de fusion des vésicules
+
+**Troisième et dernière version du pilotage.** Le joueur ne barre plus : il
+**place la zone où les vésicules fusionnent** sur la calotte, de −1 (bord
+gauche) à +1 (bord droit). La surface avance là où elles arrivent, donc le cap
+suit.
+
+C'est tout le modèle du centre d'approvisionnement, et c'est aussi ce qu'on
+observe : une réorientation de croissance est **précédée** du déplacement du
+Spitzenkörper vers le côté du nouveau cap.
+
+Deux conséquences, et aucune des deux n'a été inventée pour le jeu :
+
+**On ne peut pas tourner sans déposer de matière.** La rotation est
+proportionnelle à la *longueur produite*, pas au temps. Au régime 0 l'hyphe est
+immobile : elle ne tourne pas non plus. Barrer coûte donc de la croissance, et
+l'on ne peut plus se repositionner gratuitement juste avant un obstacle.
+
+**Tourner amincit la paroi du côté extérieur.** L'extérieur d'un virage parcourt
+un arc plus long avec moins de matériau, puisque les vésicules fusionnent du
+côté intérieur. Le virage entre ainsi dans le même arbitrage que la vitesse, et
+pour la même raison physique. −30 % à dépôt maximal.
+
+Rayon de braquage : **89 µm**, soit 6,4 diamètres de tube — mesuré au banc, pas
+estimé (voir ci-dessous pourquoi cette précision compte).
+
+> **Deux pilotages écartés avant celui-ci.** Barrer le Spitzenkörper avec l'apex
+> qui suit : deux commandes en cascade, un pilotage qu'on ne sentait pas, et un
+> SPK dessiné net qui se donnait pour une poignée. Agir sur la vitesse angulaire
+> du cap avec de l'inertie : ça se pilotait bien, mais le Spitzenkörper n'était
+> plus qu'une décoration et tourner ne coûtait rien.
+
+### 2 quater bis. (ancien) On pilote le cap, pas le Spitzenkörper
 
 Première version : le joueur barrait le SPK, et l'apex suivait avec un retard.
 Fidèle au modèle du centre d'approvisionnement en vésicules — et **refusé à

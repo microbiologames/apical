@@ -509,15 +509,18 @@ export class Game {
       let d = ang - a.cap;
       while (d > Math.PI) d -= TAU;
       while (d < -Math.PI) d += TAU;
-      /* Signe negatif : `barre` est exprimee EN REPERE ECRAN (positif = droite)
-         alors que `d` est un ecart d angle mathematique. Voir apex.js. */
-      return clamp(-d * 2.2, -1, 1);
+      /* Signe negatif : le depot est exprime EN REPERE ECRAN (positif = droite)
+         alors que `d` est un ecart d angle mathematique. Voir apex.js.
+         Gain reduit de 2,2 a 1,3 : la commande vise desormais une POSITION de
+         zone de fusion et non une vitesse angulaire, donc un gain fort la
+         collait aux butees et l apex autonome zigzaguait. */
+      return clamp(-d * 1.3, -1, 1);
     }
     /* Gradient de sucre, echantillonne a gauche et a droite du cap. */
     const r = 26;
     const g = this.champ.echantillon(a.x + Math.cos(a.cap + 0.7) * r, a.y + Math.sin(a.cap + 0.7) * r).sucre;
     const dr = this.champ.echantillon(a.x + Math.cos(a.cap - 0.7) * r, a.y + Math.sin(a.cap - 0.7) * r).sucre;
-    const flair = 3.2 * (1 + (this.stats.flair || 0));
+    const flair = 2.0 * (1 + (this.stats.flair || 0));
     return clamp(-(g - dr) * flair, -1, 1);
   }
 
@@ -551,9 +554,9 @@ export class Game {
       const alt = Math.atan2(nx, -ny);
       const cible = Math.abs(angEcart(a.cap, tang)) < Math.abs(angEcart(a.cap, alt)) ? tang : alt;
       a.cap = Apex.borner(lerp(a.cap, cible, clamp(st.glisse + 0.25, 0, 0.9)));
-      /* Le glissement casse l elan : sinon l apex repart aussitot dans
-         l obstacle qu il vient de longer. */
-      a.omega *= 0.4;
+      /* Le glissement recentre la zone de fusion : longer un obstacle remet le
+         depot dans l axe, sinon l apex repart aussitot dedans. */
+      a.depot *= 0.4;
       /* 0,50 par seconde de contact continu, et en dt reel : la version au pas
          fixe de 0,016 tuait en 1,9 s quel que soit le nombre d'images, donc
          differemment sur un ecran a 120 Hz. */
@@ -614,7 +617,7 @@ export class Game {
       this.bonusFlux += 0.9;
       this.stats.jmax += 0.9;
       a.cap = Apex.borner(a.cap + (this.rng() < 0.5 ? -1 : 1) * 0.9);
-      a.omega = 0;
+      a.depot = 0;
       a.x += Math.cos(a.cap) * 5; a.y += Math.sin(a.cap) * 5;
       this.dire('ANASTOMOSE +FLUX', 'bon');
       this.secousse = 0.4;
@@ -905,6 +908,7 @@ export class Game {
       entretien: Math.round((this.stats.maintenance + this.thalle.longueur * ENTRETIEN_PAR_UM) * 1000) / 1000,
       autophagie: this.autophagie || 0,
       regime: this.regime, regimeNom: REGIMES[this.regime].nom,
+      depot: this.pilote.depot,
       reserve: this.reserveSpore,
       germ: this.facteurGerm(), sel: ech.sel || 0,
       spores: this.recolte(1),

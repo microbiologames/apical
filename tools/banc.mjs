@@ -17,6 +17,8 @@
 --------------------------------------------------------------------------- */
 
 import { Game } from '../src/game/game.js';
+import { Apex } from '../src/game/apex.js';
+import { Thalle } from '../src/game/thalle.js';
 import { appliquer } from '../src/data/genes.js';
 import { facteurTemp } from '../src/data/substrats.js';
 
@@ -120,8 +122,10 @@ function gradient(g) {
   let d = meilleur - base;
   while (d > Math.PI) d -= Math.PI * 2;
   while (d < -Math.PI) d += Math.PI * 2;
-  /* Signe negatif : la barre est en repere ECRAN, positif = droite. */
-  return Math.max(-1, Math.min(1, -d * 3.2));
+  /* Signe negatif : le depot est en repere ECRAN, positif = droite. Gain
+     reduit de 3,2 a 1,8 : on vise une POSITION de zone de fusion, pas une
+     vitesse angulaire — un gain fort la plaquait aux butees. */
+  return Math.max(-1, Math.min(1, -d * 1.8));
 }
 
 /* --- moteur de simulation ---------------------------------------------- */
@@ -335,6 +339,34 @@ verdict(spAvec > spSans * 1.5,
   'sporuler a temps vaut mieux que pousser jusqu\'a la mort',
   `${spAvec} spores en encaissant contre ${spSans} en poussant jusqu'au bout `
   + `(il faut au moins 1,5x). Causes sans encaissement : ${causes(sansSporu)}`);
+
+/* 3c. LE RAYON DE BRAQUAGE, mesure en isolation.
+       Ce verdict existe parce qu'il a manque : la constante d'agilite est restee
+       a 1,9 au lieu de 0,55 pendant deux passes — un remplacement de fichier
+       avait echoue en silence — donc le rayon valait 17 um au lieu des 57
+       annonces. Une epingle a cheveux pour un tube de 14 um de diametre, et
+       personne ne l'a vu : les onze autres verdicts mesuraient des durees, des
+       causes et des epaisseurs, aucun ne regardait la GEOMETRIE de la
+       trajectoire, qui est pourtant ce que le joueur pilote.
+       Mesure sur un apex isole, sans milieu ni obstacle : depot a fond, et l'on
+       compte la longueur deposee par radian de cap gagne. */
+const rayonBraquage = (() => {
+  const th = new Thalle();
+  const b = th.nouvelleBranche(-1, 0, 0);
+  const a = new Apex(b, 0, 0, Math.PI / 2, { phase: 0 });
+  const st = appliquer({}); st.jmaxEff = 26; st.germ = 1;
+  const h = (1 / 60) * 0.48;
+  let L = 0; const cap0 = a.cap;
+  for (let i = 0; i < 20000 && Math.abs(a.cap - cap0) < 0.6; i++) {
+    L += a.pas(h, 0.75, st, 1, 0, 1, th, i * h);
+  }
+  return Math.abs(L / (a.cap - cap0));
+})();
+verdict(rayonBraquage > 40 && rayonBraquage < 120,
+  'le rayon de braquage est celui d\'une hyphe, pas d\'une epingle a cheveux',
+  `${rayonBraquage.toFixed(0)} um a depot maximal, soit `
+  + `${(rayonBraquage / 14).toFixed(1)} diametres de tube (il en faut 3 a 9). `
+  + `Une hyphe s'incurve sur des dizaines a des centaines de micrometres.`);
 
 /* 4. Consolider survit plus longtemps MAIS avance moins. Les deux moities
       comptent : si prudent avance autant, consolider est gratuit. */

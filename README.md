@@ -16,14 +16,19 @@ npm run banc      # les 11 verdicts d'equilibrage, en node, sans navigateur
 
 ## Ce qui rend le jeu différent
 
-**On ne pilote pas l'apex. On pilote le Spitzenkörper.**
+**On ne pilote pas l'apex. On place les vésicules.**
 
-Le Spitzenkörper est un amas de vésicules situé juste derrière le bout de
-l'hyphe. Le modèle qui décrit la croissance apicale — le *centre
-d'approvisionnement en vésicules* — dit que **c'est son déplacement qui détermine
-la direction de croissance** : la forme de l'hyphe est la trace géométrique de son
-trajet. Vous barrez donc le Spitzenkörper, et l'apex suit, avec 70 ms de retard.
-On anticipe, on ne corrige pas.
+La surface avance là où les vésicules fusionnent. Vous choisissez donc **de quel
+côté de la calotte elles arrivent**, et le cap suit — c'est tout le modèle du
+centre d'approvisionnement, et c'est ce qu'on observe : une réorientation de
+croissance est *précédée* du déplacement du Spitzenkörper vers le côté du
+nouveau cap.
+
+Deux conséquences, et aucune n'a été inventée pour le jeu : **on ne peut pas
+tourner sans déposer de matière** — au régime 0 l'hyphe est immobile, donc elle
+ne tourne pas — et **tourner amincit la paroi du côté extérieur**, qui parcourt
+un arc plus long avec moins de matériau. Le virage entre ainsi dans le même
+arbitrage que la vitesse.
 
 **L'eau pousse, le sucre retient.**
 
@@ -92,7 +97,7 @@ difficulté n'est pas scriptée : c'est votre propre thalle.
 
 | | Clavier | Tactile |
 |---|---|---|
-| **Barrer** (le cap, avec inertie) | `A` / `D` / flèches | glissement horizontal, moitié gauche |
+| **Placer la zone de fusion** | `A` / `D` / flèches | glissement horizontal, moitié gauche |
 | **Accélérer** d'un cran | `W` / `↑` | glissement vers le haut, moitié droite |
 | **Ralentir** d'un cran | `S` / `↓` | glissement vers le bas, moitié droite |
 | **Ramifier** | `Espace` | tap, moitié droite |

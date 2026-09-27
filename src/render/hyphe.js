@@ -560,7 +560,8 @@ function calotteEtSpk(scr, pal, apex, cam, t, P, cyto, opts) {
   scr.layer(0);
 
   /* Vesicules en rayonnement du SPK vers la surface de la calotte. Le modele du
-     centre d'approvisionnement, dessine tel quel. */
+     centre d'approvisionnement, dessine tel quel — et depuis que le joueur
+     PLACE ce centre, ce rayonnement montre ou la calotte va avancer. */
   /* Rayons CONTENUS dans la calotte : ils allaient jusqu'a sd + 0,9 R, ce qui
      au zoom serre les faisait sortir du tube et dessinait deux traits en
      travers de la paroi. Une vesicule ne traverse pas sa propre paroi. */
@@ -573,11 +574,16 @@ function calotteEtSpk(scr, pal, apex, cam, t, P, cyto, opts) {
     scr.plot(px, py, fade32(pal.phase, 0.85 - u * 0.5));
   }
 
-  /* Bouffees d'exocytose : la vesicule a fusionne, la paroi s'est etendue. */
+  /* Bouffees d'exocytose : la vesicule a fusionne, la paroi s'est etendue.
+     Elles se produisent SUR LA ZONE DE FUSION, pas au hasard de la largeur du
+     tube : c'est la que le joueur les a envoyees, et c'est la que la calotte
+     avance. Sans ce recentrage, la commande n'avait aucune confirmation
+     visuelle a l'endroit meme ou elle agit. */
   if (cyto) {
+    const zone = (apex.depot || 0) * 0.62;
     for (const f of cyto.flashs) {
       const k = clamp(f.t / 0.26, 0, 1);
-      const o = f.off * (Rpx - 1.2 * z);
+      const o = (zone + f.off * 0.3) * (Rpx - 1.2 * z);
       const bx2 = ax + ux * 1.2 * z + nx * o, by2 = ay + uy * 1.2 * z + ny * o;
       /* CE QUE FAIT LA VESICULE EN FUSIONNANT, dessine. Quatre gestes distincts,
          et chacun est le phenomene : la chitine epaissit le bord, la

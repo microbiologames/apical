@@ -15,7 +15,41 @@
       le resultat d une pression que le joueur depense. En dessous de Y, rien
       ne bouge, quelle que soit la quantite d ameliorations.
 
-   2. ON PILOTE LE CAP, ET LE SPITZENKORPER EN EST LA CONSEQUENCE.
+   2. ON PILOTE LE POINT DE FUSION DES VESICULES. LE CAP EN EST LA CONSEQUENCE.
+
+      Troisieme et derniere version du pilotage, choisie par l auteur. Les deux
+      precedentes sont decrites plus bas parce qu elles disent pourquoi
+      celle-ci est la bonne.
+
+      LE MECANISME REEL : le Spitzenkorper rayonne ses vesicules, elles
+      fusionnent sur la calotte, et LA SURFACE AVANCE LA OU ELLES ARRIVENT.
+      Deposer a gauche fait avancer la gauche de la calotte, donc l apex tourne
+      a gauche. C est tout le modele du centre d approvisionnement, et c est
+      aussi ce qu on observe : une reorientation de croissance est PRECEDEE du
+      deplacement du Spitzenkorper vers le cote du nouveau cap.
+
+      Le joueur place donc la zone de fusion, de -1 (bord gauche de la calotte)
+      a +1 (bord droit), et le cap suit. Deux consequences enormes, et aucune
+      des deux n a ete inventee pour le jeu :
+
+      a) ON NE PEUT PAS TOURNER SANS DEPOSER DE MATIERE. La rotation est
+         proportionnelle a la LONGUEUR PRODUITE, pas au temps. Au regime 0,
+         l hyphe est immobile : elle ne tourne pas non plus. Barrer coute donc
+         de la croissance, et l on ne peut plus se repositionner gratuitement
+         avant un obstacle.
+
+      b) TOURNER AMINCIT LA PAROI DU COTE EXTERIEUR. Le cote exterieur d un
+         virage parcourt un arc plus long avec moins de materiau : sa paroi y
+         est plus mince. Le virage entre donc dans le meme arbitrage que la
+         vitesse, et pour la meme raison physique.
+
+      HISTORIQUE DES DEUX VERSIONS ECARTEES :
+      - barrer le SPK, l apex suivant avec un retard : deux commandes en
+        cascade, un pilotage qu on ne sentait pas, et un SPK dessine net qui se
+        donnait pour une poignee ;
+      - agir sur la vitesse angulaire du cap avec de l inertie : ca se pilotait
+        bien, mais le Spitzenkorper n etait plus qu une decoration et la
+        rotation ne coutait rien.
       Premiere version : le joueur barrait le SPK et l apex suivait avec un
       retard du premier ordre. Fidele au modele du centre d approvisionnement en
       vesicules — le SPK avance, rayonne, et l apex est la ou les vesicules
@@ -71,10 +105,12 @@ export class Apex {
     this.branche = branche;
     this.x = x; this.y = y;
     /* Le SPK est DERRIERE l apex, a `spkDist`. C est lui qui porte le cap. */
-    /* `cap` est le cap REEL, borne a l avant. `omega` est sa vitesse angulaire,
-       et c est elle que la barre commande — d ou l inertie. */
+    /* `cap` est le cap REEL, borne a l avant. Il n a plus de vitesse angulaire
+       propre : il ne tourne que quand de la matiere est deposee de travers.
+       `depot` est la position de la zone de fusion sur la calotte, -1 a +1 en
+       repere ECRAN, et c est la seule commande de direction du jeu. */
     this.cap = ang;
-    this.omega = 0;
+    this.depot = 0;
     /* Le SPK n a plus de cap propre : sa position est recalculee a chaque pas a
        partir du cap et du taux de virage. Il ne sert qu au rendu. */
     this.spk = { x: x - Math.cos(ang) * 6, y: y - Math.sin(ang) * 6 };
@@ -175,47 +211,45 @@ export class Apex {
     if (v > vViable) v = Math.max(vViable, v * 0.18);
     this.v = v;
 
-    /* --- barre : on agit sur la VITESSE ANGULAIRE ----------------------
-       SIGNE. L ecran a son y vers le HAUT alors qu un angle mathematique croit
-       dans le sens trigonometrique : partant du cap « avant » (pi/2), AJOUTER a
-       l angle fait donc tourner vers la GAUCHE de l ecran. La premiere version
-       ajoutait `barre` tel quel, et la touche de droite faisait virer a gauche.
-       Defaut signale a l essai, confirme au calcul : cos(pi/2 + 0,5) = -0,48.
-       On SOUSTRAIT donc, et `barre` positif veut dire droite a l ecran.
-
-       AMPLITUDE. La vitesse de virage decroit avec la vitesse d avance : le
-       rayon de courbure qu un cone apical peut decrire est borne. A 20 um/s,
-       omega = 0,35 rad/s donc R = 57 um (quatre diametres de tube) ; a 35 um/s,
-       R = 129 um. Une hyphe ne fait pas d epingle a cheveux.
-
-       INERTIE. 0,34 s de constante de temps sur omega, pas sur le cap : c est
-       ce qui donne la sensation de barre. Sur le cap, l inertie aurait donne un
-       retard ; sur la vitesse angulaire, elle donne un ELAN. */
-    const omegaMax = stats.agilite / (1 + v / 34);
-    const cible = -barre * omegaMax;
-    this.omega += (cible - this.omega) * (1 - Math.exp(-dt / 0.34));
-    const capVoulu = this.cap + this.omega * dt;
-    this.cap = Apex.borner(capVoulu);
-    /* Contre la butee de cap, l elan se casse au lieu de s accumuler : sans
-       cela on restait colle a +/-78 deg pendant une seconde apres avoir lache. */
-    if (Math.abs(capVoulu - this.cap) > 1e-9) this.omega *= 0.25;
+    /* --- placement de la zone de fusion ------------------------------
+       Le Spitzenkorper met du temps a se deplacer lateralement : 0,26 s de
+       constante de temps. La commande vise une position, elle ne la saute pas.
+       Au relachement, la cible est le centre : le site de polarite se recentre
+       tout seul, et le joueur n a donc pas a contre-barrer pour redresser. */
+    this.depot += (clamp(barre, -1, 1) - this.depot) * (1 - Math.exp(-dt / 0.26));
 
     const px = this.x, py = this.y;
     this.x += Math.cos(this.cap) * v * dt;
     this.y += Math.sin(this.cap) * v * dt;
-    this.dir = this.cap;
     const d = Math.hypot(this.x - px, this.y - py);
 
-    /* --- le Spitzenkorper, DEDUIT du virage ---------------------------
-       Il se tient a `spkDist` en arriere du bout, et il se DECALE du cote
-       interieur du virage — c est ce que fait le vrai organite, et c est de ce
-       decalage que nait la courbure dans le modele du centre
-       d approvisionnement. On le calcule donc au lieu de le piloter, et il
-       redevient une information : voir ou penche la nuee, c est voir ou l on
-       va avant que le tube ne l ait montre. */
-    const lat = clamp(this.omega / Math.max(0.05, omegaMax), -1, 1) * stats.spkDist * 0.55;
-    this.spk.x = this.x - Math.cos(this.cap) * stats.spkDist + Math.cos(this.cap - Math.PI / 2) * lat;
-    this.spk.y = this.y - Math.sin(this.cap) * stats.spkDist + Math.sin(this.cap - Math.PI / 2) * lat;
+    /* --- le cap tourne PARCE QU ON A DEPOSE DE TRAVERS ----------------
+       COURBURE = 0,0175 rad par micrometre a depot maximal. Ce chiffre n est
+       pas choisi : c est exactement le rapport qu avait le pilotage precedent
+       a vitesse de croisiere (0,35 rad/s pour 20 um/s), donc le rayon de
+       braquage reste celui qu on avait regle — 57 um, quatre diametres de tube.
+       Le signe est negatif parce que `barre` est en repere ecran et que l angle
+       mathematique croit vers la gauche (voir la mesure 9bis de CLAUDE.md).
+
+       La division par (1 + v/60) garde un reste de couplage a la vitesse : une
+       calotte qui s allonge vite se redirige moins bien. Plus doux qu avant —
+       le prix du virage est maintenant paye en MATIERE, pas en rayon. */
+    const raideur = 1 + v / 60;
+    const dTheta = -this.depot * d * 0.0175 * (stats.agilite / 0.55) / raideur;
+    const capVoulu = this.cap + dTheta;
+    this.cap = Apex.borner(capVoulu);
+    this.dir = this.cap;
+
+    /* --- le Spitzenkorper EST la commande, affichee ---------------------
+       Il se tient sur la zone de fusion : la ou le joueur l a place, c est la
+       que les vesicules vont arriver et donc que la calotte va avancer. Voir ou
+       penche la nuee, c est voir ou l on va — et cette fois ce n est pas une
+       information deduite, c est l ordre lui-meme. */
+    const lat = -this.depot * stats.spkDist * 0.95;
+    this.spk.x = this.x - Math.cos(this.cap) * stats.spkDist * 0.55
+      + Math.cos(this.cap - Math.PI / 2) * lat;
+    this.spk.y = this.y - Math.sin(this.cap) * stats.spkDist * 0.55
+      + Math.sin(this.cap - Math.PI / 2) * lat;
 
     /* --- epaisseur de paroi : e = min(consigne, J / v) -----------------
        LE FLUX MAXIMAL EST UN PLAFOND, PAS UNE CONSIGNE. La premiere version
@@ -234,7 +268,15 @@ export class Apex {
        acheter. */
     const eNom = Math.min(stats.eMax,
       stats.eNom * (1 + (drive < 0 ? -drive * 0.28 : 0)));
-    const eCible = clamp(Math.min(eNom, stats.jmaxEff / Math.max(v, V_PLANCHER)),
+    /* TOURNER AMINCIT LA PAROI. Le cote exterieur d un virage parcourt un arc
+       plus long que l interieur et recoit moins de vesicules, puisqu elles
+       fusionnent du cote interieur : sa paroi y est donc plus mince. A depot
+       maximal, 30 % de moins.
+       C est la contrepartie du nouveau pilotage, et elle rend au virage un prix
+       qu il n avait pas : on ne peut plus se repositionner sans consequence
+       juste avant un passage etroit. */
+    const virage = 1 - 0.30 * Math.abs(this.depot);
+    const eCible = clamp(Math.min(eNom, stats.jmaxEff / Math.max(v, V_PLANCHER)) * virage,
       0, stats.eMax);
     /* Rigidification progressive : la paroi met du temps a prendre. 0,18 s de
        constante de temps, soit environ 11 px de tube a vitesse nominale — la

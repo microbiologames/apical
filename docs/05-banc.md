@@ -263,6 +263,27 @@ La leçon vaut d'être écrite : un verdict qui porte sur une **quantité absolu
 est solidaire d'un réglage de rythme ; un verdict qui porte sur un **rapport**
 ne l'est pas. Préférer les seconds.
 
+### 20. Une constante documentée mais jamais appliquée
+
+`BASE.agilite` devait passer de 1,9 à 0,55. Le remplacement de fichier a
+**échoué en silence** — une apostrophe courbe dans la chaîne cherchée — et la
+valeur est restée à 1,9 pendant **deux passes entières**.
+
+Pendant ce temps, le rayon de braquage a été annoncé à 57 µm dans le code, dans
+les docs et à l'auteur, alors qu'il valait **17 µm** : exactement l'épingle à
+cheveux que la correction prétendait supprimer, et que l'auteur avait signalée.
+
+Les onze verdicts passaient à chaque exécution. Ils mesuraient des durées, des
+causes de mort, des épaisseurs de paroi — **aucun ne regardait la géométrie de
+la trajectoire**, qui est pourtant ce que le joueur pilote directement.
+
+Deux leçons, et la seconde est la plus utile :
+
+- le banc mesure désormais le **rayon de braquage** sur un apex isolé, sans
+  milieu ni obstacle : dépôt à fond, longueur déposée par radian ;
+- **un chiffre qu'on documente sans le mesurer est un chiffre qu'on croit
+  avoir.** Après toute modification d'une constante, relire le fichier.
+
 ---
 
 ## Chantier ouvert : la paroi fait-elle encore peur ?

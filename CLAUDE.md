@@ -147,6 +147,17 @@ Ce que le banc a trouvé, et qu'aucune relecture n'aurait trouvé :
    où il faut la prendre. C'est aussi un contresens biologique : c'est **la
    limitation en nutriments qui induit la conidiation**. Seuil ramené à 0,04.
 
+11. **`BASE.agilite` est resté à 1,9 pendant deux passes.** Un remplacement de
+   fichier avait échoué en silence sur une apostrophe. Le rayon de braquage a
+   donc été **annoncé à 57 µm alors qu'il valait 17 µm** — exactement l'épingle
+   à cheveux que la correction prétendait supprimer, et que l'auteur avait
+   signalée. Les onze verdicts passaient : aucun ne regardait la **géométrie de
+   la trajectoire**, qui est pourtant ce que le joueur pilote. Le banc mesure
+   maintenant le rayon de braquage en isolation.
+   **Un chiffre qu'on documente sans le mesurer est un chiffre qu'on croit
+   avoir.** Après toute modification d'une constante, vérifier qu'elle a bien
+   changé dans le fichier.
+
 Corollaire de 4 et 5 : **un banc dont tous les verdicts passent du premier coup
 ne garde rien.** Vérifier qu'un verdict attrape le défaut qu'il prétend garder,
 en remettant le défaut.
@@ -203,10 +214,18 @@ en remettant le défaut.
 - **Pas de concurrents.** Décision de l'auteur : ils se lisaient comme des mobs
   à trajectoire rectiligne. Le milieu ne contient que des éléments de milieu.
 - **`barre` est en REPÈRE ÉCRAN** : positif = droite. Voir la mesure 9bis.
-- **On pilote `cap` par son `omega`, pas le Spitzenkörper.** Le SPK est
-  **calculé** à partir du taux de virage et dessiné en croissant diffus : il
-  informe, il ne commande pas. Deux commandes en cascade ne se sentaient pas, et
-  un SPK net se donnait pour une poignée qu'il n'était pas.
+- **ON PILOTE LE POINT DE FUSION DES VÉSICULES ; le cap en est la conséquence.**
+  La surface avance là où les vésicules fusionnent : déposer à gauche fait
+  tourner à gauche. C'est tout le modèle du centre d'approvisionnement, et c'est
+  aussi ce qu'on observe — une réorientation est *précédée* du déplacement du
+  Spitzenkörper vers le côté du nouveau cap. Deux conséquences, aucune inventée :
+  **on ne peut pas tourner sans déposer de matière** (au régime 0 on ne tourne
+  pas), et **tourner amincit la paroi du côté extérieur** (−30 % à dépôt
+  maximal). Le virage entre ainsi dans le même arbitrage que la vitesse.
+  Deux pilotages ont été écartés avant : barrer le SPK avec l'apex qui suit
+  (deux commandes en cascade, rien ne se sentait) et agir sur la vitesse
+  angulaire du cap (ça se pilotait bien, mais le SPK n'était plus qu'une
+  décoration et tourner ne coûtait rien).
 - **L'épaisseur de paroi ne suit PAS le zoom** (`epaisseurEcran`). Voir 9quater.
 - **Les vésicules sont toujours nettes et plus claires que le cytoplasme.** Elles
   sont le sujet du champ : on doit pouvoir suivre chacune du fond du tube
