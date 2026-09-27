@@ -101,21 +101,26 @@ export function sections(branche, portee = PORTEE, pas = PAS) {
  * un apex en croissance d'un bout casse.
  */
 function calotte(d, R) {
-  /* PROFIL REVU : le precedent (exposants 1,75 et 0,52 sur L = 1,32 R) donnait
-     un bout court et tres bombe, qui se lisait comme un BOURGEON pose sur un
-     tube — un defaut de silhouette signale a l'essai, et il avait deux causes
-     cumulees : la calotte etait trop courte pour son rayon, et elle etait en
-     plus gonflee par le turgor et par le pulse.
-     On prend maintenant une demi-ellipse de demi-axes R et 1,55 R. Elle a deux
-     vertus : elle raccorde le tube avec une tangente exactement perpendiculaire
-     a l'axe (donc aucune cassure visible a la base), et elle est une fois et
-     demie plus longue que large, ce qui est la silhouette d'un apex fongique en
-     croissance. Le gonflement radial a ete supprime : le pulse allonge le bout,
-     il ne l'enfle pas. */
-  const L = R * 1.55;
+  /* TROISIEME PROFIL, ET LE BON. Historique, parce qu'il dit exactement ce qui
+     ne va pas dans les deux premiers :
+       - dome court et tres bombe (L = 1,32 R, exposants 1,75 / 0,52) : lu comme
+         un BOURGEON pose sur un tube ;
+       - demi-ellipse allongee (L = 1,55 R) : pire, lue comme un PHALLUS. En
+         cherchant la fidelite au profil « hyphoide » j'ai allonge la calotte,
+         et une calotte plus longue que large donne cette silhouette-la, quoi
+         qu'elle represente.
+     Ce qu'il faut est un TUBE FERME : des flancs qui restent paralleles presque
+     jusqu'au bout, puis un dome COURT qui referme. C'est une superellipse
+     d'exposant 2,8 sur une longueur de 0,82 R — donc une calotte plus COURTE
+     que le rayon. A mi-hauteur le flanc est encore a 95 % du rayon, il ne
+     s'inflechit vraiment qu'apres 80 %.
+     Et c'est defendable : les Mucorales, dont on a pris le diametre, ont des
+     apex nettement plus obtus que le hyphoide classique des Ascomycetes. */
+  const L = R * 0.82;
   if (d >= L) return 0;
   const u = d / L;
-  return R * Math.sqrt(Math.max(0, 1 - u * u));
+  const n = 2.8;
+  return R * Math.pow(Math.max(0, 1 - Math.pow(u, n)), 1 / n);
 }
 
 /**
@@ -361,7 +366,10 @@ function surTube(secs, s, pas) {
 }
 
 function dessinerOrganite(scr, pal, o, sx, sy, pos, z) {
+  /* `defo` deforme la vesicule dans le sens du tube : allongee quand elle
+     accelere, tassee quand elle ralentit. Une poche de membrane, pas une bille. */
   const r = o.r * z;
+  const dl = r * (o.defo || 1), dt2 = r / (o.defo || 1);
   const axx = -pos.ny, axy = -pos.nx;   // axe du tube, en ecran
   switch (o.type) {
     case 'vesicule': {
@@ -382,13 +390,13 @@ function dessinerOrganite(scr, pal, o, sx, sy, pos, z) {
              du tube est dessine avec cette teinte-la. Une vesicule est un corps
              dense a fort indice de refraction — en contraste de phase elle
              brille, elle ne se fond pas. */
-          scr.disc(sx, sy, r * 1.35, pal.phase, pal.vesExtension);
-          scr.ring(sx, sy, r * 1.35, Math.max(1.4, z * 0.3), pal.vesExtension);
+          scr.ellipse(sx, sy, dl * 1.35, dt2 * 1.35, ang, pal.phase, pal.vesExtension);
+          scr.ringE(sx, sy, dl * 1.35, dt2 * 1.35, ang, Math.max(1.2, z * 0.26), pal.vesExtension);
           break;
         case 'membrane':
           /* Vesicule lipidique : une bicouche, donc un ANNEAU et non un disque. */
-          scr.disc(sx, sy, r * 1.1, pal.phase);
-          scr.ring(sx, sy, r * 1.1, Math.max(1.4, z * 0.3), pal.vesMembrane);
+          scr.ellipse(sx, sy, dl * 1.1, dt2 * 1.1, ang, pal.phase, pal.vesMembrane);
+          scr.ringE(sx, sy, dl * 1.1, dt2 * 1.1, ang, Math.max(1.2, z * 0.26), pal.vesMembrane);
           break;
         case 'secretion':
           /* Enzyme exportee : allongee, elle file vers la sortie. */

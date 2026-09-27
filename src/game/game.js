@@ -154,6 +154,27 @@ export const REGIMES = [
  */
 export const T_GERM = 5.5;
 
+/**
+ * TEMPO. Facteur applique au pas de temps de TOUTE la simulation.
+ *
+ * Demande de l'auteur : « il faut que ce soit beaucoup plus lent que ca ». Le
+ * jeu se joue de pres — on voit arriver chaque vesicule — et a ce cadrage la
+ * vitesse precedente donnait un defilement qui ne laissait pas le temps de
+ * regarder ce qu'on avait justement rapproche pour le voir.
+ *
+ * On ralentit L'HORLOGE et non les coefficients, et c'est la seule facon sure
+ * de le faire : croissance, absorption, depenses, entretien, autophagie,
+ * dessechement, pulse — tout est divise par le meme facteur, donc TOUS LES
+ * RAPPORTS SONT PRESERVES et l'equilibrage mesure au banc reste valide tel
+ * quel. Ralentir les coefficients un par un aurait casse l'equilibre a coup
+ * sur.
+ *
+ * Consequence sur l'echelle declaree : une seconde de jeu ne vaut plus une
+ * minute de biologie mais une trentaine de secondes. Les rapports entre
+ * vitesses restent ceux de la paillasse.
+ */
+export const TEMPO = 0.48;
+
 export class Game {
   constructor(graine = (Math.random() * 1e9) | 0) {
     this.graine = graine >>> 0;
@@ -284,7 +305,7 @@ export class Game {
 
   pas(dt, cmd) {
     if (this.etat !== 'jeu') return;
-    dt = Math.min(dt, 1 / 30);          // un onglet qui reprend la main
+    dt = Math.min(dt, 1 / 30) * TEMPO;  // un onglet qui reprend la main
     this.t += dt;
     this.secousse = Math.max(0, this.secousse - dt * 3.4);
     for (const f of this.flash) f.t -= dt;

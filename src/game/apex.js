@@ -152,7 +152,7 @@ export class Apex {
        vesicules du SPK mesuree en FRAP (1,3 a 2,5 min) ramenee a l echelle de
        temps du jeu (1 s de jeu = 1 min de biologie). Ce n est donc pas un
        chiffre d animation : c est la vraie horloge de l organite. */
-    this.phase = (this.phase + dt * 1.55 * TAU) % TAU;
+    this.phase = (this.phase + dt * 1.15 * TAU) % TAU;
 
     let v = this.vitesse(P, stats, drive, ft);
     /* RETROACTION DE DISETTE. Un apex a court de materiau de paroi ne fonce pas

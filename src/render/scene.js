@@ -68,10 +68,12 @@ export function fond(scr, pal, champ, cam) {
           const x = sx + i, y = sy + j;
           if (x >= W || y >= H) continue;
           let cc = c;
-          /* Taille du grain indexee sur le ZOOM : a z = 2,4 un granule de
-             milieu mesure 2 a 3 px et non 1, sinon il redevient du bruit de
-             capteur des qu'on se rapproche. */
-          const q = Math.max(1, Math.round(zz * 0.9));
+          /* Taille du grain indexee sur le ZOOM, mais a la RACINE : a z = 4,6
+             un facteur lineaire donnait des blocs de 4 px qui se lisaient comme
+             des carreaux de mosaique, pas comme un milieu granuleux. Une
+             granulation de milieu fait environ un demi-micrometre : a z = 4,6
+             cela fait deux pixels, et c'est exactement ce que rend la racine. */
+          const q = Math.max(1, Math.round(Math.sqrt(zz) * 0.95));
           const h = hash2(Math.floor(x / q) * 3 + 7, Math.floor(y / q) * 5 + 11);
           if (g > 0.08 && h < g * 0.16) {
             cc = mix32(cc, pal.sucre, 0.26 + g * 0.26);

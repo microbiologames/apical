@@ -216,7 +216,8 @@ function image(ms) {
       lon += Math.hypot(b.pts[i].x - b.pts[i - 1].x, b.pts[i].y - b.pts[i - 1].y);
     }
     cyto.maj(dt, b.id, lon, ap ? ap.v : 0, !!ap,
-      ap === g.pilote ? g.mixVesicules() : undefined);
+      ap === g.pilote ? g.mixVesicules() : undefined,
+      ap ? ap.decharge : true);
   }
 
   /* --- rendu ---------------------------------------------------------- */

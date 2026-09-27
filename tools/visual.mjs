@@ -188,7 +188,9 @@ if (port.etat) {
      longueur d'une execution a l'autre. Il verifie que la simulation tourne
      derriere le rendu, pas qu'elle tourne a une vitesse donnee — cela, c'est le
      travail du banc de logique, qui lui est reproductible. */
-  verdict(e.longueur > 110 && e.avance > 38,
+  /* Seuils divises par deux avec l'arrivee du TEMPO : la meme session de
+     quatorze secondes reelles ne simule plus que sept secondes de croissance. */
+  verdict(e.longueur > 55 && e.avance > 16,
     'la simulation a reellement tourne derriere le rendu',
     `longueur ${e.longueur} um, avance ${e.avance} um, ${e.apex} apex, etat ${e.etat}`);
 }

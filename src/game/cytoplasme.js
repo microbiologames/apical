@@ -58,14 +58,20 @@
 import { clamp, lerp, mulberry32, TAU } from '../core/util.js';
 
 /* Flux visuel, en px/s, RELATIF a l'apex.
-   La valeur fidele serait 300 px/s : un flux de masse de 5 um/s a ete mesure
-   chez Neurospora, et l'echelle du jeu est 1 s = 1 min. A 300 px/s un organite
-   traverse le champ en moins d'une seconde et il ne reste qu'un scintillement.
-   On rend donc le flux a 16 px/s + 0,8 x la vitesse d'extension : lisible, et
-   toujours PLUS RAPIDE que l'apex, ce qui est le fait qui compte — c'est le
-   corps qui alimente la pointe, jamais l'inverse. */
-const FLUX_BASE = 16;
-const FLUX_PAR_V = 0.8;
+   La valeur fidele serait de plusieurs centaines de um/s a l'echelle du jeu :
+   un flux de masse de 5 um/s a ete mesure chez Neurospora. A cette vitesse un
+   organite traverse le champ en une fraction de seconde et il ne reste qu'un
+   scintillement.
+   RALENTI DE 16 A 5,5 sur demande de l'auteur : « des vesicules qui arrivent un
+   peu comme dans une lampe a lave ». Le cadrage serre ne sert a rien si ce
+   qu'il rapproche defile trop vite pour etre suivi. A 5,5 um/s + 0,5 x la
+   vitesse d'extension, une vesicule met une dizaine de secondes a remonter le
+   champ : on a le temps de la voir venir, de voir ce qu'elle porte, et de la
+   voir fusionner.
+   Le fait qui compte est preserve : le flux reste PLUS RAPIDE que l'apex —
+   c'est le corps qui alimente la pointe, jamais l'inverse. */
+const FLUX_BASE = 5.5;
+const FLUX_PAR_V = 0.5;
 
 /* Au-dela de cette distance derriere l'apex on ne peuple plus : c'est hors
    champ dans tous les cas de figure. */
@@ -126,7 +132,7 @@ export class Cytoplasme {
    * @param {number} v       vitesse d'extension de son apex (0 si morte)
    * @param {boolean} vive   la branche a-t-elle encore un apex
    */
-  maj(dt, id, lon, v, vive, mix = MIX_DEFAUT) {
+  maj(dt, id, lon, v, vive, mix = MIX_DEFAUT, decharge = true) {
     const l = this.liste(id);
     this.mix = mix;
     const portee = Math.min(lon, PORTEE);
@@ -149,19 +155,37 @@ export class Cytoplasme {
          le flux le ramene vers l'apex. La somme des deux est ce que l'oeil
          percoit, et c'est pour cela qu'un apex rapide semble ASPIRER son
          cytoplasme : a 40 px/s la difference change de signe. */
-      o.s += (vive ? v : 0) * dt - flux * o.flux * dt;
+      /* DECELERATION D'APPROCHE. Une vesicule ne fonce pas sur la membrane :
+         elle ralentit en entrant dans la calotte, s'y attarde, et y attend sa
+         fusion. C'est ce freinage qui donne le mouvement de lampe a lave — sans
+         lui, les vesicules arrivaient a pleine vitesse et disparaissaient net.
+         Le facteur tombe a 0,18 dans les douze derniers micrometres. */
+      const frein = o.type === 'vesicule' ? lerp(0.18, 1, clamp((o.s - 4) / 12, 0, 1)) : 1;
+      o.s += (vive ? v : 0) * dt - flux * o.flux * frein * dt;
       /* Ballottement lateral : le cytoplasme est mou, les organites se
          bousculent. Amplitude bornee a 0,72 du rayon pour qu'aucun ne chevauche
          la paroi — un organite qui mord sur la paroi casse la lecture du tube
          comme objet rigide. */
       o.ph += dt * o.w;
       o.off = clamp(o.off0 + Math.sin(o.ph) * 0.17, -0.72, 0.72);
+      /* DEFORMATION. Une vesicule est une poche de membrane, pas une bille :
+         elle s'allonge et se tasse en derivant. Deux pour cent d'amplitude
+         suffisent a lui oter sa raideur, et c'est ce qui manquait a l'effet de
+         lampe a lave autant que la lenteur. */
+      o.defo = 1 + Math.sin(o.ph * 0.7 + o.s * 0.08) * 0.22;
       /* Les vacuoles grossissent avec l'age du compartiment, et c'est ce qui
          donne au tube son sens de lecture sans aucune fleche. */
       if (o.type === 'vacuole') o.r = lerp(o.r0, o.r0 * 2.3, clamp((o.s - 52) / 320, 0, 1));
 
       if (o.s < 4.5) {
         if (o.type === 'vesicule') {
+          /* ELLES ATTENDENT LA DECHARGE. Les vesicules secretoires s'accumulent
+             au Spitzenkorper pendant la phase lente du pulse et sont exocytees
+             pendant la phase rapide : c'est le mecanisme mesure, et c'est ce qui
+             donne a la croissance ses paliers. En jeu, on VOIT donc le bouchon
+             se former au bout puis partir d'un coup, au lieu d'un egouttement
+             continu. */
+          if (!decharge) { o.s = 3.2 + (o.att = (o.att || 0) + dt * 0.4) % 1.6; continue; }
           /* EXOCYTOSE. La vesicule fusionne, et ce qu'elle portait se voit :
              un chitosome epaissit la paroi, une macrovesicule pousse le bout,
              une lipidique etale la membrane, une enzyme part dehors. C'est le
@@ -191,7 +215,10 @@ export class Cytoplasme {
         r0: lerp(t.r[0], t.r[1], this.rng()),
         r: lerp(t.r[0], t.r[1], this.rng()),
         off0: (this.rng() * 2 - 1) * 0.62,
-        off: 0, ph: this.rng() * TAU, w: lerp(1.1, 2.9, this.rng()),
+        /* Ballottement TRES lent : 0,25 a 0,7 rad/s au lieu de 1,1 a 2,9. Un
+           cytoplasme est visqueux, et une vesicule y derive, elle n'y vibre
+           pas. */
+        off: 0, ph: this.rng() * TAU, w: lerp(0.25, 0.7, this.rng()), defo: 1,
         flux: t.flux * lerp(0.82, 1.18, this.rng()),
         ang: this.rng() * Math.PI,
       });

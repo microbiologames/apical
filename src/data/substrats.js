@@ -51,7 +51,10 @@ export const AW_MIN_BASE = 0.88;
    horizon de 600 px se franchit donc en une minute environ, et les quatre font
    une boucle d'a peu pres huit minutes. Les premieres longueurs, posees a
    1400 px a l'estime, faisaient qu'aucune manche sur 96 ne voyait le second
-   substrat : les trois quarts du contenu n'existaient pas. */
+   substrat : les trois quarts du contenu n'existaient pas.
+   RACCOURCIS DE 30 % avec l'arrivee du TEMPO : l'avancee par seconde REELLE a
+   ete divisee par deux, donc a longueurs egales chaque horizon prenait deux
+   fois plus longtemps a franchir. On en rend la moitie. */
 /* `court` est le nom affiche par le HUD. La fonte fait 3 px de large et la
    colonne en tient douze caracteres : « Pellicule du fruit » s'y affichait
    « PELLICULE DU », ce qui se lit comme un bug d'affichage. Un nom long et un
@@ -71,7 +74,7 @@ export const SUBSTRATS = [
     obstacle: { type: 'cire', densite: 0.35, taille: [3, 7] },
     sel: 0,
     antifongique: null,
-    longueur: 600,
+    longueur: 420,
   },
   {
     id: 'mesocarpe',
@@ -87,7 +90,7 @@ export const SUBSTRATS = [
     /* pH 3,4 : l'acide organique du fruit est deja un acide faible. Faible
        dose, juste de quoi faire sentir le terme de maintenance. */
     antifongique: { type: 'sorbate', intensite: 0.18, echelle: 200 },
-    longueur: 1100,
+    longueur: 760,
   },
   {
     id: 'confiture',
@@ -102,7 +105,7 @@ export const SUBSTRATS = [
     sel: 0.45,
     /* Sorbate de potassium, la conservation reelle d'une confiture peu sucree. */
     antifongique: { type: 'sorbate', intensite: 0.55, echelle: 160 },
-    longueur: 1300,
+    longueur: 900,
   },
   {
     id: 'grain',
@@ -118,7 +121,7 @@ export const SUBSTRATS = [
     sel: 0.30,
     /* Traitement de conservation des grains : un imidazole de synthese. */
     antifongique: { type: 'azole', intensite: 0.5, echelle: 180 },
-    longueur: 1500,
+    longueur: 1000,
   },
 ];
 

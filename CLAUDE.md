@@ -133,6 +133,16 @@ Ce que le banc a trouvé, et qu'aucune relecture n'aurait trouvé :
    le centre du tube est dessiné avec cette teinte-là. Une vésicule est
    **réfringente** : plus claire que son fond, toujours nette, jamais floutée.
 
+10. **La calotte apicale, trois profils avant le bon.** Dôme court et bombé :
+   lu comme un **bourgeon**. Demi-ellipse allongée (L = 1,55 R), en cherchant la
+   fidélité au profil « hyphoïde » : **pire, lue comme un phallus**. Une calotte
+   plus longue que large donne cette silhouette-là, quoi qu'elle représente.
+   Ce qu'il faut est un **tube fermé** : superellipse d'exposant 2,8 sur une
+   longueur de **0,82 R** — donc une calotte plus COURTE que le rayon, des
+   flancs encore à 95 % du rayon à mi-hauteur. Défendable : les Mucorales, dont
+   on a pris le diamètre, ont des apex nettement plus obtus que le hyphoïde
+   classique des Ascomycètes.
+
 9. **La sporulation exigeait du sucre**, donc était impossible au moment exact
    où il faut la prendre. C'est aussi un contresens biologique : c'est **la
    limitation en nutriments qui induit la conidiation**. Seuil ramené à 0,04.
@@ -205,6 +215,18 @@ en remettant le défaut.
   du rendu : le flux de chitosomes suit l'épaisseur déposée, celui des
   macrovésicules suit la vitesse. Pousser fait donc littéralement disparaître les
   chitosomes du tube.
+- **La calotte est un TUBE FERMÉ, pas un ovoïde** : elle est plus courte que le
+  rayon (0,82 R). Voir la mesure 10 — une calotte plus longue que large donne
+  une silhouette phallique, et aucune justification physiologique ne rattrape ça.
+- **Le TEMPO ralentit l'HORLOGE, jamais les coefficients.** `dt` est multiplié
+  par 0,48 en tête de `Game.pas`, donc croissance, absorption, dépenses,
+  entretien, autophagie, dessèchement et pulse sont divisés par le même facteur
+  et **tous les rapports sont préservés**. Ralentir les coefficients un par un
+  casserait l'équilibrage à coup sûr.
+- **Les vésicules attendent la DÉCHARGE du pulse.** Elles s'accumulent au
+  Spitzenkörper pendant la phase lente et sont exocytées pendant la phase
+  rapide : c'est le mécanisme mesuré, et c'est ce qui donne à la croissance ses
+  paliers. On voit le bouchon se former puis partir d'un coup.
 - **La caméra garde l'apex dans le cadre** (22–78 % en hauteur, 16–84 % en
   largeur). Elle n'avance toujours pas à reculons, mais au zoom serré un apex qui
   vire près de sa butée de cap dérivait hors de l'écran.
@@ -235,6 +257,11 @@ commentés en profondeur.
   vitesse / paroi se lit maintenant dans l'**épaisseur** et dans la **durée de
   manche**, plus dans une mort. À rejuger à la manette : si la paroi cesse de
   faire peur, il faudra rendre la rétroaction plus imparfaite.
+- **La plasmolyse domine la table des causes** (environ 15 manches sur 24 pour
+  toutes les politiques). Le dessèchement plus les poches de sel forment
+  maintenant la pression principale, et les autres morts sont reléguées. À
+  rejuger : soit adoucir la dérive d'aw, soit rendre l'osmotolérance plus
+  accessible dans le catalogue.
 - **Le méta.** Les spores s'accumulent mais n'achètent rien.
 - **Le son.** Rien pour l'instant. La piste évidente est de faire entendre le
   **pulse calcique** : c'est déjà l'horloge du jeu, à 1,55 Hz.

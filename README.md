@@ -48,7 +48,11 @@ derrière vous jusqu'à la fin de la manche.
 **On voit l'apex de très près, et chaque vésicule y a un rôle.**
 
 Le champ ne montre que 56 µm de large : le tube occupe le quart de l'écran et
-l'on suit **chaque vésicule** du fond du tube jusqu'à sa fusion. Un chitosome
+l'on suit **chaque vésicule** du fond du tube jusqu'à sa fusion — lentement, en
+dérivant et en se déformant, avec un freinage d'approche dans la calotte. Elles
+**attendent la décharge du pulse** pour fusionner, comme dans la cellule : elles
+s'accumulent au Spitzenkörper pendant la phase lente et partent d'un coup
+pendant la phase rapide. C'est ce qui donne à la croissance ses paliers. Un chitosome
 polyédrique épaissit la paroi d'un arc, une macrovésicule pousse le bout, une
 lipidique étale la membrane en anneau, une enzyme **sort** digérer dehors. Et la
 composition du trafic vient du modèle : **pousser fait disparaître les

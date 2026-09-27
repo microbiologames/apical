@@ -241,6 +241,28 @@ qui manquait. La `reserveSpore` tient une vingtaine de secondes.
   politique d'avoir encaissé au bon moment. **Le score du jeu, ce sont les
   spores.**
 
+### 18. Le banc ne dit rien d'une silhouette
+
+Trois profils de calotte ont été livrés avant le bon, et **les onze verdicts
+passaient à chaque fois**. Un banc mesure des durées, des causes de mort, des
+épaisseurs — pas le fait qu'un apex allongé se lise comme un phallus. La seule
+chose qui l'a attrapé est un œil humain devant une capture.
+
+Corollaire pratique : les captures du banc visuel ne servent pas seulement à
+vérifier que « ça tourne ». **Elles servent à être regardées.**
+
+### 19. Changer le tempo invalide les seuils, pas l'équilibrage
+
+L'horloge a été divisée par 0,48. Comme on ralentit le **temps** et non les
+coefficients, tous les rapports sont préservés et aucun réglage d'équilibrage
+n'a bougé. En revanche **deux verdicts mesuraient des quantités absolues** —
+longueur produite en quatorze secondes réelles, bornes des horizons en
+micromètres — et sont tombés mécaniquement.
+
+La leçon vaut d'être écrite : un verdict qui porte sur une **quantité absolue**
+est solidaire d'un réglage de rythme ; un verdict qui porte sur un **rapport**
+ne l'est pas. Préférer les seconds.
+
 ---
 
 ## Chantier ouvert : la paroi fait-elle encore peur ?
@@ -253,6 +275,18 @@ manche, mais il ne se paie plus guère d'une mort.
 À rejuger à la manette, pas au banc : si la jauge de paroi cesse de faire peur,
 il faudra rendre la rétroaction plus imparfaite — elle retire aujourd'hui 82 %
 de la vitesse demandée, et c'est ce chiffre qui décide.
+
+---
+
+## Chantier ouvert : la plasmolyse mange la table des causes
+
+Environ **15 manches sur 24 pour toutes les politiques**. Le dessèchement
+progressif et les poches de sel forment désormais la pression principale, et les
+autres morts sont reléguées au rang d'anecdotes — ce qui est exactement le
+défaut qu'on avait corrigé pour la carence.
+
+Deux pistes : adoucir la dérive d'aw (−0,00035/s, plafonnée à −0,11), ou rendre
+l'osmotolérance plus accessible dans le catalogue. À trancher à la manette.
 
 ---
 

@@ -376,12 +376,15 @@ verdict(fusion >= 4, 'un thalle dense se touche lui-meme',
 /* 9. La manche atteint un second substrat : sinon trois quarts du contenu ne
       sont jamais vus, et le catalogue induit ne sert a rien. */
 const tous = Object.values(R).flat();
-const h2 = tous.filter((r) => r.avance > 600).length;
-const h3 = tous.filter((r) => r.avance > 1700).length;
+/* Seuils cales sur les BORNES REELLES des horizons, qui ont ete raccourcies de
+   30 % avec l'arrivee du TEMPO : 420, 1 180, 2 080. Ils etaient restes a 600 et
+   1 700, donc le verdict mesurait des frontieres qui n'existaient plus. */
+const h2 = tous.filter((r) => r.avance > 420).length;
+const h3 = tous.filter((r) => r.avance > 1180).length;
 verdict(h2 >= tous.length * 0.25 && h3 >= 2,
   'les substrats suivants sont atteignables',
-  `${h2}/${tous.length} manches passent le 1er horizon (600 um), `
-  + `${h3} atteignent le 3e (1700 um)`);
+  `${h2}/${tous.length} manches passent le 1er horizon (420 um), `
+  + `${h3} atteignent le 3e (1180 um)`);
 
 /* 10. Cout de la logique : le rendu doit avoir de la place. */
 const t0 = performance.now();

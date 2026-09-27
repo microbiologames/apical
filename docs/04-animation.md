@@ -103,7 +103,54 @@ bloquant. Plans 1 à 3 = flous **et traversables**.
 > plan. Mesure : 14 morts sur 20 par écrasement, et aucune n'était
 > compréhensible à l'écran.
 
-## 3 bis. La calotte apicale : une demi-ellipse, pas un dôme
+## 3 bis. La calotte apicale : un tube fermé, pas un ovoïde
+
+**Trois profils avant le bon**, et l'historique dit exactement ce qui ne va pas
+dans les deux premiers :
+
+1. **dôme court et très bombé** (L = 1,32 R) — lu comme un *bourgeon posé sur un
+   tube* ;
+2. **demi-ellipse allongée** (L = 1,55 R) — en cherchant la fidélité au profil
+   « hyphoïde » des Ascomycètes, j'ai allongé la calotte. Résultat : **une
+   silhouette phallique**. Une calotte plus longue que large donne cette lecture,
+   quoi qu'elle représente, et aucune justification physiologique ne la rattrape ;
+3. **superellipse d'exposant 2,8 sur L = 0,82 R** — une calotte plus **courte**
+   que le rayon. Les flancs sont encore à 95 % du rayon à mi-hauteur et ne
+   s'infléchissent vraiment qu'après 80 % : c'est un **tube fermé**, pas un œuf.
+
+| d (µm) | 0 | 1,4 | 2,9 | 4,3 | 5,0 | 5,7 |
+|---|---|---|---|---|---|---|
+| rayon | 7,00 | 6,95 | 6,62 | 5,67 | 4,62 | 0 |
+
+Et c'est défendable : les **Mucorales**, dont on a pris le diamètre de 14 µm,
+ont des apex nettement plus obtus que le hyphoïde classique.
+
+## 3 ter. Le tempo, et le mouvement de lampe à lave
+
+Trois réglages, demandés ensemble — *« il faut que ce soit beaucoup plus lent »*,
+*« des vésicules qui arrivent un peu comme dans une lampe à lave »* :
+
+- **l'horloge** est divisée par 0,48 en tête de la simulation. On ralentit le
+  temps, jamais les coefficients : tous les rapports sont préservés et
+  l'équilibrage mesuré reste valide tel quel ;
+- **le flux cytoplasmique** passe de 16 à 5,5 µm/s. Une vésicule met une
+  dizaine de secondes à remonter le champ : on a le temps de la voir venir, de
+  voir ce qu'elle porte, et de la voir fusionner ;
+- **le freinage d'approche** : une vésicule ne fonce pas sur la membrane, elle
+  ralentit en entrant dans la calotte (facteur 0,18 dans les douze derniers
+  micromètres) et s'y attarde. C'est ce freinage qui fait la lampe à lave autant
+  que la lenteur ;
+- **la déformation** : une vésicule est une poche de membrane, pas une bille.
+  Elle s'allonge et se tasse en dérivant, 22 % d'amplitude.
+
+Et surtout : **les vésicules attendent la décharge du pulse.** Elles
+s'accumulent au Spitzenkörper pendant la phase lente et sont exocytées pendant
+la phase rapide — le mécanisme mesuré, et ce qui donne à la croissance ses
+paliers. On voit le bouchon se former au bout puis partir d'un coup, au lieu
+d'un égouttement continu. Le pulse lui-même est passé à 0,55 Hz et son amplitude
+de ±38 % à ±72 % : l'apex **surgit puis attend**.
+
+## 3 quater. (ancien) La calotte apicale : une demi-ellipse, pas un dôme
 
 Le premier profil donnait un bout court et très bombé, qui se lisait comme un
 **bourgeon posé sur un tube**. Deux causes cumulées : la calotte était trop
