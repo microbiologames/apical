@@ -95,7 +95,7 @@ function terminal(g) {
  */
 function gradient(g) {
   const a = g.pilote;
-  const base = a.spk.ang;
+  const base = a.cap;
   let meilleur = 0, meilleureNote = -1e9;
   for (let i = -2; i <= 2; i++) {
     const cap = base + i * 0.45;
@@ -120,7 +120,8 @@ function gradient(g) {
   let d = meilleur - base;
   while (d > Math.PI) d -= Math.PI * 2;
   while (d < -Math.PI) d += Math.PI * 2;
-  return Math.max(-1, Math.min(1, d * 3.2));
+  /* Signe negatif : la barre est en repere ECRAN, positif = droite. */
+  return Math.max(-1, Math.min(1, -d * 3.2));
 }
 
 /* --- moteur de simulation ---------------------------------------------- */
@@ -239,13 +240,18 @@ const avPassif = stats(R.passif, 'avance').med, avJoueur = stats(R.joueur, 'avan
    longtemps. Ce qui ne doit pas etre legitime, c est qu elle RAPPORTE autant.
    La premiere version exigeait que le passif meure plus vite, ce qui aurait
    demande de punir la prudence — alors que le jeu doit punir la STERILITE. */
-verdict(spPassif < spJoueur * 0.7 && avPassif < avJoueur * 0.8,
+/* LA CLAUSE DE PROFONDEUR A ETE RETIREE, et c'est une correction de raisonnement
+   plutot que de reglage. Depuis que la politique de reference SPORULE, elle
+   s'arrete volontairement a 129 s alors que la politique passive derive encore a
+   312 s : la passive finit donc PLUS PROFOND, tout en rapportant moins de la
+   moitie des spores. Exiger les deux revenait a reprocher a la bonne politique
+   d'avoir encaisse au bon moment. Le score du jeu, ce sont les spores. */
+verdict(spPassif < spJoueur * 0.6,
   'ne rien faire rapporte nettement moins',
-  `passif ${spPassif} spores / ${avPassif} um de profondeur, `
-  + `joueur ${spJoueur} spores / ${avJoueur} um `
-  + `(il faut moins de 70 % des spores ET 80 % de la profondeur). `
-  + `Durees ${tPassif} s contre ${tJoueur} s : survivre plus longtemps en `
-  + `rapportant moins est le resultat voulu.`);
+  `passif ${spPassif} spores en ${tPassif} s, joueur ${spJoueur} spores en `
+  + `${tJoueur} s (il faut moins de 60 % des spores). La passive va plus loin `
+  + `(${avPassif} um contre ${avJoueur}) parce qu'elle ne s'arrete jamais : `
+  + `c'est le resultat voulu, pas un defaut.`);
 
 /* 3a. La vitesse AMINCIT VISIBLEMENT la paroi, meme sans tuer. C'est
        l'arbitrage central, et il doit se SENTIR avant de se payer : aux stats de

@@ -18,13 +18,13 @@ Quatre mots, quatre contraintes techniques. Chacune a dicté une décision.
 
 ## 0. Le cadrage : la caméra est serrée, et la visibilité se paie
 
-À l'arrêt le champ montre **100 µm de large**, à pleine vitesse 138 µm — mais la
+À l'arrêt le champ montre **56 µm de large**, à pleine vitesse 73 µm — mais la
 surface parcourue par seconde double. On voit donc **moins en allant vite**,
 et c'est le contraire d'une caméra de course : la visibilité est une ressource
 que la vitesse consomme.
 
-Le tube fait 14 µm de diamètre, soit **34 px de large** dans un champ de 256 :
-13 % de la largeur. C'est ce resserrement qui fait exister l'animation — à
+Le tube fait 14 µm de diamètre, soit **64 px de large** dans un champ de 256 :
+le quart de la largeur, et l'on voit arriver chaque vésicule. C'est ce resserrement qui fait exister l'animation — à
 l'échelle précédente il ne restait pas assez de pixels pour montrer à la fois
 deux parois, un cytoplasme et un organite.
 
@@ -35,6 +35,18 @@ Deux corollaires :
   était impossible à anticiper dans une fenêtre de 110 µm ;
 - **voir plus loin devient une amélioration** (le récepteur GPR-4 recule la
   caméra), ce qui est la traduction exacte du chimiotropisme.
+
+### L'épaisseur de paroi ne suit pas le zoom
+
+Toutes les longueurs sont multipliées par le zoom — sauf celle-là. À 4,6 px/µm
+une paroi mise à l'échelle faisait huit pixels et le tube se lisait comme une
+saucisse floue bordée de bleu.
+
+Le fait physique tranche dans le même sens : une paroi d'hyphe fait **0,1 à
+0,3 µm**, soit *un* pixel même à ce grossissement. À l'échelle elle
+disparaîtrait ; à l'échelle du zoom elle devient un bourrelet. On la garde donc
+à une largeur d'**écran** quasi constante (1 à 3,6 px) — assez pour rester un
+trait, assez variable pour continuer à porter la jauge de sucre.
 
 ## 1. « Paroi rigide » → on rastérise par sections, pas en traits épais
 
@@ -163,14 +175,37 @@ préservé — le flux dépasse toujours l'apex.
 
 ---
 
+## Les vésicules, et ce que chacune fait en fusionnant
+
+C'est le cœur du champ depuis que la caméra est serrée. Quatre rôles, quatre
+formes, et chaque forme est celle de l'organite réel : le **chitosome** est
+polyédrique donc carré, la **macrovésicule** est la plus grosse et ronde, la
+**lipidique** est une bicouche donc un anneau, l'**enzyme** est allongée.
+
+Trois règles qui ont chacune corrigé un défaut vu sur capture :
+
+- **une vésicule est réfringente**, donc plus claire que le cytoplasme. Remplie
+  de la teinte du cytoplasme elle était littéralement invisible — le centre du
+  tube est dessiné avec cette teinte-là ;
+- **une vésicule n'est jamais floutée**, contrairement aux autres organites. On
+  doit pouvoir suivre chacune, et un contour d'un pixel flouté disparaît ;
+- **chaque fusion a son geste** : un arc dans la paroi pour la chitine, un jet
+  vers l'avant pour la macrovésicule, un anneau qui s'étale pour la membrane, un
+  point qui **sort** du tube pour l'enzyme.
+
 ## Le Spitzenkörper à l'écran
 
-Il porte trois informations à lui seul, et c'est pour ça qu'il est dessiné en
-détail :
+Il est dessiné en **croissant diffus**, jamais en corps net. Deux raisons :
+rendu en disque il se donnait pour une poignée de commande — or il n'en est plus
+une — et dans un microscope on ne voit jamais un contour, seulement une zone plus
+dense. Réparti en nuée ronde il faisait une tache grise au pied de la calotte ;
+en croissant appliqué contre la face interne de l'apex, il redevient ce qu'il est.
 
-1. **l'intention de virage.** Il se décale du côté où le joueur barre, **avant**
-   que l'apex ne tourne. Le retard de 70 ms du pilotage est donc *affiché*, ce
-   qui le rend maîtrisable au lieu de flou ;
+Il porte trois informations à lui seul :
+
+1. **l'intention de virage.** Il se décale du côté intérieur du virage, et c'est
+   *calculé* à partir du taux de virage : voir où penche le croissant, c'est
+   voir où l'on va avant que le tube ne l'ait montré ;
 2. **le flux vésiculaire.** Sa brillance suit `jmaxEff`. Un joueur à court de
    sucre voit son Spitzenkörper **pâlir avant que la paroi ne s'amincisse** : la
    panne s'annonce, elle ne surprend pas ;

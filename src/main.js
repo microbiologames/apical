@@ -153,13 +153,15 @@ function image(ms) {
   /* --- camera ---------------------------------------------------------
      Trois comportements, et chacun repond a une contrainte de conception.
 
-     1. ZOOM VARIABLE : on voit PLUS QUAND ON VA LENTEMENT. C'est le contraire
-        d'une camera de course, et c'est voulu — la visibilite devient une
-        ressource que la vitesse consomme. Ralentir n'est donc pas seulement
-        economique, c'est ce qui permet de LIRE le champ avant de s'engager.
-        De 2,55 px/um a l'arret (le champ montre 100 um de large) a 1,85 a
-        pleine vitesse (138 um) : contre-intuitif dit comme ca, mais a l'ecran
-        c'est la SURFACE PARCOURUE PAR SECONDE qui decide, et elle double.
+     1. ZOOM TRES SERRE, ET VARIABLE. De 4,6 px/um a l'arret — le champ ne
+        montre plus que 56 um de large, soit quatre diametres de tube — a 3,5 a
+        pleine vitesse (73 um). L'hyphe occupe ainsi le quart de la largeur du
+        champ, et l'on voit ARRIVER CHAQUE VESICULE.
+        Consequence assumee : on ne navigue plus a vue. C'est la perception
+        chimiotropique (bandeau du HUD) qui dit ce qu'il y a devant, et c'est
+        exactement ce qu'une hyphe fait — elle remonte un gradient qu'elle sent
+        bien au-dela de ce qu'un microscope montrerait.
+        Le zoom s'ouvre quand on ralentit : ralentir, c'est voir.
      2. VISEE DEVANT : la camera vise un point situe devant l'apex, dans la
         direction ou le Spitzenkorper pointe, et d'autant plus loin qu'on va
         vite. Sans elle, un rayon de braquage de 60 um etait impossible a
@@ -167,13 +169,25 @@ function image(ms) {
      3. `y` RESTE MONOTONE : on ne revient jamais en arriere. */
   const a = g.pilote;
   const vNorm = clamp(a.v / 26, 0, 1);
-  const zCible = (2.55 - 0.70 * vNorm) / (1 + (g.stats.vue || 0) / 120);
+  const zCible = (4.6 - 1.1 * vNorm) / (1 + (g.stats.vue || 0) / 120);
   cam.z = lerp(cam.z, zCible, 1 - Math.exp(-dt / 0.7));
-  const avant = 8 + 30 * vNorm;
-  const tx = a.x + Math.cos(a.spk.ang) * avant;
-  const ty = a.y + Math.sin(a.spk.ang) * avant;
+  const avant = 5 + 16 * vNorm;
+  const tx = a.x + Math.cos(a.cap) * avant;
+  const ty = a.y + Math.sin(a.cap) * avant;
   cam.x = lerp(cam.x, tx, 1 - Math.exp(-dt / 0.28));
   cam.y = Math.max(cam.y, lerp(cam.y, ty, 1 - Math.exp(-dt / 0.22)));
+  /* GARDE-FOU DE CADRAGE, ajoute apres capture : l'apex sortait par le bas.
+     La camera n'avance jamais a reculons en `y`, ce qui est une regle du jeu ;
+     mais quand l'apex vire pres de sa butee de cap, il n'avance presque plus en
+     `y` alors que la camera, elle, a deja avance — et l'apex derivait vers le
+     bord. On borne donc la camera pour que l'apex reste entre 22 % et 78 % de
+     la hauteur et entre 16 % et 84 % de la largeur. La regle « on ne revient
+     pas en arriere » est preservee : c'est l'apex qui avance toujours, la
+     camera ne fait que le suivre sans le perdre. */
+  const bandeY = [0.22, 0.78].map((u) => a.y + (u * scr.h - cam.cy) / cam.z);
+  cam.y = clamp(cam.y, Math.min(bandeY[1], bandeY[0]), Math.max(bandeY[1], bandeY[0]));
+  const bandeX = [0.16, 0.84].map((u) => a.x + (u * scr.w - cam.cx) / cam.z);
+  cam.x = clamp(cam.x, Math.min(bandeX[0], bandeX[1]), Math.max(bandeX[0], bandeX[1]));
   /* Secousse : elle ne sert qu'aux evenements de paroi (lyse, contact,
      ramification). Jamais au decor, sinon on ne sait plus ce qui l'a declenchee. */
   const sec = g.secousse;
@@ -201,7 +215,8 @@ function image(ms) {
     for (let i = b.pts.length - 1; i > 0 && lon < 470; i--) {
       lon += Math.hypot(b.pts[i].x - b.pts[i - 1].x, b.pts[i].y - b.pts[i - 1].y);
     }
-    cyto.maj(dt, b.id, lon, ap ? ap.v : 0, !!ap);
+    cyto.maj(dt, b.id, lon, ap ? ap.v : 0, !!ap,
+      ap === g.pilote ? g.mixVesicules() : undefined);
   }
 
   /* --- rendu ---------------------------------------------------------- */

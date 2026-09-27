@@ -46,6 +46,57 @@ function jauge(scr, x, y, w, v, col, colDim, seuil = -1) {
   }
 }
 
+/**
+ * PERCEPTION CHIMIOTROPIQUE.
+ *
+ * Le champ ne montre plus que 56 a 73 um de large : on ne navigue donc plus a
+ * vue, et c'est voulu. Mais une hyphe ne navigue pas a vue non plus — elle
+ * remonte un gradient qu'elle SENT bien au-dela de ce qu'un objectif montrerait,
+ * par des recepteurs couples aux proteines G. Le bandeau rend ce sens.
+ *
+ * Onze caps sondes de -78 a +78 degres (l'amplitude exacte du cap), a une
+ * distance que les genes de tropisme augmentent. Chaque cap porte une barre :
+ * vers le HAUT ce qu'il y a a gagner (sucre, eau), vers le BAS ce qu'il y a a
+ * craindre (sel, antifongique, zone seche). Le cap courant est marque.
+ *
+ * Ce n'est pas une carte : on ne voit ni la forme ni la distance, seulement
+ * « ca sent bon par la ». Le choix de trajectoire reste un pari, ce qui est le
+ * sujet du jeu.
+ */
+function perception(scr, g, y0) {
+  const a = g.pilote;
+  const st = g.stats;
+  const W = scr.w;
+  const N = 11;
+  const AMPL = 1.3614;                 // l'amplitude de cap, a l'identique
+  const portee = 62 + (st.portee || 0) * 2.2;
+  bande(scr, 0, y0, W, 16, 0.45);
+  for (let i = 0; i < N; i++) {
+    const u = (i / (N - 1)) * 2 - 1;   // -1 .. 1
+    const cap = a.cap - u * AMPL;      // repere ecran : u positif = droite
+    let bon = 0, mal = 0;
+    for (const d of [0.45, 0.8, 1.15]) {
+      const e = g.champ.echantillon(a.x + Math.cos(cap) * portee * d,
+        a.y + Math.sin(cap) * portee * d);
+      bon += e.sucre;
+      mal += (e.sel || 0) + (e.af ? e.af.v : 0)
+        + Math.max(0, (st.awMin + 0.02 - e.aw) * 6);
+    }
+    bon /= 3; mal /= 3;
+    const x = 6 + Math.round(u * 0.5 + 0.5, 0) * 0 + Math.round((u * 0.5 + 0.5) * (W - 12));
+    const h = Math.min(7, Math.round(bon * 11));
+    for (let j = 0; j < h; j++) scr.direct(x, y0 + 8 - j, UI.sucre);
+    const hm = Math.min(6, Math.round(mal * 9));
+    for (let j = 0; j < hm; j++) scr.direct(x, y0 + 9 + j, UI.alerte);
+    if (h === 0 && hm === 0) scr.direct(x, y0 + 8, UI.textDim);
+  }
+  /* Le cap courant : un repere au milieu, puisque le bandeau est en repere
+     RELATIF a l'apex. Sans lui on ne sait pas ou l'on pointe. */
+  const xc = 6 + Math.round(0.5 * (W - 12));
+  scr.direct(xc, y0 + 1, UI.text);
+  scr.direct(xc, y0 + 14, UI.text);
+}
+
 export function hud(scr, g, cmd) {
   const e = g.etatLisible();
   const W = scr.w, H = scr.h;
@@ -63,8 +114,10 @@ export function hud(scr, g, cmd) {
     e.temp > 34 || e.temp < 8 ? UI.alerte : UI.textDim);
   drawTextRight(scr, String(e.avance), W - 2, 2, UI.textDim);
 
+  perception(scr, g, 10);
+
   /* --- charge d'antifongique : a droite, verticale -------------------- */
-  let cy = 14;
+  let cy = 30;
   for (const [k, v] of Object.entries(e.charge)) {
     if (v < 0.02) continue;
     const col = k === 'azole' ? UI.gene : k === 'echino' ? UI.alerte
@@ -159,6 +212,12 @@ export function hud(scr, g, cmd) {
   if (e.germ < 1) {
     drawTextCentered(scr, e.germ <= 0 ? 'IMBIBITION' : 'TUBE GERMINATIF',
       W >> 1, y0 - 12, UI.textHot);
+  } else if (e.reserve > 0) {
+    /* La reserve de spore est une horloge d'ouverture : il faut avoir trouve sa
+       premiere plume avant qu'elle ne s'epuise. Elle merite donc d'etre vue,
+       et seulement tant qu'elle existe. */
+    drawTextCentered(scr, 'RESERVE DE SPORE', W >> 1, y0 - 12, UI.textDim);
+    jauge(scr, (W >> 1) - 20, y0 - 5, 40, clamp(e.reserve / 0.9, 0, 1), UI.spore, UI.sucreDim);
   }
 
   /* --- messages ------------------------------------------------------ */

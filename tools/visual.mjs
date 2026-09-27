@@ -73,7 +73,11 @@ async function session(nom, viewport) {
      le cran de depart est LENT, donc sans cela une session de quatorze secondes
      ne produit presque pas de thalle et le banc conclut a tort que la
      simulation ne tourne pas. Cela verifie aussi la commande crantee. */
-  await page.keyboard.press('KeyW');
+  /* UN cran, pas deux : a deux crans le robot part en POUSSEE des la sortie de
+     spore, et sur un substrat pauvre il se met en deficit avant d'avoir
+     construit de quoi s'autodigerer. Il mourait alors vers la quatorzieme
+     seconde et tous les verdicts de rendu tombaient avec lui, alors que le
+     rendu, lui, allait bien. Un banc de rendu doit jouer raisonnablement. */
   await page.keyboard.press('KeyW');
   const t2 = await page.evaluate(STATS);
   await page.screenshot({ path: `captures/${nom}-02s.png` });
@@ -110,8 +114,12 @@ async function session(nom, viewport) {
     const c = document.getElementById('jeu');
     const r = c.getBoundingClientRect();
     const ex = r.width / c.width, ey = r.height / c.height;
-    return { x: r.x + r.width / 2 - 34 * ex, y: r.y + r.height * 0.62 - 30 * ey,
-             width: 68 * ex, height: 60 * ey };
+    /* Cadre elargi avec le zoom serre : a 4,6 px/um, 68 px de canvas ne
+       montraient que quinze micrometres et le Spitzenkorper tombait hors cadre.
+       112 x 104 montre l'apex ENTIER, sa nuee et le debut du tube — le seul
+       cadrage ou l'on puisse juger le trafic vesiculaire. */
+    return { x: r.x + r.width / 2 - 56 * ex, y: r.y + r.height * 0.62 - 56 * ey,
+             width: 112 * ex, height: 104 * ey };
   })()`);
   await page.screenshot({ path: `captures/${nom}-macro.png`, clip: cadre });
 

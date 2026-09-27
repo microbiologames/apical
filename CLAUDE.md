@@ -114,6 +114,25 @@ Ce que le banc a trouvé, et qu'aucune relecture n'aurait trouvé :
    de disette** (un apex à court de matériau se ferme au lieu de foncer vers sa
    rupture) et l'**autophagie** (un mycélium affamé se mange). Avec eux, la
    famine devient un compte à rebours visible et six causes de mort coexistent.
+9bis. **LA BARRE ETAIT INVERSEE.** `cap += barre × ω` avec un écran en y-haut :
+   partant de π/2, ajouter à l'angle tourne vers la **gauche**. La touche de
+   droite faisait virer à gauche. Signalé à l'essai, confirmé au calcul
+   (`cos(π/2 + 0,5) = −0,48`). **`barre` est désormais en repère écran**,
+   positif = droite, et tout ce qui la produit doit respecter ce repère
+   (`autoBarre`, l'éventail du banc).
+9ter. **L'autophagie mangeait un thalle qui n'existait pas encore.** Pendant la
+   germination rien n'est absorbé ni construit ; le thalle faisait quarante
+   micromètres et se digérait à la sixième seconde. Une conidie **alimente son
+   tube germinatif** sur ses propres réserves : c'est la `reserveSpore`, et elle
+   tient vingt secondes — le temps de trouver sa première plume.
+9quater. **L'épaisseur de paroi était mise à l'échelle du zoom.** À 4,6 px/µm
+   elle faisait huit pixels et le tube devenait une saucisse floue. Une paroi
+   d'hyphe fait 0,1 à 0,3 µm : elle doit rester un **trait d'écran** (1 à 3,6 px)
+   quel que soit le grossissement, sinon elle cesse d'être rigide.
+9quinquies. **Une vésicule remplie de la couleur du cytoplasme est invisible** —
+   le centre du tube est dessiné avec cette teinte-là. Une vésicule est
+   **réfringente** : plus claire que son fond, toujours nette, jamais floutée.
+
 9. **La sporulation exigeait du sucre**, donc était impossible au moment exact
    où il faut la prendre. C'est aussi un contresens biologique : c'est **la
    limitation en nutriments qui induit la conidiation**. Seuil ramené à 0,04.
@@ -173,6 +192,22 @@ en remettant le défaut.
   d'affichage. Ne pas remettre de fond noir.
 - **Pas de concurrents.** Décision de l'auteur : ils se lisaient comme des mobs
   à trajectoire rectiligne. Le milieu ne contient que des éléments de milieu.
+- **`barre` est en REPÈRE ÉCRAN** : positif = droite. Voir la mesure 9bis.
+- **On pilote `cap` par son `omega`, pas le Spitzenkörper.** Le SPK est
+  **calculé** à partir du taux de virage et dessiné en croissant diffus : il
+  informe, il ne commande pas. Deux commandes en cascade ne se sentaient pas, et
+  un SPK net se donnait pour une poignée qu'il n'était pas.
+- **L'épaisseur de paroi ne suit PAS le zoom** (`epaisseurEcran`). Voir 9quater.
+- **Les vésicules sont toujours nettes et plus claires que le cytoplasme.** Elles
+  sont le sujet du champ : on doit pouvoir suivre chacune du fond du tube
+  jusqu'à sa fusion. Voir 9quinquies.
+- **La composition du trafic vésiculaire vient du MODÈLE** (`mixVesicules`), pas
+  du rendu : le flux de chitosomes suit l'épaisseur déposée, celui des
+  macrovésicules suit la vitesse. Pousser fait donc littéralement disparaître les
+  chitosomes du tube.
+- **La caméra garde l'apex dans le cadre** (22–78 % en hauteur, 16–84 % en
+  largeur). Elle n'avance toujours pas à reculons, mais au zoom serré un apex qui
+  vire près de sa butée de cap dérivait hors de l'écran.
 
 ---
 

@@ -22,6 +22,27 @@
                   Ce sont les seuls organites qui ne coulent pas : ils sont
                   ancres au pore, prets a le boucher.
 
+   ET CHAQUE VESICULE PORTE UN ROLE. Ce n'est pas une decoration : le trafic
+   vesiculaire apical est reellement heterogene, et ce que transporte une
+   vesicule decide de ce qu'elle fabrique en fusionnant.
+
+     `paroi`      CHITOSOME. Microvesicule polyedrique de 30 a 40 nm, chargee de
+                  chitine synthase. Elle epaissit la paroi. C'est la vesicule
+                  qu'on n'a plus quand on va trop vite.
+     `extension`  MACROVESICULE apicale de 70 a 100 nm, la plus grosse. Elle
+                  apporte le materiau de SURFACE : c'est elle qui allonge.
+     `membrane`   vesicule lipidique. La membrane plasmique doit s'etendre en
+                  meme temps que la paroi, sinon rien n'avance.
+     `secretion`  enzyme exportee — amylase, protease, pectinase. Elle ne
+                  construit rien : elle part DEHORS digerer le substrat.
+
+   La composition du trafic est calculee a partir du modele (voir
+   Game.mixVesicules) : le flux de paroi suit l'epaisseur deposee, le flux
+   d'extension suit la vitesse. Donc POUSSER FAIT LITTERALEMENT DISPARAITRE LES
+   CHITOSOMES DU TUBE, et l'arbitrage vitesse / paroi se regarde au lieu de se
+   lire sur une jauge. C'est l'aboutissement de la regle « le champ porte
+   l'information ».
+
    TROIS REGLES DE RENDU QUI VIENNENT DE LA :
      - un organite plus haut ou plus bas dans le tube est PLUS FLOU. Le tube a
        11 um de diametre et la profondeur de champ d'un objectif a immersion en
@@ -48,14 +69,24 @@ const FLUX_PAR_V = 0.8;
 
 /* Au-dela de cette distance derriere l'apex on ne peuple plus : c'est hors
    champ dans tous les cas de figure. */
-const PORTEE = 460;
+const PORTEE = 220;
+
+/* Composition par defaut, utilisee tant que le jeu n'en fournit pas. */
+const MIX_DEFAUT = { paroi: 1, extension: 1, membrane: 0.6, secretion: 0.3 };
 
 const TYPES = [
   /* poids, rayon min/max, part du flux, distance d'apparition mini */
-  { id: 'vesicule', poids: 30, r: [0.7, 1.15], flux: 1.25, sMin: 0, sMax: 150 },
-  { id: 'mito', poids: 22, r: [1.1, 1.9], flux: 1.0, sMin: 7, sMax: PORTEE },
-  { id: 'noyau', poids: 7, r: [1.9, 2.7], flux: 0.72, sMin: 16, sMax: PORTEE },
-  { id: 'lipide', poids: 10, r: [1.0, 1.8], flux: 0.9, sMin: 10, sMax: PORTEE },
+  /* VESICULES : plus grosses et plus nombreuses que le reste, parce que ce sont
+     elles qu'on doit pouvoir SUIVRE A L'OEIL, une par une, de leur apparition
+     jusqu'a leur fusion. A 1,15-1,75 um de rayon elles font 5 a 8 px au zoom de
+     jeu : assez pour qu'un contour et une forme se lisent.
+     Les autres organites ont ete espaces d'autant : au zoom serre, un noyau de
+     douze pixels qui passe toutes les demi-secondes mange le champ et on ne voit
+     plus le trafic vesiculaire, qui est le sujet. */
+  { id: 'vesicule', poids: 46, r: [1.15, 1.75], flux: 1.25, sMin: 0, sMax: 150 },
+  { id: 'mito', poids: 14, r: [1.1, 1.9], flux: 1.0, sMin: 26, sMax: PORTEE },
+  { id: 'noyau', poids: 5, r: [1.9, 2.7], flux: 0.72, sMin: 30, sMax: PORTEE },
+  { id: 'lipide', poids: 7, r: [1.0, 1.8], flux: 0.9, sMin: 24, sMax: PORTEE },
   /* Les vacuoles ne coulent presque pas : elles appartiennent au compartiment,
      pas au flux. C'est ce qui cree le gradient d'age. */
   { id: 'vacuole', poids: 14, r: [1.6, 2.6], flux: 0.12, sMin: 52, sMax: PORTEE },
@@ -95,8 +126,9 @@ export class Cytoplasme {
    * @param {number} v       vitesse d'extension de son apex (0 si morte)
    * @param {boolean} vive   la branche a-t-elle encore un apex
    */
-  maj(dt, id, lon, v, vive) {
+  maj(dt, id, lon, v, vive, mix = MIX_DEFAUT) {
     const l = this.liste(id);
+    this.mix = mix;
     const portee = Math.min(lon, PORTEE);
     const flux = FLUX_BASE + FLUX_PAR_V * v;
     /* Densite : un organite tous les 7 px de tube. Mesure a l'oeil sur capture
@@ -105,7 +137,10 @@ export class Cytoplasme {
        la paroi ne se lisait plus. Le tube fait 14 um de diametre, donc un
        organite tous les 7 px correspond a une densite lineaire d'environ un par
        demi-diametre, ce qui est ce qu'on voit sur une hyphe en croissance. */
-    const cible = Math.min(120, Math.ceil(portee / 7) + 4);
+    /* Un organite tous les 5 um : a z = 4,6 cela fait un toutes les 23 px le
+       long d'un tube large de 64. Recale avec le zoom serre — a 7 um le tube
+       paraissait vide, maintenant qu'on le voit de pres. */
+    const cible = Math.min(120, Math.ceil(portee / 6) + 4);
 
     for (let i = l.length - 1; i >= 0; i--) {
       const o = l[i];
@@ -127,8 +162,11 @@ export class Cytoplasme {
 
       if (o.s < 4.5) {
         if (o.type === 'vesicule') {
-          /* Exocytose : la vesicule fusionne et devient de la paroi. */
-          this.flashs.push({ off: o.off, t: 0.16 });
+          /* EXOCYTOSE. La vesicule fusionne, et ce qu'elle portait se voit :
+             un chitosome epaissit la paroi, une macrovesicule pousse le bout,
+             une lipidique etale la membrane, une enzyme part dehors. C'est le
+             seul endroit du jeu ou l'on voit le sucre devenir de la paroi. */
+          this.flashs.push({ off: o.off, t: 0.26, role: o.role });
           l.splice(i, 1);
           continue;
         }
@@ -149,7 +187,7 @@ export class Cytoplasme {
       const s = neuf ? portee - this.rng() * 24 : this.rng() * portee;
       const t = tirerType(this.rng, s);
       l.push({
-        type: t.id, s,
+        type: t.id, s, role: t.id === 'vesicule' ? this.tirerRole() : null,
         r0: lerp(t.r[0], t.r[1], this.rng()),
         r: lerp(t.r[0], t.r[1], this.rng()),
         off0: (this.rng() * 2 - 1) * 0.62,
@@ -164,6 +202,17 @@ export class Cytoplasme {
       if (this.flashs[i].t <= 0) this.flashs.splice(i, 1);
     }
     return l;
+  }
+
+  /** Tire un role selon la composition courante du trafic. */
+  tirerRole() {
+    const m = this.mix || MIX_DEFAUT;
+    const total = m.paroi + m.extension + m.membrane + m.secretion;
+    let r = this.rng() * (total || 1);
+    if ((r -= m.paroi) <= 0) return 'paroi';
+    if ((r -= m.extension) <= 0) return 'extension';
+    if ((r -= m.membrane) <= 0) return 'membrane';
+    return 'secretion';
   }
 
   oublier(id) { this.parBranche.delete(id); }

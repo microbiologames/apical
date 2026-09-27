@@ -65,6 +65,14 @@ const COTON = {
      comme une tache et non comme un cytoplasme granuleux. Un montage au bleu
      coton colore la PAROI ; le contenu y reste pale et seulement contraste. */
   vesicule: hexToRgba('#8b9cc9'),
+  /* UNE TEINTE PAR ROLE DE VESICULE. Le chitosome porte la couleur de la paroi
+     parce qu'il VA devenir de la paroi : voir un point bleu foncé arriver et se
+     fondre dans le bord, c'est voir la paroi se construire. Les trois autres
+     s'en ecartent juste assez pour se distinguer d'un coup d'oeil. */
+  vesParoi: hexToRgba('#2f4f9e'),
+  vesExtension: hexToRgba('#6f93d6'),
+  vesMembrane: hexToRgba('#b07a2a'),
+  vesSecretion: hexToRgba('#3f7f5a'),
   septum: hexToRgba('#0e1c44'),
   woronin: hexToRgba('#8a6a22'),
   noeud: hexToRgba('#1d7d6a'),
@@ -101,6 +109,10 @@ const CALCO = {
   spk: hexToRgba('#ffffff'),
   spkGlow: hexToRgba('#7fe3ff'),
   vesicule: hexToRgba('#cbf2ff'),
+  vesParoi: hexToRgba('#9fe8ff'),
+  vesExtension: hexToRgba('#ffffff'),
+  vesMembrane: hexToRgba('#ffd479'),
+  vesSecretion: hexToRgba('#9be8a8'),
   septum: hexToRgba('#dff6ff'),
   woronin: hexToRgba('#ffd479'),
   noeud: hexToRgba('#6affc8'),

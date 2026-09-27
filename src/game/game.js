@@ -175,7 +175,23 @@ export class Game {
     /* Turgor de depart a 0,52 : au-dessus du seuil de fluage (0,28) mais sans
        marge. La premiere seconde de jeu apprend donc la poussee, sans texte. */
     this.P = 0.52;
-    this.S = 0.42;
+    /* RESERVES DE LA SPORE. 0,75 et non 0,42 : une conidie n'est pas vide, elle
+       est bourree de lipides et de trehalose, et c'est ce stock qui paie la
+       germination — pendant laquelle rien n'est encore absorbe ni construit.
+       Sans cela, l'autophagie se declenchait AVANT que le thalle existe et la
+       manche mourait a la sixieme seconde, thalle de zero micrometre. */
+    this.S = 0.75;
+    /* RESERVE DE LA SPORE, distincte du stock courant.
+       Une conidie ne se contente pas de demarrer la germination : elle ALIMENTE
+       son tube germinatif pendant des dizaines de minutes, sur ses lipides et
+       son trehalose, bien avant que le milieu ne rapporte quoi que ce soit.
+       Le jeu en avait besoin autant que la biologie : sans elle, l'apex entrait
+       en deficit des la sortie de spore et l'autophagie mangeait un thalle de
+       quarante micrometres — mesure au banc visuel, longueur de 1 um a la
+       quatorzieme seconde. A 0,045 par seconde, la reserve tient environ vingt
+       secondes : le temps qu'il faut pour trouver sa premiere plume, et pas une
+       de plus. Quand elle s'epuise, l'ouverture est finie. */
+    this.reserveSpore = 0.9;
     this.charge = { azole: 0, echino: 0, polyene: 0, sorbate: 0 };
 
     const b = this.thalle.nouvelleBranche(-1, 0, 0);
@@ -226,6 +242,32 @@ export class Game {
   /** Rayon apparent de la spore de depart, en um. Elle gonfle puis reste. */
   rayonSpore() {
     return lerp(4.2, 6.8, clamp(this.t / (T_GERM * 0.5), 0, 1));
+  }
+
+  /**
+   * Composition du trafic vesiculaire apical.
+   *
+   * Elle N'EST PAS inventee pour le rendu : chaque poids suit un terme du
+   * modele, et c'est ce qui fait que regarder le tube renseigne vraiment.
+   *   paroi      suit l'EPAISSEUR deposee — donc s'effondre quand on pousse ;
+   *   extension  suit la VITESSE — donc domine quand on pousse ;
+   *   membrane   suit la vitesse aussi, la membrane s'etendant avec la surface ;
+   *   secretion  monte quand le substrat sous l'apex est pauvre ET qu'on a des
+   *              hydrolases : une moisissure secrete pour digerer ce qu'elle ne
+   *              peut pas absorber tel quel.
+   * Consequence directement visible : POUSSER FAIT DISPARAITRE LES CHITOSOMES.
+   */
+  mixVesicules() {
+    const a = this.pilote;
+    const st = this.stats;
+    const ech = this.champ.echantillon(a.x, a.y);
+    const hydro = Object.keys(st.hydrolases).length;
+    return {
+      paroi: 0.25 + a.e * 1.5,
+      extension: 0.15 + a.v * 0.055,
+      membrane: 0.10 + a.v * 0.030,
+      secretion: 0.10 + hydro * 0.45 + (ech.sucre < 0.12 ? 0.55 : 0),
+    };
   }
 
   /** Flux vesiculaire effectif : borne par le stock ET par les echinocandines. */
@@ -345,6 +387,15 @@ export class Game {
     /* --- bilan global ------------------------------------------------- */
     let poussee = 0;
     if (drivePilote > 0) poussee = COUT_POUSSEE * drivePilote;
+    /* La spore verse sa reserve tant qu'elle en a. */
+    let spore = 0;
+    if (this.reserveSpore > 0) {
+      spore = Math.min(this.reserveSpore / Math.max(dt, 1e-6), 0.045);
+      this.reserveSpore = Math.max(0, this.reserveSpore - spore * dt);
+      if (this.reserveSpore === 0 && !this._ditSpore) {
+        this._ditSpore = true; this.dire('RESERVE EPUISEE', 'mal');
+      }
+    }
     const sorb = 1 + this.charge.sorbate * 2.2;
     const entretien = (st.maintenance + this.thalle.longueur * ENTRETIEN_PAR_UM) * sorb;
     this.P = clamp(this.P + (absEau - coutVol - this.charge.polyene * FUITE_POLYENE) * dt,
@@ -352,7 +403,7 @@ export class Game {
     /* Plafond de stock ramene de 2,2 a 1,6 : a 2,2 le stock servait de tampon
        si large que la jauge ne bougeait plus et cessait de porter la derivee,
        qui est sa seule raison d'exister. */
-    const bilanS = (absSucre - coutParoi - entretien - poussee) * dt;
+    const bilanS = (absSucre + spore - coutParoi - entretien - poussee) * dt;
     if (this.S + bilanS < 0) {
       /* Le deficit est couvert par le thalle lui-meme. On retire la longueur
          recyclee du COMPTEUR, donc du score et de l'entretien — la geometrie
@@ -371,7 +422,10 @@ export class Game {
       this.thalle.longueur = Math.max(0, this.thalle.longueur - um);
       this.autophagie = Math.min(1, (this.autophagie || 0) + dt * 2.5);
       this.S = FOND;
-      if (this.thalle.longueur < 8) {
+      /* On ne peut s'autodigerer que si l'on s'est d'abord construit. Le garde
+         `longueurMax` evite qu'un thalle naissant — donc court par nature — soit
+         declare autodigere alors qu'il n'a encore rien mange de lui-meme. */
+      if (this.thalle.longueur < 8 && this.longueurMax > 60) {
         for (const a of this.apex) if (a.vivant) a.tuer('autophagie');
       }
     } else {
@@ -397,6 +451,7 @@ export class Game {
     }
 
     this.avance = Math.max(this.avance, ...this.apex.filter((a) => a.vivant).map((a) => a.y));
+    this.longueurMax = Math.max(this.longueurMax || 0, this.thalle.longueur);
     this.ramifierSpontane();
     this.moissonner();
     this.thalle.purger(Math.min(...this.apex.filter((a) => a.vivant).map((a) => a.y), this.avance));
@@ -430,16 +485,19 @@ export class Game {
     if (pr) {
       const m = pr.seg;
       const ang = Math.atan2(a.y - (m.y0 + m.y1) / 2, a.x - (m.x0 + m.x1) / 2);
-      let d = ang - a.spk.ang;
+      let d = ang - a.cap;
       while (d > Math.PI) d -= TAU;
       while (d < -Math.PI) d += TAU;
-      return clamp(d * 2.2, -1, 1);
+      /* Signe negatif : `barre` est exprimee EN REPERE ECRAN (positif = droite)
+         alors que `d` est un ecart d angle mathematique. Voir apex.js. */
+      return clamp(-d * 2.2, -1, 1);
     }
     /* Gradient de sucre, echantillonne a gauche et a droite du cap. */
     const r = 26;
-    const g = this.champ.echantillon(a.x + Math.cos(a.spk.ang + 0.7) * r, a.y + Math.sin(a.spk.ang + 0.7) * r).sucre;
-    const dr = this.champ.echantillon(a.x + Math.cos(a.spk.ang - 0.7) * r, a.y + Math.sin(a.spk.ang - 0.7) * r).sucre;
-    return clamp((g - dr) * 3.2, -1, 1);
+    const g = this.champ.echantillon(a.x + Math.cos(a.cap + 0.7) * r, a.y + Math.sin(a.cap + 0.7) * r).sucre;
+    const dr = this.champ.echantillon(a.x + Math.cos(a.cap - 0.7) * r, a.y + Math.sin(a.cap - 0.7) * r).sucre;
+    const flair = 3.2 * (1 + (this.stats.flair || 0));
+    return clamp(-(g - dr) * flair, -1, 1);
   }
 
   /* --- contacts --------------------------------------------------------- */
@@ -462,18 +520,19 @@ export class Game {
         this.S = Math.min(1.6, this.S + 0.03);
         continue;
       }
-      /* On repousse l apex ET son SPK : ne repousser que l apex le laissait
-         retomber dans l obstacle a l image suivante, et l integrite fondait en
-         une seconde sur un simple frottement. */
+      /* Le SPK etant desormais recalcule a chaque pas a partir du cap, il suffit
+         de repousser l apex : la nuee suivra d elle-meme. */
       const nx = dx / d, ny = dy / d, push = seuil - d;
       a.x += nx * push; a.y += ny * push;
-      a.spk.x += nx * push; a.spk.y += ny * push;
       /* Thigmotropisme : l apex GLISSE le long de la surface au lieu de s y
          ecraser. Le cap est projete sur la tangente. */
       const tang = Math.atan2(-nx, ny);
       const alt = Math.atan2(nx, -ny);
-      const cible = Math.abs(angEcart(a.spk.ang, tang)) < Math.abs(angEcart(a.spk.ang, alt)) ? tang : alt;
-      a.spk.ang = Apex.borner(lerp(a.spk.ang, cible, clamp(st.glisse + 0.25, 0, 0.9)));
+      const cible = Math.abs(angEcart(a.cap, tang)) < Math.abs(angEcart(a.cap, alt)) ? tang : alt;
+      a.cap = Apex.borner(lerp(a.cap, cible, clamp(st.glisse + 0.25, 0, 0.9)));
+      /* Le glissement casse l elan : sinon l apex repart aussitot dans
+         l obstacle qu il vient de longer. */
+      a.omega *= 0.4;
       /* 0,50 par seconde de contact continu, et en dt reel : la version au pas
          fixe de 0,016 tuait en 1,9 s quel que soit le nombre d'images, donc
          differemment sur un ecran a 120 Hz. */
@@ -533,8 +592,9 @@ export class Game {
       this.noeuds++;
       this.bonusFlux += 0.9;
       this.stats.jmax += 0.9;
-      a.spk.ang = Apex.borner(a.spk.ang + (this.rng() < 0.5 ? -1 : 1) * 0.9);
-      a.x += Math.cos(a.spk.ang) * 5; a.y += Math.sin(a.spk.ang) * 5;
+      a.cap = Apex.borner(a.cap + (this.rng() < 0.5 ? -1 : 1) * 0.9);
+      a.omega = 0;
+      a.x += Math.cos(a.cap) * 5; a.y += Math.sin(a.cap) * 5;
       this.dire('ANASTOMOSE +FLUX', 'bon');
       this.secousse = 0.4;
       return;
@@ -824,6 +884,7 @@ export class Game {
       entretien: Math.round((this.stats.maintenance + this.thalle.longueur * ENTRETIEN_PAR_UM) * 1000) / 1000,
       autophagie: this.autophagie || 0,
       regime: this.regime, regimeNom: REGIMES[this.regime].nom,
+      reserve: this.reserveSpore,
       germ: this.facteurGerm(), sel: ech.sel || 0,
       spores: this.recolte(1),
       etat: this.etat, cause: this.cause,

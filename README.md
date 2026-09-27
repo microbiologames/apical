@@ -45,6 +45,19 @@ plastique, donc irréversible. Votre trajectoire devient le mur contre lequel vo
 jouerez dans vingt secondes, et le moment où vous avez sur-poussé reste visible
 derrière vous jusqu'à la fin de la manche.
 
+**On voit l'apex de très près, et chaque vésicule y a un rôle.**
+
+Le champ ne montre que 56 µm de large : le tube occupe le quart de l'écran et
+l'on suit **chaque vésicule** du fond du tube jusqu'à sa fusion. Un chitosome
+polyédrique épaissit la paroi d'un arc, une macrovésicule pousse le bout, une
+lipidique étale la membrane en anneau, une enzyme **sort** digérer dehors. Et la
+composition du trafic vient du modèle : **pousser fait disparaître les
+chitosomes**, donc l'arbitrage vitesse / paroi se regarde au lieu de se lire.
+
+On ne navigue donc plus à vue, mais à l'odorat : un bandeau de **perception
+chimiotropique** sonde onze caps bien au-delà du champ visible. Ce n'est pas une
+carte — seulement « ça sent bon par là ».
+
 **On germe, on se ramifie tout seul, et on ne voit qu'un apex sur quatre.**
 
 La manche commence par une **spore qui s'imbibe et gonfle** ; un tube germinatif
@@ -75,7 +88,7 @@ difficulté n'est pas scriptée : c'est votre propre thalle.
 
 | | Clavier | Tactile |
 |---|---|---|
-| **Barrer** le Spitzenkörper | `A` / `D` / flèches | glissement horizontal, moitié gauche |
+| **Barrer** (le cap, avec inertie) | `A` / `D` / flèches | glissement horizontal, moitié gauche |
 | **Accélérer** d'un cran | `W` / `↑` | glissement vers le haut, moitié droite |
 | **Ralentir** d'un cran | `S` / `↓` | glissement vers le bas, moitié droite |
 | **Ramifier** | `Espace` | tap, moitié droite |

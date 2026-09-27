@@ -195,6 +195,52 @@ les mêmes graines.
   l'échantillon distingue quoi que ce soit. **Un verdict qui tranche sur quatre
   événements ne garde rien.** Il ne compare plus que les épaisseurs de paroi.
 
+### 14. La barre était inversée
+
+`cap += barre × ω`, avec un écran dont le `y` va vers le haut. Partant du cap
+« avant » (π/2), **ajouter** à l'angle tourne vers la gauche : la touche de
+droite faisait virer à gauche. Signalé à l'essai, confirmé au calcul en trois
+lignes — `cos(π/2 + 0,5) = −0,48`.
+
+Aucun banc ne pouvait l'attraper : les deux politiques automatiques calculaient
+leur barre dans la **même** convention fausse, donc elles pilotaient
+correctement. **Un banc ne teste que ce qu'il sait mesurer** ; l'orientation d'une
+commande se teste à la main.
+
+### 15. Trois défauts que seule la capture pouvait montrer
+
+Ils n'ont rien cassé au banc de logique, et ils rendaient le jeu illisible :
+
+- **l'épaisseur de paroi était mise à l'échelle du zoom.** À 4,6 px/µm elle
+  faisait huit pixels : le tube devenait une saucisse floue. Une paroi d'hyphe
+  fait 0,1 à 0,3 µm et doit rester un trait d'écran ;
+- **les vésicules étaient remplies de la couleur du cytoplasme**, qui est aussi
+  celle du centre du tube. Elles étaient invisibles ;
+- **la nuée du Spitzenkörper**, en points sombres répartis en rond, formait au
+  pied de la calotte un amas noir. Un SPK est dense en vésicules donc *clair*,
+  et c'est un croissant, pas une boule.
+
+### 16. L'autophagie mangeait un thalle qui n'existait pas encore
+
+Pendant la germination rien n'est absorbé ni construit. Le thalle faisait
+quarante micromètres et se digérait à la sixième seconde : **longueur de 1 µm à
+la quatorzième seconde**, mesuré au banc visuel.
+
+Une conidie alimente son tube germinatif sur ses propres réserves, et c'est ce
+qui manquait. La `reserveSpore` tient une vingtaine de secondes.
+
+### 17. Deux verdicts affirmaient encore des choses fausses
+
+- « la poussée atteint moins de profondeur » : faux depuis la rétroaction de
+  disette. Elle en atteint **plus** (1 700 µm contre 806) ; ce qu'elle vend,
+  c'est de la paroi et du temps pour lire le champ ;
+- « ne rien faire va moins loin » : faux depuis que la politique de référence
+  **sporule**. Elle s'arrête volontairement à 129 s quand la passive dérive
+  jusqu'à 312 s, donc la passive finit plus profond — tout en rapportant moins
+  de la moitié des spores. Exiger les deux revenait à reprocher à la bonne
+  politique d'avoir encaissé au bon moment. **Le score du jeu, ce sont les
+  spores.**
+
 ---
 
 ## Chantier ouvert : la paroi fait-elle encore peur ?

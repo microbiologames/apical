@@ -55,7 +55,7 @@ const PAS = 0.8;
 /** Longueur de tube rendue derriere chaque apex, en um. Ramenee de 470 a 300
     avec l'arrivee du zoom : a z = 2,4 le champ ne montre que 110 a 200 um, donc
     tout ce qui est au-dela de 300 um etait rasterise pour rien. */
-const PORTEE = 300;
+const PORTEE = 200;
 
 /**
  * Sections transversales d'une branche, du bout vers l'arriere.
@@ -116,6 +116,24 @@ function calotte(d, R) {
   if (d >= L) return 0;
   const u = d / L;
   return R * Math.sqrt(Math.max(0, 1 - u * u));
+}
+
+/**
+ * Epaisseur de paroi A L'ECRAN, en pixels.
+ *
+ * ELLE NE SUIT PAS LE ZOOM, et c'est une correction importante. La version
+ * precedente multipliait l'epaisseur par `z` comme toute autre longueur : a
+ * z = 4,6 la paroi faisait huit pixels et le tube se lisait comme une saucisse
+ * floue bordee de bleu au lieu d'un tube a paroi rigide.
+ * Le fait physique tranche dans le meme sens : une paroi d'hyphe fait 0,1 a
+ * 0,3 um, soit UN pixel meme a ce grossissement. Si on la dessinait a l'echelle
+ * elle disparaitrait ; si on la met a l'echelle du zoom elle devient un
+ * bourrelet. On la garde donc a une largeur d'ECRAN quasi constante — de 1,3 a
+ * 3,4 px selon l'epaisseur du modele — pour qu'elle reste lisible comme trait
+ * ET qu'elle continue de porter la jauge de sucre.
+ */
+function epaisseurEcran(e, z) {
+  return clamp(1.15 + e * 1.35 + z * 0.06, 1.0, 3.6);
 }
 
 /** Direction de la lampe, fixe en haut a gauche pour tout le champ. */
@@ -268,7 +286,7 @@ export function branche(scr, pal, b, apex, cam, t, P, cyto, opts = {}) {
     const sy = cam.cy - (s.y - cam.y) * z;
     /* Maturation : la paroi neuve est plus mince et plus pale. */
     const mat = clamp((t - s.t) / MATURATION, 0, 1);
-    const ep = clamp(s.e * (0.42 + 0.58 * mat) * 1.45 * z, 0.6, 3.4 * z);
+    const ep = epaisseurEcran(s.e * (0.42 + 0.58 * mat), z);
     const col = mix32(pal.paroiMince, pal.paroi, mat);
     /* Plasmolyse : plus marquee loin de l'apex, ou le cytoplasme se retire en
        premier. L'apex garde son turgor le plus longtemps, c'est lui qui pompe. */
@@ -294,7 +312,7 @@ export function branche(scr, pal, b, apex, cam, t, P, cyto, opts = {}) {
     const dx = p.x - q.x, dy = -(p.y - q.y);
     const l = Math.hypot(dx, dy) || 1;
     const nx = -dy / l, ny = dx / l;
-    for (let k = -Rpx + z; k <= Rpx - z; k += 0.7) {
+    for (let k = -Rpx + z * 0.6; k <= Rpx - z * 0.6; k += 0.6) {
       scr.plot(sx + nx * k, sy + ny * k, pal.septum);
     }
     /* Corps de Woronin : deux de chaque cote du pore, refringents. On les
@@ -322,8 +340,11 @@ export function branche(scr, pal, b, apex, cam, t, P, cyto, opts = {}) {
     const sx = cam.cx + (wx - cam.x) * z, sy = cam.cy - (wy - cam.y) * z;
     if (sx < -10 || sx > scr.w + 10 || sy < -10 || sy > scr.h + 10) continue;
     /* PROFONDEUR DE CHAMP : la position laterale devient un flou. Un organite
-       colle a la paroi est en haut ou en bas du tube, donc hors du plan. */
-    const flou = Math.abs(o.off) > 0.5 ? 1 : 0;
+       colle a la paroi est en haut ou en bas du tube, donc hors du plan.
+       EXCEPTION : les vesicules restent NETTES. Ce sont elles le sujet — on doit
+       pouvoir suivre chacune du fond du tube jusqu'a sa fusion — et floutees,
+       avec un contour d'un pixel, elles disparaissaient purement et simplement. */
+    const flou = o.type !== 'vesicule' && Math.abs(o.off) > 0.5 ? 1 : 0;
     scr.layer(flou);
     dessinerOrganite(scr, pal, o, sx, sy, pos, z);
   }
@@ -343,18 +364,66 @@ function dessinerOrganite(scr, pal, o, sx, sy, pos, z) {
   const r = o.r * z;
   const axx = -pos.ny, axy = -pos.nx;   // axe du tube, en ecran
   switch (o.type) {
-    case 'vesicule':
-      if (z > 1.6) scr.disc(sx, sy, r * 0.9, pal.vesicule);
-      else scr.plot(sx, sy, pal.vesicule);
+    case 'vesicule': {
+      /* CHAQUE ROLE A SA FORME, et chaque forme est celle de l'organite reel.
+         A ce niveau de zoom une vesicule fait quatre a huit pixels : la forme
+         se lit, et c'est elle qui porte le sens — la couleur seule ne suffirait
+         pas sur un cytoplasme pale. */
+      const ang = Math.atan2(axy, axx);
+      switch (o.role) {
+        case 'extension':
+          /* Macrovesicule apicale, 70-100 nm : la plus GROSSE, et c'est elle
+             qui allonge. On la dessine CONTOUREE et claire au centre — comme on
+             la voit en contraste de phase, et comme on doit pouvoir la suivre :
+             une vesicule pleine se confond avec le cytoplasme des qu'elle
+             croise un autre organite. */
+          /* REFRINGENTE, donc PLUS CLAIRE que le cytoplasme. Remplie de la
+             teinte du cytoplasme, elle etait litteralement invisible : le centre
+             du tube est dessine avec cette teinte-la. Une vesicule est un corps
+             dense a fort indice de refraction — en contraste de phase elle
+             brille, elle ne se fond pas. */
+          scr.disc(sx, sy, r * 1.35, pal.phase, pal.vesExtension);
+          scr.ring(sx, sy, r * 1.35, Math.max(1.4, z * 0.3), pal.vesExtension);
+          break;
+        case 'membrane':
+          /* Vesicule lipidique : une bicouche, donc un ANNEAU et non un disque. */
+          scr.disc(sx, sy, r * 1.1, pal.phase);
+          scr.ring(sx, sy, r * 1.1, Math.max(1.4, z * 0.3), pal.vesMembrane);
+          break;
+        case 'secretion':
+          /* Enzyme exportee : allongee, elle file vers la sortie. */
+          scr.cap(sx, sy, r * 2.4, r * 0.85, ang, pal.phase, pal.vesSecretion);
+          break;
+        default:
+          /* Chitosome, 30-40 nm : petit, dense, POLYEDRIQUE. On le rend carre —
+             a cette taille, quatre cotes droits suffisent a le distinguer d'un
+             disque, et c'est un vrai caractere ultrastructural. */
+          {
+            const q = r * 0.75;
+            for (let a = -q; a <= q; a += 0.7) {
+              for (let b = -q; b <= q; b += 0.7) {
+                const bord = Math.abs(a) > q - 0.9 || Math.abs(b) > q - 0.9;
+                scr.plot(sx + a, sy + b, bord ? pal.vesParoi : pal.phase);
+              }
+            }
+          }
+      }
       break;
+    }
     case 'mito':
       /* Une mitochondrie fongique est un FUSEAU aligne sur l'axe du tube : elle
          suit les microtubules. La dessiner ronde donnait des billes et le flux
          perdait sa direction. */
-      scr.cap(sx, sy, r * 3.4, r * 1.35, Math.atan2(axy, axx), pal.vesicule, pal.paroiRim);
+      /* Mitochondrie ECLAIRCIE : en bleu moyen a bord fonce, elle formait au
+         zoom serre un corps sombre qui se lisait comme une piece mecanique. */
+      scr.cap(sx, sy, r * 2.6, r * 0.85, Math.atan2(axy, axx), pal.cyto, pal.vesicule);
       break;
     case 'noyau':
-      scr.ell(sx, sy, r * 1.25, r, Math.atan2(axy, axx), pal.cyto, pal.paroi);
+      /* `ellipse` et non `ell` : le bord y commence a 0,80 du rayon au lieu de
+         0,62, donc le noyau a un CONTOUR et non un gros anneau plein. Au zoom
+         serre, la difference decide de tout — a 0,62 les noyaux devenaient des
+         masses sombres qui mangeaient le cytoplasme. */
+      scr.ellipse(sx, sy, r * 1.25, r, Math.atan2(axy, axx), pal.cyto, pal.paroi);
       break;
     case 'lipide':
       /* Une gouttelette lipidique est tres refringente : c'est l'objet le plus
@@ -396,7 +465,7 @@ function calotteEtSpk(scr, pal, apex, cam, t, P, cyto, opts) {
      l'apex avance par paliers. La version precedente gonflait aussi le rayon,
      ce qui faisait battre la silhouette et contribuait au bourgeon. */
   const pulse = apex.facteurPulse({ pulse: opts.pulse || 0 });
-  const ep0 = clamp(apex.e * 1.45 * z, 0.55, 3.2 * z);
+  const ep0 = epaisseurEcran(apex.e, z);
   const cytoFill = 0.66 + 0.34 * clamp(P / 0.45, 0, 1);
   const mat = clamp(apex.integrite, 0, 1);
 
@@ -429,12 +498,15 @@ function calotteEtSpk(scr, pal, apex, cam, t, P, cyto, opts) {
   /* Reste CONFINE dans le premier tiers de la calotte : etale plus loin, il
      dessinait un liseré clair tout autour du bout et c'est lui qui donnait au
      tout la silhouette d'un bulbe. */
-  const nVes = 9 + Math.round(pulse * 5);
+  /* NUEE APICALE reduite a six points. Elle ne doit pas concurrencer les
+     vesicules individuelles qui arrivent : au zoom serre, ce sont elles le
+     spectacle, et un bourrelet dense les noyait. */
+  const nVes = 5 + Math.round(pulse * 2);
   for (let i = 0; i < nVes; i++) {
-    const a = (i / nVes) * TAU + t * 1.4;
-    const rr = (1.2 + ((i * 7) % 5) * 0.45) * z * 0.55;
-    const d = (1.0 + ((i * 3) % 4) * 0.7) * z * 0.62;
-    scr.plot(ax + ux * d + nx * Math.sin(a) * rr, ay + uy * d + ny * Math.sin(a) * rr, pal.vesicule);
+    const a = (i / nVes) * TAU + t * 1.1;
+    const rr = (0.9 + ((i * 7) % 4) * 0.35) * z * 0.42;
+    const d = (0.8 + ((i * 3) % 3) * 0.6) * z * 0.5;
+    scr.plot(ax + ux * d + nx * Math.sin(a) * rr, ay + uy * d + ny * Math.sin(a) * rr, pal.vesParoi);
   }
 
   /* Le Spitzenkorper. Position : `spkDist` en arriere du bout, DECALEE du cote
@@ -444,8 +516,34 @@ function calotteEtSpk(scr, pal, apex, cam, t, P, cyto, opts) {
   const sx = cam.cx + (apex.spk.x - cam.x) * z;
   const sy = cam.cy - (apex.spk.y - cam.y) * z;
   const bril = 0.45 + 0.55 * clamp((pulse - 0.62) / 0.76, 0, 1);
-  scr.disc(sx, sy, (1.5 + bril * 0.9) * z * 0.62, mix32(pal.spkGlow, pal.spk, 0.5), pal.spk);
-  scr.plot(sx, sy, pal.spk);
+  /* LE SPITZENKORPER EST UNE NUEE, PAS UN CORPS. Il etait rendu comme un disque
+     net, ce qui en faisait visuellement une poignee de commande — or il n'en est
+     plus une, et il n'en a jamais ete une dans un microscope : c'est un
+     rassemblement de vesicules a contour flou, qu'on reconnait a sa DENSITE.
+     On le dessine donc en une vingtaine de points disperses, dont l'etalement
+     se resserre quand le flux monte. Il reste parfaitement lisible comme
+     information — ou penche la nuee, c'est ou l'on va — sans se donner pour un
+     objet qu'on manipule. */
+  /* CROISSANT et non amas. Reparti sur une nuee ronde et dense, le SPK se
+     lisait comme une tache grise posee au pied de la calotte — vu sur capture,
+     « un insecte ». Le vrai organite est un CROISSANT de vesicules applique
+     contre la face interne de l'apex : on biaise donc la distribution vers
+     l'avant, on allege le nombre, et il redevient ce qu'il est — une zone plus
+     dense, pas un corps. */
+  const nuee = 9 + Math.round(bril * 4);
+  const etal = (2.4 - bril * 0.8) * z * 0.30;
+  for (let i = 0; i < nuee; i++) {
+    const a = (i * 2.399) + t * 0.9;            // angle d'or : jamais de motif
+    const rr = Math.sqrt(((i * 37) % 23) / 23) * etal;
+    /* Biais vers l'avant : le croissant epouse la calotte. */
+    const px = sx + Math.cos(a) * rr + ux * etal * 0.55;
+    const py = sy + Math.sin(a) * rr + uy * etal * 0.55;
+    /* Teintes CLAIRES : en points sombres, la nuee formait au pied de la
+       calotte un amas noir qui se lisait comme un corps etranger — vu sur
+       capture. Un Spitzenkorper est dense en vesicules, donc CLAIR en contraste
+       de phase, pas noir. */
+    scr.plot(px, py, i % 5 === 0 ? pal.vesExtension : pal.phase);
+  }
   /* Le halo du SPK : sa brillance est la jauge de flux vesiculaire. Un joueur
      a court de sucre voit son Spitzenkorper PALIR avant que la paroi ne
      s'amincisse. La panne s'annonce, elle ne surprend pas. */
@@ -455,21 +553,58 @@ function calotteEtSpk(scr, pal, apex, cam, t, P, cyto, opts) {
 
   /* Vesicules en rayonnement du SPK vers la surface de la calotte. Le modele du
      centre d'approvisionnement, dessine tel quel. */
-  const rays = 7;
+  /* Rayons CONTENUS dans la calotte : ils allaient jusqu'a sd + 0,9 R, ce qui
+     au zoom serre les faisait sortir du tube et dessinait deux traits en
+     travers de la paroi. Une vesicule ne traverse pas sa propre paroi. */
+  const rays = 5;
   for (let i = 0; i < rays; i++) {
-    const a = dir + (i / (rays - 1) - 0.5) * 2.3;
+    const a = dir + (i / (rays - 1) - 0.5) * 1.7;
     const u = ((t * 2.6 + i * 0.37) % 1);
-    const dd = sd * 0.4 + u * (sd + Rpx * 0.9);
+    const dd = sd * 0.25 + u * sd * 0.8;
     const px = sx + Math.cos(a) * dd, py = sy - Math.sin(a) * dd;
-    scr.plot(px, py, fade32(pal.vesicule, 1 - u * 0.5));
+    scr.plot(px, py, fade32(pal.phase, 0.85 - u * 0.5));
   }
 
   /* Bouffees d'exocytose : la vesicule a fusionne, la paroi s'est etendue. */
   if (cyto) {
     for (const f of cyto.flashs) {
-      const k = f.t / 0.16;
+      const k = clamp(f.t / 0.26, 0, 1);
       const o = f.off * (Rpx - 1.2 * z);
-      scr.plot(ax + ux * 1.5 * z + nx * o, ay + uy * 1.5 * z + ny * o, fade32(pal.phase, k));
+      const bx2 = ax + ux * 1.2 * z + nx * o, by2 = ay + uy * 1.2 * z + ny * o;
+      /* CE QUE FAIT LA VESICULE EN FUSIONNANT, dessine. Quatre gestes distincts,
+         et chacun est le phenomene : la chitine epaissit le bord, la
+         macrovesicule pousse le bout, la lipidique etale la membrane, l'enzyme
+         part DEHORS. */
+      switch (f.role) {
+        case 'extension': {
+          /* Un jet vers l'avant : c'est du materiau de surface qui arrive. */
+          const d2 = (1 - k) * Rpx * 0.45;
+          scr.disc(bx2 + ux * d2, by2 + uy * d2, 0.7 * z * k, fade32(pal.vesExtension, k));
+          break;
+        }
+        case 'membrane':
+          /* Un anneau qui s'etale : la membrane gagne de la surface. */
+          scr.ring(bx2, by2, (1 - k) * 1.6 * z + 0.6, Math.max(1, z * 0.18),
+            fade32(pal.vesMembrane, k * 0.9));
+          break;
+        case 'secretion': {
+          /* Elle SORT : elle traverse la paroi et s'eloigne dans le milieu.
+             C'est la seule vesicule qui ne construit rien. */
+          const d3 = (1 - k) * Rpx * 1.1;
+          scr.plot(bx2 + ux * d3 + nx * o * 0.3, by2 + uy * d3 + ny * o * 0.3,
+            fade32(pal.vesSecretion, k));
+          break;
+        }
+        default: {
+          /* Chitine : un court arc DANS la paroi, du cote ou elle a fusionne.
+             La paroi s'epaissit sous les yeux, un chitosome a la fois. */
+          const s2 = f.off >= 0 ? 1 : -1;
+          for (let j = -1; j <= 1; j++) {
+            scr.plot(bx2 + nx * s2 * 0.45 * z + ux * j * z * 0.35,
+              by2 + ny * s2 * 0.45 * z + uy * j * z * 0.35, fade32(pal.vesParoi, k));
+          }
+        }
+      }
     }
   }
 

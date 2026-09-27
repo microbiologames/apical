@@ -15,12 +15,23 @@
       le resultat d une pression que le joueur depense. En dessous de Y, rien
       ne bouge, quelle que soit la quantite d ameliorations.
 
-   2. L APEX NE SE PILOTE PAS. ON PILOTE LE SPITZENKORPER.
-      Le modele du « centre d approvisionnement en vesicules » dit que la forme
-      de l hyphe est la trace geometrique du deplacement du SPK : le SPK avance,
-      rayonne ses vesicules, et l apex est la ou elles arrivent. Le joueur
-      barre donc le SPK, et l apex SUIT, avec un retard. C est ce retard qui
-      donne au pilotage sa profondeur : on anticipe, on ne corrige pas.
+   2. ON PILOTE LE CAP, ET LE SPITZENKORPER EN EST LA CONSEQUENCE.
+      Premiere version : le joueur barrait le SPK et l apex suivait avec un
+      retard du premier ordre. Fidele au modele du centre d approvisionnement en
+      vesicules — le SPK avance, rayonne, et l apex est la ou les vesicules
+      arrivent — mais REFUSE A L ESSAI : deux commandes en cascade (barre -> SPK
+      -> apex) donnaient un pilotage qu on ne sentait pas, et afficher le SPK
+      comme un corps net en faisait une poignee de commande qui n en etait pas
+      une.
+      Maintenant : le joueur agit sur la VITESSE ANGULAIRE du cap, avec une
+      inertie de 0,34 s. On amorce un virage, il monte, et il continue un peu
+      quand on lache — c est de la conduite, pas de la correction. Le SPK, lui,
+      est CALCULE a partir du taux de virage et dessine en nuee diffuse : il
+      reste ce qu il est reellement, l endroit vers lequel les vesicules
+      convergent, et il indique l intention de virage sans etre la commande.
+      L inversion de causalite est assumee : la position du SPK et la direction
+      de croissance sont deux faces du meme phenomene, et seule la premiere se
+      voit.
 
    3. LA CROISSANCE EST PULSEE, PAS CONTINUE.
       Des bouffees de Ca2+ synchronisent l assemblage d actine et l exocytose :
@@ -60,7 +71,13 @@ export class Apex {
     this.branche = branche;
     this.x = x; this.y = y;
     /* Le SPK est DERRIERE l apex, a `spkDist`. C est lui qui porte le cap. */
-    this.spk = { x: x - Math.cos(ang) * 6, y: y - Math.sin(ang) * 6, ang };
+    /* `cap` est le cap REEL, borne a l avant. `omega` est sa vitesse angulaire,
+       et c est elle que la barre commande — d ou l inertie. */
+    this.cap = ang;
+    this.omega = 0;
+    /* Le SPK n a plus de cap propre : sa position est recalculee a chaque pas a
+       partir du cap et du taux de virage. Il ne sert qu au rendu. */
+    this.spk = { x: x - Math.cos(ang) * 6, y: y - Math.sin(ang) * 6 };
     this.dir = ang;
     this.v = 0;
     this.e = 1.1;             // epaisseur de paroi en cours de depot
@@ -158,41 +175,47 @@ export class Apex {
     if (v > vViable) v = Math.max(vViable, v * 0.18);
     this.v = v;
 
-    /* --- barre : on tourne le SPK -------------------------------------
-       La vitesse de virage DECROIT avec la vitesse d avance. Ce n est pas une
-       penalite arbitraire : le rayon de courbure que le SPK peut decrire est
-       borne par la geometrie du cone apical, donc plus il avance vite, plus la
-       courbe est large. C est le coeur de l arbitrage du jeu — la vitesse
-       achete de la distance et vend de la precision. */
-    /* RAYON DE BRAQUAGE, refait apres essai a la manette.
-       L'ancien reglage (agilite 1,9 rad/s, chute en 1 + v/22) donnait a vitesse
-       de croisiere omega = 1,0 rad/s pour v = 20 um/s, soit un rayon de courbure
-       de 20 um — UN DIAMETRE ET DEMI DE TUBE. Une hyphe faisait des epingles a
-       cheveux, ce qu'aucune hyphe ne fait : elles s'incurvent sur des dizaines
-       a des centaines de micrometres.
-       Avec agilite 0,55 et une chute en 1 + v/34 : a 20 um/s, omega = 0,35 rad/s
-       donc R = 57 um (quatre diametres) ; a 35 um/s, R = 129 um. Le virage
-       devient une DECISION QUI S'ANTICIPE, ce qui est precisement ce qu'on veut
-       comme source de difficulte, et la ramification redevient le seul moyen de
-       changer de cap vite. */
-    const omega = stats.agilite / (1 + v / 34);
-    this.spk.ang = Apex.borner(this.spk.ang + barre * omega * dt);
-    this.spk.x += Math.cos(this.spk.ang) * v * dt;
-    this.spk.y += Math.sin(this.spk.ang) * v * dt;
+    /* --- barre : on agit sur la VITESSE ANGULAIRE ----------------------
+       SIGNE. L ecran a son y vers le HAUT alors qu un angle mathematique croit
+       dans le sens trigonometrique : partant du cap « avant » (pi/2), AJOUTER a
+       l angle fait donc tourner vers la GAUCHE de l ecran. La premiere version
+       ajoutait `barre` tel quel, et la touche de droite faisait virer a gauche.
+       Defaut signale a l essai, confirme au calcul : cos(pi/2 + 0,5) = -0,48.
+       On SOUSTRAIT donc, et `barre` positif veut dire droite a l ecran.
 
-    /* --- l apex suit le SPK ------------------------------------------
-       Premier ordre, constante de temps 70 ms. C est ce retard qui fait la
-       « main » du jeu : trop court, le pilotage devient nerveux et la courbe
-       perd sa signature d hyphe ; trop long, on ne rattrape plus un obstacle. */
-    const cx = this.spk.x + Math.cos(this.spk.ang) * stats.spkDist;
-    const cy = this.spk.y + Math.sin(this.spk.ang) * stats.spkDist;
-    const k = 1 - Math.exp(-dt / 0.07);
+       AMPLITUDE. La vitesse de virage decroit avec la vitesse d avance : le
+       rayon de courbure qu un cone apical peut decrire est borne. A 20 um/s,
+       omega = 0,35 rad/s donc R = 57 um (quatre diametres de tube) ; a 35 um/s,
+       R = 129 um. Une hyphe ne fait pas d epingle a cheveux.
+
+       INERTIE. 0,34 s de constante de temps sur omega, pas sur le cap : c est
+       ce qui donne la sensation de barre. Sur le cap, l inertie aurait donne un
+       retard ; sur la vitesse angulaire, elle donne un ELAN. */
+    const omegaMax = stats.agilite / (1 + v / 34);
+    const cible = -barre * omegaMax;
+    this.omega += (cible - this.omega) * (1 - Math.exp(-dt / 0.34));
+    const capVoulu = this.cap + this.omega * dt;
+    this.cap = Apex.borner(capVoulu);
+    /* Contre la butee de cap, l elan se casse au lieu de s accumuler : sans
+       cela on restait colle a +/-78 deg pendant une seconde apres avoir lache. */
+    if (Math.abs(capVoulu - this.cap) > 1e-9) this.omega *= 0.25;
+
     const px = this.x, py = this.y;
-    this.x = lerp(this.x, cx, k);
-    this.y = lerp(this.y, cy, k);
-    const dx = this.x - px, dy = this.y - py;
-    const d = Math.hypot(dx, dy);
-    if (d > 0.02) this.dir = Math.atan2(dy, dx);
+    this.x += Math.cos(this.cap) * v * dt;
+    this.y += Math.sin(this.cap) * v * dt;
+    this.dir = this.cap;
+    const d = Math.hypot(this.x - px, this.y - py);
+
+    /* --- le Spitzenkorper, DEDUIT du virage ---------------------------
+       Il se tient a `spkDist` en arriere du bout, et il se DECALE du cote
+       interieur du virage — c est ce que fait le vrai organite, et c est de ce
+       decalage que nait la courbure dans le modele du centre
+       d approvisionnement. On le calcule donc au lieu de le piloter, et il
+       redevient une information : voir ou penche la nuee, c est voir ou l on
+       va avant que le tube ne l ait montre. */
+    const lat = clamp(this.omega / Math.max(0.05, omegaMax), -1, 1) * stats.spkDist * 0.55;
+    this.spk.x = this.x - Math.cos(this.cap) * stats.spkDist + Math.cos(this.cap - Math.PI / 2) * lat;
+    this.spk.y = this.y - Math.sin(this.cap) * stats.spkDist + Math.sin(this.cap - Math.PI / 2) * lat;
 
     /* --- epaisseur de paroi : e = min(consigne, J / v) -----------------
        LE FLUX MAXIMAL EST UN PLAFOND, PAS UNE CONSIGNE. La premiere version

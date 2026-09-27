@@ -86,6 +86,58 @@ l'extension devient linéaire. La spore reste ensuite à l'origine du monde,
 visible derrière soi. Les cinq premières secondes ne demandent rien d'autre que
 de regarder — le meilleur moment pour apprendre à lire un champ.
 
+### 2 quater. On pilote le cap, pas le Spitzenkörper
+
+Première version : le joueur barrait le SPK, et l'apex suivait avec un retard.
+Fidèle au modèle du centre d'approvisionnement en vésicules — et **refusé à
+l'essai**. Deux raisons, toutes deux justes :
+
+- **deux commandes en cascade** (barre → SPK → apex) donnent un pilotage qu'on
+  ne sent pas ;
+- **afficher le SPK comme un corps net** en faisait une poignée de commande qui
+  n'en était pas une.
+
+Maintenant : la barre agit sur la **vitesse angulaire** du cap, avec 0,34 s
+d'inertie. On amorce un virage, il monte, il continue un peu quand on lâche.
+C'est de la conduite, pas de la correction. Le SPK est **calculé** à partir du
+taux de virage et dessiné en **croissant diffus** : il reste ce qu'il est
+réellement — l'endroit vers lequel les vésicules convergent — et il indique
+l'intention de virage sans être la commande.
+
+> Et la barre était **inversée**. Avec un écran en y-haut, ajouter à l'angle
+> depuis « l'avant » fait tourner à gauche : la touche de droite virait à
+> gauche. `barre` est désormais en repère écran.
+
+### 2 quinquies. Chaque vésicule porte un rôle
+
+Au zoom de jeu, une vésicule fait cinq à huit pixels : on peut la **suivre du
+fond du tube jusqu'à sa fusion**. Il fallait donc qu'elle veuille dire quelque
+chose. Le trafic vésiculaire apical est réellement hétérogène, et ce qu'une
+vésicule transporte décide de ce qu'elle fabrique :
+
+| Vésicule | Ce qu'elle est | Ce qu'on voit à la fusion |
+|---|---|---|
+| **chitosome** | microvésicule polyédrique de 30–40 nm, chitine synthase | un court arc **dans la paroi** : elle s'épaissit sous les yeux |
+| **macrovésicule** | apicale, 70–100 nm, la plus grosse | un jet vers l'avant : c'est elle qui allonge |
+| **lipidique** | une bicouche, donc dessinée en anneau | un anneau qui s'étale : la membrane gagne de la surface |
+| **enzyme** | hydrolase exportée | elle **sort** et s'éloigne : la seule qui ne construit rien |
+
+La composition vient du **modèle**, pas du rendu : le flux de chitosomes suit
+l'épaisseur déposée, celui des macrovésicules suit la vitesse. **Pousser fait
+donc littéralement disparaître les chitosomes du tube.** L'arbitrage vitesse /
+paroi se regarde au lieu de se lire sur une jauge — c'est l'aboutissement de la
+règle « le champ porte l'information ».
+
+### 2 sexies. La réserve de spore, et l'ouverture
+
+Une conidie n'est pas vide : elle est bourrée de lipides et de tréhalose, et
+elle **alimente son tube germinatif** bien avant que le milieu ne rapporte quoi
+que ce soit. La réserve tient une vingtaine de secondes.
+
+C'est l'horloge de l'ouverture : il faut avoir trouvé sa première plume avant
+qu'elle ne s'épuise. Le HUD l'affiche tant qu'elle dure, et le message
+« RÉSERVE ÉPUISÉE » marque le moment où la partie commence vraiment.
+
 ### 3. Des contraintes sans agentivité ne sont que du terrain
 
 Une contrainte statique se mémorise et cesse d'exister. Trois étages ont donc été
@@ -181,6 +233,20 @@ Trois conséquences :
   d'autant plus loin qu'on va vite ;
 - **voir plus loin devient une amélioration** : le récepteur GPR-4 recule la
   caméra, et le légendaire « Récepteurs de gradient » beaucoup plus.
+
+Le cadrage a été **beaucoup resserré** après essai : 56 µm de champ à l'arrêt,
+73 µm à pleine vitesse, et le tube occupe le quart de la largeur. On voit
+arriver chaque vésicule. Conséquence assumée : **on ne navigue plus à vue**.
+
+C'est la **perception chimiotropique** qui dit ce qu'il y a devant — un bandeau
+de onze caps sondés bien au-delà du champ visible, vers le haut ce qu'il y a à
+gagner, vers le bas ce qu'il y a à craindre. Ce n'est pas une carte : on ne voit
+ni la forme ni la distance, seulement « ça sent bon par là ». Le choix de
+trajectoire reste un pari, ce qui est le sujet.
+
+Et c'est exactement ce qu'une hyphe fait : elle remonte un gradient qu'elle
+**sent** bien au-delà de ce qu'un objectif montrerait, par des récepteurs
+couplés aux protéines G.
 
 ### 6. La caméra et les apex multiples se contredisaient
 
