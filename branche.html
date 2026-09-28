@@ -1,79 +1,178 @@
-<!doctype html>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Ramification</title>
+<title>Naissance d'une branche</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;450;600&display=swap">
 <style>
-:root{ color-scheme: dark; --ombre:#07080a; --encre:#cfd3da; --gris:#8b919b; --trait:#22252b; --laiton:#cfae6c; }
+:root{
+  color-scheme: light;
+  --ground:#efece4; --surface:#e3ded2; --surface-2:#d8d2c4;
+  --ink:#1d1f22; --ink-2:#5d5f64; --ink-3:#8a8b8f; --rule:#c8c1b0;
+  --brass:#8a6520; --brass-soft:#b08b3d; --stage:#0a0b0d;
+  /* schema : memes roles que dans la simulation */
+  --paroi:#b9b2a2; --peri:#e7e3d8; --memb:#4a463f; --cyto:#a9a495;
+  --serif:"Fraunces",Georgia,serif;
+  --sans:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  color-scheme: dark;
+  --ground:#0c0d10; --surface:#15171b; --surface-2:#1d2026;
+  --ink:#e9e6df; --ink-2:#a2a49f; --ink-3:#74767b; --rule:#2a2e35;
+  --brass:#cfae6c; --brass-soft:#9d854f; --stage:#08090b;
+  --paroi:#8d939c; --peri:#4e545e; --memb:#c3c9d2; --cyto:#282b31;
+}}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --ground:#0c0d10; --surface:#15171b; --surface-2:#1d2026;
+  --ink:#e9e6df; --ink-2:#a2a49f; --ink-3:#74767b; --rule:#2a2e35;
+  --brass:#cfae6c; --brass-soft:#9d854f; --stage:#08090b;
+  --paroi:#8d939c; --peri:#4e545e; --memb:#c3c9d2; --cyto:#282b31;
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--ombre);color:var(--encre);
-  font:13px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;}
-main{max-width:980px;margin:0 auto;padding:22px 18px 60px}
-h1{font-size:19px;font-weight:600;margin:0 0 2px;letter-spacing:.2px}
-.sous{color:var(--gris);margin:0 0 18px;font-size:12.5px}
-#vue{display:grid;place-items:center;background:#000;border:1px solid var(--trait);
-  border-radius:4px;overflow:hidden;height:min(72vh,720px)}
-canvas{image-rendering:pixelated;image-rendering:crisp-edges;display:block;touch-action:none}
-.barre{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:10px 0 0}
-button{font:inherit;font-size:12px;color:var(--encre);background:transparent;
-  border:1px solid var(--trait);border-radius:999px;padding:5px 12px;cursor:pointer}
-button:hover{background:#1a1d22}
-button[disabled]{opacity:.35;cursor:default}
-button[aria-pressed="true"]{background:var(--laiton);color:#14110a;border-color:var(--laiton);font-weight:600}
-.sep{width:1px;height:18px;background:var(--trait);margin:0 4px}
-label{display:inline-flex;align-items:center;gap:7px;color:var(--gris);font-size:12px}
-input[type=range]{width:120px;accent-color:var(--laiton)}
-#mesures{color:var(--gris);font-size:12px;margin-top:9px;font-variant-numeric:tabular-nums}
-#mesures b{color:var(--encre);font-weight:600}
-.notice{margin-top:22px;color:var(--gris);font-size:12.5px;max-width:64ch}
-.notice b{color:var(--encre)}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.page{max-width:1120px;margin:0 auto;padding-inline:16px;padding-block:28px 64px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--brass);margin:0 0 10px}
+h1{font-family:var(--serif);font-optical-sizing:auto;font-weight:600;font-size:clamp(2rem,6vw,3rem);line-height:1.05;letter-spacing:-.015em;margin:0 0 12px;text-wrap:balance}
+.lead{margin:0 0 26px;max-width:62ch;color:var(--ink-2);font-size:clamp(15px,1.9vw,17px)}
+.lead b{color:var(--ink);font-weight:600}
+.instrument{border:1px solid var(--rule);border-radius:3px;overflow:hidden;background:var(--surface)}
+#vue{position:relative;background:var(--stage);overflow:hidden;display:grid;place-items:center;height:min(62vh,660px);min-height:340px}
+canvas{image-rendering:pixelated;display:block;touch-action:none}
+#bandeau{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;gap:12px;align-items:baseline;pointer-events:none;padding:9px 13px;font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:#8f9299;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+#phase{color:#d6bc86;font-weight:500;font-style:normal}
+#etat{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;text-transform:none;letter-spacing:.04em}
+#pupitre{background:var(--surface-2);border-top:1px solid var(--rule);padding:11px 13px;display:flex;flex-direction:column;gap:9px}
+.rangee{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+.rangee>span{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+button{font-family:var(--sans);font-size:12.5px;font-weight:450;color:var(--ink);background:transparent;border:1px solid var(--rule);border-radius:2px;padding:4px 10px;cursor:pointer}
+button:hover{background:var(--surface);border-color:var(--brass-soft)}
+button:focus-visible{outline:2px solid var(--brass);outline-offset:1px}
+button[aria-pressed="true"]{background:var(--brass);border-color:var(--brass);color:var(--ground);font-weight:600}
+button[disabled]{opacity:.42;cursor:default}
+button[disabled]:hover{background:transparent;border-color:var(--rule)}
+.curseur{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);flex:1 1 220px}
+.curseur input[type=range]{flex:1;min-width:120px;accent-color:var(--brass)}
+.curseur output{font-size:11px;text-transform:none;letter-spacing:0;color:var(--ink);min-width:3.6em;font-variant-numeric:tabular-nums}
+#chiffres{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+#chiffres b{color:var(--ink);font-weight:500}
+.colonnes{margin-top:44px;display:grid;gap:34px 46px;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));align-items:start}
+h2{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--brass);margin:0 0 10px;padding-bottom:7px;border-bottom:1px solid var(--rule)}
+.colonnes p{margin:0 0 12px;max-width:62ch}
+.colonnes p:last-child{margin-bottom:0}
+.colonnes b{font-weight:600}
+em{font-style:italic;color:var(--ink-2)}
+.mesures{margin:44px 0 0;border-top:1px solid var(--rule)}
+.mesures table{width:100%;border-collapse:collapse;font-size:13px}
+.mesures caption{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--brass);text-align:left;padding:14px 0 10px}
+.mesures th,.mesures td{text-align:left;padding:6px 14px 6px 0;border-bottom:1px solid var(--rule);vertical-align:baseline}
+.mesures th{font-weight:450;color:var(--ink-2)}
+.mesures td{font-family:var(--mono);font-size:12px;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.mesures td.ref{color:var(--ink-3);white-space:normal}
+.source{margin-top:40px;padding-top:16px;border-top:1px solid var(--rule);font-size:12.5px;color:var(--ink-3);max-width:76ch}
+.source a{color:var(--brass);text-underline-offset:2px}
+@media (max-width:620px){#vue{height:56vh;min-height:320px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
-<main>
-  <h1>Ramification</h1>
-  <p class="sous">Le modèle dans le moteur, pas une silhouette calculée d'avance.</p>
+<div class="page">
+  <p class="eyebrow">Croissance apicale — ramification</p>
+  <h1>Naissance d'une branche</h1>
+  <p class="lead">Une hyphe qui veut changer franchement de direction ne tourne pas : elle
+  <b>branche</b>. Son apex ne vire qu'à 58 µm de rayon, une branche part à 60–80°. Ce qu'on regarde
+  ici, c'est la simulation elle-même, avec un second axe — pas une silhouette calculée d'avance.</p>
 
-  <div id="vue"><canvas id="toile"></canvas></div>
-
-  <div class="barre">
-    <button id="bPause" aria-pressed="false">Pause</button>
-    <button id="bBrancher">Ramifier</button>
-    <button id="bNeuf">Une autre hyphe</button>
-    <span class="sep"></span>
-    <button data-vue="jonction" aria-pressed="true">Jonction</button>
-    <button data-vue="mere" aria-pressed="false">Mère</button>
-    <button data-vue="fille" aria-pressed="false">Fille</button>
-    <span class="sep"></span>
-    <button data-vit="1" aria-pressed="false">×1</button>
-    <button data-vit="2" aria-pressed="true">×2</button>
-    <button data-vit="4" aria-pressed="false">×4</button>
-    <span class="sep"></span>
-    <button data-pal="phase" aria-pressed="true">Phase</button>
-    <button data-pal="noir" aria-pressed="false">Fond noir</button>
-    <button data-pal="met" aria-pressed="false">MET</button>
-    <span class="sep"></span>
-    <label>Zoom <input id="cZoom" type="range" min="0.6" max="3.2" step="0.05" value="1.5"><span id="oZoom">×1.50</span></label>
+  <div class="instrument">
+    <div id="vue">
+      <canvas id="toile"></canvas>
+      <div id="bandeau"><span>optique — <i id="phase"></i></span><span id="etat"></span></div>
+    </div>
+    <div id="pupitre">
+      <div class="rangee">
+        <button id="bPause" aria-pressed="false">Pause</button>
+        <button id="bBrancher">Ramifier</button>
+        <button id="bNeuf">Une autre hyphe</button>
+        <span>caméra</span>
+        <button data-vue="jonction" aria-pressed="true">Jonction</button>
+        <button data-vue="mere" aria-pressed="false">Mère</button>
+        <button data-vue="fille" aria-pressed="false">Fille</button>
+      </div>
+      <div class="rangee">
+        <span>vitesse</span>
+        <button data-vit="1" aria-pressed="false">×1</button>
+        <button data-vit="2" aria-pressed="true">×2</button>
+        <button data-vit="4" aria-pressed="false">×4</button>
+        <span>optique</span>
+        <button data-pal="phase" aria-pressed="true">Phase</button>
+        <button data-pal="noir" aria-pressed="false">Fond noir</button>
+        <button data-pal="met" aria-pressed="false">MET</button>
+        <label class="curseur" for="cZoom">zoom<input id="cZoom" type="range" min="0.6" max="3.2" step="0.05" value="1.5"><output id="oZoom"></output></label>
+      </div>
+      <div id="chiffres"></div>
+    </div>
   </div>
-  <div id="mesures"></div>
 
-  <p class="notice">
-    <b>Une branche n'est pas un second objet.</b> C'est un second <b>axe</b>, et la
-    silhouette est l'<b>union</b> des deux tubes — prise comme un minimum adouci de
-    leurs deux distances signées. Le terme d'adoucissement s'annule dès que les deux
-    parois sont distantes de plus de 0,55 µm : l'évasement concave n'existe donc qu'à
-    la jonction, et nulle part ailleurs. On n'a jamais deux contours, on a un contour
-    qui a un Y dedans.<br><br>
-    Le bourgeon naît <b>1,5 µm sous la paroi</b> de sa mère et s'enfonce encore de
-    6 µm derrière : à la naissance il est entièrement dans le cytoplasme maternel,
-    donc invisible, et il émerge en grandissant. Son tube s'élargit avec son matériau
-    — 0,55 R au col, le calibre plein après 25 µm — au lieu de naître à sa taille
-    définitive.<br><br>
-    Elle a son propre intérieur : Spitzenkörper, vésicules, membrane plasmique, dépôts
-    de paroi neuve. Rien n'est partagé pour l'instant — le ralentissement de l'apex
-    mère, qui puise dans le même pool de vésicules, reste à faire.<br><br>
-    <b>Brancher est la seule façon de tourner vite&nbsp;:</b> l'apex ne vire qu'à
-    58 µm de rayon, la branche part à 60–80°.
-  </p>
-</main>
+  <div class="colonnes">
+    <section>
+      <h2>Un contour avec un Y dedans</h2>
+      <p>Une branche n'est pas un second objet. C'est un second <b>axe</b>, et la silhouette est
+      l'<b>union</b> des deux tubes : le minimum adouci de leurs deux distances signées. Le
+      remplissage, la paroi et le halo lisent ce seul champ, donc il ne peut pas y avoir deux
+      contours qui se croisent.</p>
+      <p>L'adoucissement est un <b>congé circulaire</b> de 2,5 µm — le rayon qu'on lit est vraiment
+      le rayon de raccordement. C'est lui l'évasement concave de la base. Dès que les deux parois
+      sont éloignées de plus de 2,5 µm il redonne le minimum exact : le congé n'existe qu'à la
+      jonction, et nulle part ailleurs.</p>
+    </section>
+    <section>
+      <h2>Le bourgeon naît dans sa mère</h2>
+      <p>Son apex est posé <b>3,2 µm sous la paroi</b>, et son amorce d'axe part de l'axe maternel,
+      7 µm en arrière, puis s'incurve vers le flanc. À la naissance, il ne se passe donc
+      strictement rien à la surface : le bourgeon est entièrement dans le cytoplasme de sa mère, et
+      il en émerge en grandissant.</p>
+      <p>Ce n'est pas un réglage de silhouette, c'est le mécanisme. Une branche a besoin de sept
+      micromètres de tube dès sa naissance, sinon elle n'a pas la place d'un <b>Spitzenkörper</b> —
+      qui se tient à 2 µm de la pointe. Sans lui elle ne fusionne pas, donc elle ne pousse pas, donc
+      elle n'a toujours pas de tube. C'est aussi ce que décrit la littérature : le second
+      Spitzenkörper est <em>sub-apical</em>, il se forme avant que rien ne bombe.</p>
+    </section>
+    <section>
+      <h2>Elle s'élargit avec son matériau</h2>
+      <p>Le tube de la fille naît étroit — 5,2 µm de diamètre au col, contre 11 pour sa mère — et
+      gagne son calibre plein après une trentaine de micromètres. L'élargissement est indexé sur le
+      <b>matériau</b>, pas sur la distance à l'apex : indexé sur la distance, il resterait figé dans
+      le repère de la pointe et la branche n'aurait jamais l'air de grossir.</p>
+      <p>Elle a tout le reste en propre : vésicules, granulation, organites, membrane plasmique,
+      dépôts de paroi neuve. La caméra peut la suivre.</p>
+    </section>
+    <section>
+      <h2>Ce qui n'est pas encore là</h2>
+      <p>Le pool de vésicules n'est <b>pas partagé</b> : chaque apex a le sien, donc la mère ne
+      ralentit pas quand la fille démarre. C'est la suite immédiate, et c'est ce qui donnera son
+      coût à la ramification.</p>
+      <p>La ramification n'est pas encore <b>autonome</b> non plus — ici c'est le bouton qui la
+      déclenche. Il manque la règle qui la déclenche toute seule, tous les ~110 µm d'unité de
+      croissance hyphale, et l'autotropisme négatif qui écarte les branches entre elles.</p>
+    </section>
+  </div>
+
+  <figure class="mesures">
+    <table>
+      <caption>Mesuré au banc, jamais estimé</caption>
+      <tbody>
+        <tr><th>Silhouette en deux morceaux</th><td>0</td><td class="ref">sur 7 âges de branche, de 48° à 84°</td></tr>
+        <tr><th>Congé hors de la jonction</th><td>0 px</td><td class="ref">au-delà de 9 µm</td></tr>
+        <tr><th>Ce que le bourgeon ajoute à sa naissance</th><td>0 px</td><td class="ref">il est entièrement dans sa mère</td></tr>
+        <tr><th>La fille perce la paroi</th><td>16 s</td><td class="ref">après sa naissance</td></tr>
+        <tr><th>Croissance de la fille</th><td>16,0 µm/min</td><td class="ref">sur 120 s ; la mère est à 21,5</td></tr>
+        <tr><th>Diamètre au col</th><td>5,2 µm</td><td class="ref">0,47 × la mère ; Trinci donne ~0,6</td></tr>
+        <tr><th>Calibre plein atteint</th><td>9,5 µm</td><td class="ref">après 32 µm de pousse</td></tr>
+      </tbody>
+    </table>
+  </figure>
+
+  <p class="source">Cohérent avec Lew RR, <em>How does a hypha grow? The biophysics of pressurized
+  growth in fungi</em>, Nature Reviews Microbiology 9:509 (2011), et avec l'unité de croissance
+  hyphale de Trinci (~110 µm, angle de branchement 45–90°). Les vésicules sont grossies ×6 et on en
+  simule quelques dizaines au lieu de 10⁴ : l'expérience visuelle passe avant l'exhaustivité.</p>
+</div>
 
 <script type="module">
 import { App } from './src/main.js';

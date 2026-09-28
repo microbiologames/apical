@@ -1,12 +1,12 @@
 /* ---------------------------------------------------------------------------
    Ramification : la meme simulation, avec un second axe.
 
-   Cette page ne fait rien de special. C'est son interet : la branche n'est
-   pas une animation a part, c'est une tige de plus dans la meme liste, et la
-   silhouette reste l'union des tubes. Ce qu'on regarde ici, ce sont trois
-   choses qu'un banc ne voit pas :
+   Cette page ne fait rien de special, et c'est son interet : une branche
+   n'est pas une animation a part, c'est une tige de plus dans la meme
+   liste, et la silhouette reste l'union des tubes. Ce qu'on regarde ici,
+   ce sont trois choses qu'un banc ne voit pas :
 
-     - le bourgeon emerge du cytoplasme maternel au lieu d'apparaitre pose
+     - le bourgeon EMERGE du cytoplasme maternel au lieu d'apparaitre pose
        sur le flanc ;
      - la base a un evasement CONCAVE, pas un angle vif ;
      - le tube de la fille s'elargit avec son materiau, du col au calibre
@@ -22,11 +22,12 @@ const $$ = (s) => [...document.querySelectorAll(s)];
 export function brancherPage(app, PALETTES) {
   app.zoom = 1.5;
   app.vitesse = 2;
+  app.opts.echelle = true;
 
-  /* Camera. Trois points de vue, et un seul mecanisme : `verrou` rend un
-     point MONDE a suivre, `suivi` dit de quelle tige on suit l'apex.
-     La jonction est le premier point d'axe de la branche : il est fixe dans
-     le monde, puisqu'une paroi construite ne bouge plus. */
+  /* Camera. Trois points de vue, un seul mecanisme : `verrou` rend un point
+     MONDE a suivre, `suivi` dit de quelle tige on suit l'apex. La jonction
+     est le premier point d'axe de la branche — il est fixe dans le monde,
+     puisqu'une paroi construite ne bouge plus. */
   let vue = 'jonction';
   app.verrou = () => {
     const f = app.tiges[1];
@@ -43,35 +44,46 @@ export function brancherPage(app, PALETTES) {
     app.active = app.suivi;
   };
 
+  /* Separateur decimal francais : ces chiffres sont du texte d'interface. */
+  const n = (v, d = 1) => v.toFixed(d).replace('.', ',');
+
   const maj = () => {
     const f = app.tiges[1];
+    $('#phase').textContent = PALETTES[app.palette].nom;
     $$('[data-vue]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.vue === vue)));
     $$('[data-pal]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.pal === app.palette)));
     $$('[data-vit]').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.vit === app.vitesse)));
     $('#bPause').textContent = app.pause ? 'Reprendre' : 'Pause';
+    $('#bPause').setAttribute('aria-pressed', String(app.pause));
     $('#bBrancher').disabled = !!f;
-    $('#mesures').innerHTML = f
-      ? `branche <b>${f.hy.longueur.toFixed(1)}</b> µm · col <b>${(f.hy.rayonA(0) * 2).toFixed(1)}</b> µm, `
-        + `pointe <b>${(f.hy.rayonA(f.hy.total) * 2).toFixed(1)}</b> µm · `
-        + `angle <b>${Math.round(Math.abs(((f.hy.th - app.hy.th) * 180 / Math.PI + 540) % 360 - 180))}°</b> · `
-        + `${Math.round(app.fps)} i/s`
+    $$('[data-vue="fille"]').forEach((b) => { b.disabled = !f; });
+    $('#etat').textContent = f
+      ? `branche ${n(f.hy.longueur)} µm · ${Math.round(app.fps)} i/s`
       : `une seule tige · ${Math.round(app.fps)} i/s`;
+    $('#chiffres').innerHTML = f
+      ? `col <b>${n(f.hy.rayonA(0) * 2)}</b> µm · pointe <b>${n(f.hy.rayonA(f.hy.total) * 2)}</b> µm `
+        + `· angle <b>${Math.round(Math.abs(((f.hy.th - app.hy.th) * 180 / Math.PI + 540) % 360 - 180))}°</b> `
+        + `· mère <b>${n(app.hy.longueur / Math.max(app.t, 0.1) * 60)}</b> µm/min`
+      : `mère <b>${n(app.hy.longueur / Math.max(app.t, 0.1) * 60)}</b> µm/min — ramifiez pour voir le second axe`;
   };
 
   $$('[data-vue]').forEach((b) => { b.onclick = () => { vue = b.dataset.vue; cadrer(); maj(); }; });
   $$('[data-pal]').forEach((b) => { b.onclick = () => { app.palette = b.dataset.pal; maj(); }; });
   $$('[data-vit]').forEach((b) => { b.onclick = () => { app.vitesse = +b.dataset.vit; maj(); }; });
   $('#bPause').onclick = () => { app.pause = !app.pause; maj(); };
-  $('#cZoom').oninput = (e) => { app.zoom = +e.target.value; $('#oZoom').textContent = `×${app.zoom.toFixed(2)}`; };
 
-  const neuf = () => {
+  const zoom = $('#cZoom'), oZoom = $('#oZoom');
+  const majZoom = () => { app.zoom = +zoom.value; oZoom.textContent = `×${n(app.zoom, 2)}`; };
+  zoom.oninput = majZoom;
+  majZoom();
+
+  $('#bNeuf').onclick = () => {
     app.reset((Math.random() * 1e9) | 0);
     app.prechauffer(20);
     vue = 'jonction';
     cadrer();
     maj();
   };
-  $('#bNeuf').onclick = neuf;
   $('#bBrancher').onclick = () => { app.brancher(0, { s: 9 }); cadrer(); maj(); };
 
   globalThis.apical = app;
