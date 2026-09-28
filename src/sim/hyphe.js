@@ -36,6 +36,23 @@ import { clamp, lerp, smoothstep, noise1, TAU } from '../core/util.js';
 const PAS = 0.22;          // um entre deux points d'axe memorises
 const MAX_PTS = 1600;      // ~350 um de memoire, largement hors champ
 
+/**
+ * Pas d'echantillonnage du contour a l'abscisse s, en um.
+ *
+ * Fin pres de l'apex : a 1,2 um le polygone LISSAIT l'ondulation de paroi que
+ * la membrane, elle, echantillonne tous les 0,09 um, et au fort grossissement
+ * les deux lignes s'ecartaient jusqu'a 0,6 um l'une de l'autre sans raison.
+ *
+ * Grossier au loin, ou le tube est droit et le plus souvent hors champ :
+ * `remplirMasque` reparcourt TOUS les sommets a chaque ligne de balayage, et
+ * 200 um echantillonnes a 0,45 um en font 900. La membrane prolongee suit le
+ * meme pas, pour que les deux lignes restent paralleles.
+ */
+export function pasContour(s, Lc) {
+  if (s < 45) return lerp(0.35, 0.45, smoothstep(Lc, Lc + 22, s));
+  return lerp(0.45, 2.4, smoothstep(45, 130, s));
+}
+
 export class Hyphe {
   constructor(opts = {}) {
     this.R = opts.R ?? 5.5;              // rayon du tube, um (diam. 11 um)
@@ -100,9 +117,12 @@ export class Hyphe {
       return;
     }
 
-    /* On amorce avec 90 um de tube droit derriere : sans cette queue, au
-       demarrage le tube s'arrete net au bord du champ. */
-    const n = Math.ceil(90 / PAS);
+    /* On amorce avec 150 um de tube droit derriere : sans cette queue, au
+       demarrage le tube s'arrete net au bord du champ. 150 et non 90 parce
+       que le tube est maintenant DESSINE sur 200 um (S_VU) et non plus 34 :
+       au-dela du plus vieux point d'axe, atS prolonge en ligne droite, ce
+       qui donne le meme trait mais sans ondulation de paroi. */
+    const n = Math.ceil(150 / PAS);
     for (let i = n; i >= 1; i--) {
       this.ax.push(this.x - Math.cos(this.th) * i * PAS);
       this.ay.push(this.y - Math.sin(this.th) * i * PAS);
@@ -283,13 +303,7 @@ export class Hyphe {
     let s = Lc;
     const sCorps = sTot - Lb;
     while (s < sCorps) {
-      /* 1,2 um au maximum : a 2,4 um les facettes de l'ondulation se
-         voyaient sur le flanc du tube. */
-      /* 0,45 um au maximum. A 1,2 le polygone lissait l'ondulation de
-         paroi que la membrane, elle, echantillonne tous les 0,09 um : au
-         fort grossissement les deux lignes s'ecartaient jusqu'a 0,6 um
-         l'une de l'autre sans raison. */
-      s += lerp(0.35, 0.45, smoothstep(Lc, Lc + 22, s));
+      s += pasContour(s, Lc);
       pousser(Math.min(s, sCorps));
     }
     /* Calotte ARRIERE du bourgeon, echantillonnee en angle pour la meme
@@ -344,12 +358,12 @@ export class Hyphe {
  *
  * Une branche n'est pas un second objet : c'est un second AXE, et la
  * silhouette reste l'union des deux tubes (Scene.unir). Son apex nait
- * 3,2 um SOUS la paroi de sa mere, et son bourgeon s'enfonce encore de 6 um
+ * 3,6 um SOUS la paroi de sa mere, et son bourgeon s'enfonce encore de 6 um
  * derriere : a la naissance il est entierement dans le cytoplasme maternel,
  * donc invisible, et il emerge en grandissant. Sans ce chevauchement
  * l'union ne serait pas connexe et la branche flotterait a cote de sa mere.
  *
- * 3,2 um et non 1 : le conge de l'union a un rayon de 2,5 um, et un apex
+ * 3,6 um et non 1 : le conge de l'union a un rayon de 2,5 um, et un apex
  * pose plus pres que ca faisait deja bomber la paroi de la mere avant que
  * la branche n'existe. A la naissance il ne doit RIEN se passer — le
  * renflement vient apres, des le premier micrometre de pousse.
@@ -369,14 +383,14 @@ export function brancherSur(par, o = {}) {
   const dy = Math.cos(ang) * p.ty + Math.sin(ang) * cote * p.ny;
 
   /* Amorce : une Bezier quadratique P0 -> P1 -> P2.
-       P2 l'apex, 3,2 um SOUS la paroi — plus pres, le conge de 2,5 um
+       P2 l'apex, 3,6 um SOUS la paroi — plus pres, le conge de 2,5 um
           ferait deja bomber la mere alors que la branche n'existe pas ;
        P1 en arriere de l'apex DANS la direction de la branche, ce qui fixe
           la tangente de sortie : sans lui l'amorce arrivait a l'apex par la
           radiale et il y avait un coude de 20 deg a la jonction ;
        P0 sur l'axe de la mere, 4 um derriere : l'amorce part donc parallele
           au tube parent, au coeur du cytoplasme, et ne peut pas en sortir. */
-  const P2 = [p.x + cote * p.nx * (w - 3.2), p.y + cote * p.ny * (w - 3.2)];
+  const P2 = [p.x + cote * p.nx * (w - 3.6), p.y + cote * p.ny * (w - 3.6)];
   const P1 = [P2[0] - dx * 2.5, P2[1] - dy * 2.5];
   const P0 = [P1[0] - p.tx * 4.0, P1[1] - p.ty * 4.0];
   const axe = [];

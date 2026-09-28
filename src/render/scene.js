@@ -20,8 +20,8 @@
 
 import { Screen, hexToRgba, mix32, fade32, shade32, rgba, bayer } from '../core/pixel.js';
 import { clamp, lerp, smoothstep, fbm2, noise2, hash2, noise1, TAU } from '../core/util.js';
-import { versMonde } from '../sim/hyphe.js';
-import { S_MAX, DUREE_FUSION } from '../sim/contenu.js';
+import { versMonde, pasContour } from '../sim/hyphe.js';
+import { DUREE_FUSION } from '../sim/contenu.js';
 import { omega, PAS as PAS_MEMB } from '../sim/membrane.js';
 
 /* Portee du champ de distance.
@@ -41,6 +41,23 @@ import { omega, PAS as PAS_MEMB } from '../sim/membrane.js';
    pas une portee de calcul. */
 const BANDE = 30;
 const HALO = 6;
+
+/* Longueur de tube DESSINEE derriere l'apex, en um — a distinguer de S_MAX,
+   qui est la longueur SIMULEE (vesicules, grains, organites, membrane,
+   depots) et reste a 34 um.
+
+   Les deux etaient confondues, et le tube s'arretait donc net a 34 um. Tant
+   que la camera suit l'apex ca ne se voit pas, la coupe est hors champ. Mais
+   des qu'on regarde autre chose que la pointe — une jonction de branche, et
+   demain le thalle — l'apex s'eloigne, la coupe avance avec lui et finit par
+   depasser la ramification : on voit la branche accrochee a un moignon, et
+   la base du bourgeon, que le tube de la mere est justement la pour cacher.
+
+   200 um : a 20 um/min, dix minutes avant que la coupe rattrape une branche
+   nee a 9 um de l'apex. Ca ne coute presque rien — le contour est echantillonne
+   de plus en plus grossierement vers l'arriere (`pasContour`), 467 sommets au
+   lieu de 197, et tout ce qui est hors cadre est rejete par sa boite. */
+const S_VU = 200;
 const MAX_SOMMETS = 4096;
 
 /* Fonte 4x6, juste de quoi ecrire la barre d'echelle. */
@@ -263,7 +280,7 @@ export class Scene {
   }
 
   contourEcran(hy, f) {
-    const n = hy.contour(f.xs, f.ys, S_MAX, 32);
+    const n = hy.contour(f.xs, f.ys, S_VU, 32);
     for (let i = 0; i < n; i++) {
       f.xs[i] = this.sx(f.xs[i]);
       f.ys[i] = this.sy(f.ys[i]);
@@ -569,7 +586,7 @@ export class Scene {
   }
 
   contenu(hy, co, P, opts) {
-    const sc = this.sc, T = hy.table(S_MAX + 2, 0.3), pt = this.pt;
+    const sc = this.sc, T = hy.table(S_VU + 2, 0.3), pt = this.pt;
     const K = this.pxUm;
 
     if (opts.granulation !== false) {
@@ -718,19 +735,37 @@ export class Scene {
   membraneLigne(hy, co, P, opts, it = 0) {
     if (opts.membrane === false) return;
     const sc = this.sc, mb = co.membrane;
-    const T = hy.table(S_MAX + 2, 0.3);
+    const T = hy.table(S_VU + 2, 0.3);
     const cM = hexToRgba(P.membrane), cPer = hexToRgba(P.periplasme);
     const cMol = hexToRgba(P.molecule);
     const K = this.pxUm;
     const { base } = this.peau();
 
     /* --- 1. une seule liste, de w = -A a w = +A ----------------------- */
+    /* Au-dela du domaine SIMULE, la membrane n'est plus une corde : a 34 um
+       de l'apex son surplus a ete absorbe depuis longtemps et elle colle a
+       la paroi. On prolonge donc la LIGNE le long du tube, jusqu'au bout de
+       ce qui est dessine, sans rien simuler — sinon le liseré s'arretait net
+       en plein milieu du tube, a l'endroit exact ou la corde finit. Meme pas
+       d'echantillonnage que le contour, pour que les deux restent
+       paralleles. */
+    const bout = [];
+    for (let a = mb.sMax; a < S_VU; ) {
+      a += pasContour(a, hy.Lc);
+      bout.push(Math.min(a, S_VU));
+    }
+
     const item = [];
+    for (let i = bout.length - 1; i >= 0; i--) {
+      const q = this.ptMembrane(mb, hy, T, -bout[i], 0, {});
+      q.hid = this.cache(it, q.x, q.y);
+      item.push(q);
+    }
     for (const [c, sens] of [[0, -1], [1, 1]]) {
       const ch = mb.ch[c], cote = c === 0 ? -1 : 1;
       const i0 = sens < 0 ? ch.n - 1 : 0, i1 = sens < 0 ? -1 : ch.n;
       for (let i = i0; i !== i1; i += sens) {
-        if (mb.sDepuisAge(ch.a[i]) > co.sMax) continue;
+        if (mb.sDepuisAge(ch.a[i]) > mb.sMax) continue;
         const q = this.ptMembrane(mb, hy, T, cote * ch.a[i], ch.off[i], {});
         /* La base d'une branche est ENFONCEE dans sa mere : la, il n'y a ni
            paroi ni membrane, c'est du cytoplasme continu. On marque le
@@ -739,6 +774,11 @@ export class Scene {
         q.hid = this.cache(it, q.x, q.y);
         item.push(q);
       }
+    }
+    for (let i = 0; i < bout.length; i++) {
+      const q = this.ptMembrane(mb, hy, T, bout[i], 0, {});
+      q.hid = this.cache(it, q.x, q.y);
+      item.push(q);
     }
 
     /* --- 2. les zones de fusion, deja regroupees par la simulation ---- */
@@ -866,7 +906,7 @@ export class Scene {
    */
   fusions(hy, co, P, opts, it = 0) {
     if (opts.vesicules === false) return;
-    const sc = this.sc, T = hy.table(S_MAX + 2, 0.3), pt = this.pt, K = this.pxUm;
+    const sc = this.sc, T = hy.table(S_VU + 2, 0.3), pt = this.pt, K = this.pxUm;
     const cMol = hexToRgba(P.molecule);
 
     for (const v of co.ves) {
@@ -1004,7 +1044,7 @@ export class Scene {
    * quand l'apex avance de trois pixels par seconde.
    */
   tracesParoi(hy, co, P, it = 0) {
-    const sc = this.sc, T = hy.table(S_MAX + 2, 0.3);
+    const sc = this.sc, T = hy.table(S_VU + 2, 0.3);
     const a = this._pd || (this._pd = { s: 0, v: 0, jeune: false });
     const p1 = this.pt, p2 = this._pt2 || (this._pt2 = { x: 0, y: 0 });
     const p3 = this._pt3 || (this._pt3 = { x: 0, y: 0 });

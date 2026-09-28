@@ -84,7 +84,11 @@ function dire(ok, titre, detail) { R.push({ ok, titre, detail }); }
   const m = manche({ duree: 90, graine: 5 });
   const nVes = m.co.ves.length, nMol = m.co.mols.length;
   const apicales = m.co.ves.filter((v) => v.etat === 2).length;
-  dire(nVes === 95 && nMol < 470 && apicales > 7,
+  /* La population est comparee a la consigne, pas a 95 : elle suit la
+     longueur du domaine simule, qui est passee de 34 a 70 um. Ce qu'on
+     verifie ici c'est qu'elle est STABLE — aucune vesicule perdue ni
+     dupliquee en 90 s — et que le reservoir apical se forme quand meme. */
+  dire(nVes === m.co.nVes && nMol < 470 && apicales > 7,
     'le Spitzenkorper se forme sans etre dessine',
     `${apicales} vesicules sur ${nVes} retenues dans le reservoir apical, ${nMol} molecules en vol`);
 }

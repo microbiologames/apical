@@ -35,7 +35,18 @@ import { clamp, lerp, smoothstep, mulberry32, TAU } from '../core/util.js';
 import { distParoi } from './hyphe.js';
 import { Membrane, zonesFusion } from './membrane.js';
 
-export const S_MAX = 34;          // um simules derriere l'apex
+/* um de tube PEUPLE derriere l'apex : vesicules, grains, organites, depots.
+   34 suffisait tant que la camera suivait l'apex — au-dela, la coupe du tube
+   etait hors champ de toute facon. Elle ne l'est plus : le tube est dessine
+   sur 200 um (Scene.S_VU) pour qu'une jonction de branche ne finisse pas
+   accrochee a un moignon, et un tube dessine mais vide se voit. 70 um
+   couvrent le cadre au grossissement le plus faible, avec de la marge. */
+export const S_MAX = 70;
+/* La MEMBRANE, elle, reste simulee sur 34 um. C'est une corde integree tous
+   les 0,09 um : la prolonger doublerait le cout pour une ligne qui, au-dela
+   de dix micrometres, est plate — son surplus est absorbe depuis longtemps.
+   Scene.membraneLigne prolonge le TRACE le long de la paroi, sans simuler. */
+export const S_MEMB = 34;
 const FLUX = 1.2;                 // um/s, vitesse du flux de masse pres du front
 const ZONE_APICALE = 7.5;         // um : zone d'exclusion des organites
 /* um verses par fusion moyenne. Se recalibre a chaque fois qu'on change le
@@ -91,7 +102,7 @@ export class Contenu {
        tube se referme — sans cette borne les vesicules s'entassaient dans
        le fond du bourgeon, la ou W(s) tend vers zero. */
     this.sMax = opts.sMax ?? S_MAX;
-    this.membrane = new Membrane(hy, this.sMax, S_MAX);
+    this.membrane = new Membrane(hy, Math.min(this.sMax, S_MEMB), S_MEMB);
     this.zones = [];
     this.fusions = 0;             // compteur, sert au banc
 
@@ -179,7 +190,7 @@ export class Contenu {
     const v = Math.min(sMax, S_MAX);
     if (v <= this.sMax + 1e-6) return;
     this.sMax = v;
-    this.membrane.sMax = v;
+    this.membrane.sMax = Math.min(v, S_MEMB);
     const nv = Math.round(this.densVes * v);
     while (this.ves.length < nv) this.ves.push(this.naitreVesicule());
     const ng = Math.round(this.densGrains * v);

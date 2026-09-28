@@ -47,6 +47,15 @@ impossible.
   l'avant et **jamais retouchée derrière** — une paroi construite est rigide ;
 - il n'existe qu'**une fonction de demi-largeur** `W(s)`, `s` étant l'abscisse
   curviligne depuis la pointe ;
+- le tube est **dessiné sur 200 µm** (`Scene.S_VU`) et **peuplé sur 70**
+  (`S_MAX`). Les deux étaient confondus à 34 µm, et le tube s'arrêtait donc
+  net. Tant que la caméra suit l'apex la coupe est hors champ ; dès qu'on
+  regarde autre chose — une jonction de branche, demain le thalle — elle
+  avance avec l'apex et finit par dépasser la ramification, qui se retrouve
+  accrochée à un moignon. La **membrane**, elle, n'est simulée que sur 34 µm
+  (`S_MEMB`) : c'est une corde intégrée tous les 0,09 µm et, au-delà de dix
+  micromètres, elle est plate. `Scene.membraneLigne` en prolonge le **tracé**
+  le long de la paroi, au même pas d'échantillonnage que le contour ;
 - le contour est **un polygone fermé** (`Hyphe.contour`) obtenu en parcourant
   `W(s)` d'un côté puis de l'autre. `W(0) = 0` : les deux côtés se rejoignent
   à la pointe, le tube se ferme tout seul.
@@ -280,7 +289,7 @@ solution »).
 | migration de la paroi neuve | pleine largeur en 20 s, 70 µm en 200 s | — |
 | matériau déversé hors périplasme | 0,0 % | — |
 | étanchéité | 0 vésicule hors du tube sur 4 × 30 s | — |
-| budget logique | 0,31 ms/image | 16,7 ms disponibles |
+| budget logique | 0,53 ms/image | 16,7 ms disponibles |
 
 Et pour la ramification :
 
@@ -387,6 +396,12 @@ partie du travail**, pas après, pendant.
   attendus. Mais 7 µm de tube **droit** planté en travers d'une mère de 11 µm
   ressortent par le flanc opposé. L'amorce part donc de l'axe maternel et
   s'incurve.
+- **Longueur simulée et longueur dessinée ne sont pas la même chose.** Les
+  confondre a coûté deux fois : d'abord une coupe franche en travers du tube
+  dès qu'on regardait ailleurs que l'apex, puis — en allongeant le dessin
+  sans allonger le contenu — un tube dessiné mais vide. Il y a maintenant
+  trois portées, et chacune a sa raison : 200 µm dessinés, 70 µm peuplés,
+  34 µm de membrane simulée.
 - **Un `sed` qui ne trouve pas son motif ne dit rien.** Deux remplacements
   successifs de `Q_FUSION` ont échoué en silence et j'ai documenté une valeur
   que le fichier n'avait pas. Seul le banc l'a vu (22,8 µm/min au lieu de 20).
