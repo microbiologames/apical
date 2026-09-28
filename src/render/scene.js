@@ -19,7 +19,7 @@
 --------------------------------------------------------------------------- */
 
 import { Screen, hexToRgba, mix32, fade32, shade32, rgba, bayer } from '../core/pixel.js';
-import { clamp, lerp, smoothstep, fbm2, hash2, noise1, TAU } from '../core/util.js';
+import { clamp, lerp, smoothstep, fbm2, noise2, hash2, noise1, TAU } from '../core/util.js';
 import { versMonde } from '../sim/hyphe.js';
 import { S_MAX } from '../sim/contenu.js';
 
@@ -53,6 +53,15 @@ export class Scene {
     if (this.w === w && this.h === h && this.mask) return;
     this.w = w; this.h = h;
     this.mask = new Uint8Array(w * h);
+    /* Le vignetage ne depend que de la position dans le cadre : le
+       recalculer par image coutait un hypot sur 118 000 pixels. */
+    this.vign = new Float32Array(w * h);
+    const cx = w * 0.5, cy = h * 0.5, rmax = Math.hypot(cx, cy);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        this.vign[y * w + x] = smoothstep(0.52, 1.02, Math.hypot(x - cx, y - cy) / rmax) * 0.85;
+      }
+    }
     this.dist = new Float32Array(w * h);
     this.dist.fill(BANDE + 1);
     this.box = { x0: 0, y0: 0, x1: w - 1, y1: h - 1 };
@@ -74,11 +83,14 @@ export class Scene {
     sc.beginFrame(fond);
 
     this.fond(P, opts);
+    if (opts.milieu !== false) this.milieu(P, t);
     this.contourEcran(hy);
     this.bandeDistance();
     this.cytoplasme(hy, P, t, opts);
     this.contenu(hy, co, P, opts);
     this.paroi(hy, P, opts);
+    if (opts.depots !== false) this.tracesParoi(hy, co, P);
+    if (opts.milieu !== false) this.milieuAvant(P);
 
     sc.composite(P.dither);
 
@@ -89,16 +101,97 @@ export class Scene {
   fond(P, opts) {
     const sc = this.sc, w = this.w, h = this.h;
     const c0 = hexToRgba(P.fond), c1 = hexToRgba(P.fondBord);
+    const inv = 1 / this.pxUm;
     const cx = w * 0.5, cy = h * 0.5;
-    const rmax = Math.hypot(cx, cy);
+    const ox = this.cam.x - cx * inv, oy = this.cam.y - cy * inv;
+    const vg = this.vign;
+    const asp = opts.milieu === false ? 0 : 1;
+    /* Texture du milieu, indexee sur les coordonnees MONDE : c'est elle qui
+       rend l'avancee lisible. Sur un fond uniforme l'apex a l'air de faire
+       du surplace meme quand il progresse de trois pixels par seconde.
+       Une seule octave de bruit bilineaire (4 hachages) plus un hachage sur
+       la cellule monde : a trois octaves la seule passe de fond coutait
+       6 ms et l'image tombait a 46 i/s. */
+    /* Evalue par blocs de 2x2 et mis en cache par ligne : la texture varie
+       sur ~30 px, l'echantillonner pixel par pixel coutait 2,4 millions de
+       hachages par image pour un resultat identique. Le pas de 2 se voit
+       d'autant moins qu'on est deja en pixel art. */
+    let cache = this._bruitFond;
+    if (!cache || cache.length !== (w >> 1) + 1) cache = this._bruitFond = new Float32Array((w >> 1) + 1);
     for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const d = Math.hypot(x - cx, y - cy) / rmax;
-        /* Vignetage : un objectif a immersion ne repartit pas la lumiere
-           uniformement, et c'est ce qui donne la lecture « au microscope ». */
-        const k = smoothstep(0.52, 1.02, d) * 0.85;
-        sc.px[y * w + x] = mix32(c0, c1, k) | 0xff000000;
+      const row = y * w;
+      if (asp && (y & 1) === 0) {
+        const wy = (oy + y * inv) * 0.72;
+        const wyh = ((oy + y * inv) * 3.1) | 0;
+        for (let i = 0; i <= (w >> 1); i++) {
+          const wx = ox + (i << 1) * inv;
+          cache[i] = ((noise2(wx * 0.72, wy, 61) - 0.5) * 0.74
+                    + (hash2((wx * 3.1) | 0, wyh, 83) - 0.5) * 0.26) * 0.13;
+        }
       }
+      for (let x = 0; x < w; x++) {
+        let c = mix32(c0, c1, vg[row + x]);
+        if (asp) c = shade32(c, cache[x >> 1]);
+        sc.px[row + x] = c | 0xff000000;
+      }
+    }
+  }
+
+  /**
+   * Particules du milieu : grains de gelose, debris, corps refringents.
+   * Tires d'un hachage de cellules en coordonnees MONDE, donc stables et
+   * infinis : la camera glisse dessus et c'est ce glissement qui donne
+   * l'impression de progression. Ecrits en direct, donc sous le tube.
+   */
+  milieu(P, t) {
+    const sc = this.sc, CELL = 2.4;
+    const inv = 1 / this.pxUm;
+    const x0 = this.cam.x - this.w * 0.5 * inv, x1 = this.cam.x + this.w * 0.5 * inv;
+    const y0 = this.cam.y - this.h * 0.5 * inv, y1 = this.cam.y + this.h * 0.5 * inv;
+    const cg = hexToRgba(P.milieuGrain), cd = hexToRgba(P.milieuDebris);
+    const cc = hexToRgba(P.milieuClair);
+    const av = [];
+    for (let cy = Math.floor(y0 / CELL) - 1; cy <= Math.ceil(y1 / CELL) + 1; cy++) {
+      for (let cx = Math.floor(x0 / CELL) - 1; cx <= Math.ceil(x1 / CELL) + 1; cx++) {
+        const h0 = hash2(cx, cy, 991);
+        if (h0 > 0.78) continue;
+        const wx = (cx + hash2(cx, cy, 11)) * CELL;
+        const wy = (cy + hash2(cx, cy, 23)) * CELL;
+        const px = this.sx(wx), py = this.sy(wy);
+        if (px < -8 || py < -8 || px > this.w + 8 || py > this.h + 8) continue;
+        const z = hash2(cx, cy, 37);
+        /* Debris flottant AU-DESSUS du plan focal. Le calque 7 a un rayon de
+           flou de 4 px et un gain de 4,2 : a 10 % des cellules et 11 px de
+           rayon, ils couvraient le champ de grosses taches molles, le tube
+           compris. 2 % des cellules, 4 px maximum, alpha 0,08. */
+        if (z > 0.978) { av.push([px, py, 1.6 + z * 2.6, cd]); continue; }
+        const k = hash2(cx, cy, 53);
+        if (k < 0.70) {
+          sc.direct(px, py, fade32(cg, 0.55 + z * 0.4));
+        } else if (k < 0.93) {
+          /* debris : trois pixels colles, jamais un disque parfait */
+          const a = fade32(cd, 0.5 + z * 0.4);
+          sc.direct(px, py, a);
+          sc.direct(px + (h0 < 0.4 ? 1 : -1), py, a);
+          sc.direct(px, py + (z < 0.5 ? 1 : -1), a);
+        } else {
+          /* corps refringent : un point clair cercle d'un liseré sombre */
+          sc.direct(px, py, fade32(cc, 0.8));
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            sc.direct(px + dx, py + dy, fade32(cd, 0.5));
+          }
+        }
+      }
+    }
+    this._avant = av;
+  }
+
+  /** Les quelques debris flottant AU-DESSUS du plan : tres flous, devant tout. */
+  milieuAvant(P) {
+    const sc = this.sc;
+    sc.layer(7);
+    for (const [x, y, r, c] of (this._avant || [])) {
+      sc.disc(x, y, r, fade32(c, 0.085));
     }
   }
 
@@ -249,7 +342,11 @@ export class Scene {
         if (x < -4 || y < -4 || x > this.w + 4 || y > this.h + 4) continue;
         const pl = this.plan(g.z);
         sc.layer(pl.idx);
-        const c = fade32(g.clair ? cc : cs, 0.82 - pl.dz * 0.22);
+        /* Les granules s'effacent en approchant de la calotte : elle est
+           occupee par les vesicules et par elles seules, c'est une
+           observation de MET (planche de reference, panneau C). */
+        const ap = 0.22 + 0.78 * smoothstep(0.9, 5.0, g.s);
+        const c = fade32(g.clair ? cc : cs, (0.82 - pl.dz * 0.22) * ap);
         sc.dot(x, y, g.r * 0.9, c);
       }
     }
@@ -285,6 +382,7 @@ export class Scene {
 
     if (opts.vesicules !== false) {
       const cv = hexToRgba(P.vesicule), cr = hexToRgba(P.vesiculeRim);
+      const cm = hexToRgba(P.membrane);
       for (const v of co.ves) {
         versMonde(T, v.s, v.v, pt);
         const x = this.sx(pt.x), y = this.sy(pt.y);
@@ -303,12 +401,27 @@ export class Scene {
           /* Une fusion se passe CONTRE la membrane : elle est dans le plan,
              donc nette. Floutee elle donnait une trainee blanche. */
           sc.layer(this.plan(v.z, 0, 1).idx);
-          /* Exocytose : elle s'aplatit contre la membrane et s'eclaircit. */
+          /* Fusion membranaire, en figure d'omega. La vesicule ne « cogne »
+             pas dans la paroi : sa membrane s'ouvre dans la membrane
+             plasmique, le col s'elargit, et le contenu part dans le
+             periplasme. On dessine donc DEUX choses — la vesicule qui
+             s'aplatit et disparait, et l'arc de membrane qui bombe. */
           const k = clamp(v.tf / 0.42, 0, 1);
           const r = v.r * K;
-          const ang = Math.atan2(this.sy(pt.y) - this.sy(hy.y), this.sx(pt.x) - this.sx(hy.x));
-          sc.ell(x, y, r * (1 - 0.55 * k), r * (1 + 0.75 * k), ang,
-                 mix32(cv, cr, k * 0.45));
+          /* Normale sortante au point de contact : le cap de l'apex tourne
+             de phi. C'est exactement l'angle qui a servi a choisir la cible. */
+          const nx = -Math.sin(hy.th), ny = Math.cos(hy.th);
+          const ox = Math.cos(hy.th) * Math.cos(v.phi) + nx * Math.sin(v.phi);
+          const oy = Math.sin(hy.th) * Math.cos(v.phi) + ny * Math.sin(v.phi);
+          const ang = Math.atan2(oy, ox);
+          sc.ell(x, y, r * (1 - 0.72 * k), r * (1 + 0.55 * k), ang,
+                 fade32(mix32(cv, cr, k * 0.45), 1 - k * 0.75));
+          /* L'arc : perpendiculaire a la normale, pousse vers l'exterieur,
+             il s'elargit puis se rabat. */
+          const bomb = Math.sin(Math.PI * k);
+          sc.cap(x + ox * (r * 0.5 + bomb * r * 0.5), y + oy * (r * 0.5 + bomb * r * 0.5),
+                 r * (1.1 + 1.5 * k), Math.max(clamp(0.05 * K, 0.8, 1.3), 1),
+                 ang + Math.PI / 2, fade32(cm, 0.35 + 0.55 * bomb));
         } else {
           /* Bille refringente : disque plein + coeur plus clair. Le liseré
              clair en BORDURE (disc(..., fill, rim)) faisait l'inverse — un
@@ -339,18 +452,36 @@ export class Scene {
 
   /* --- paroi ------------------------------------------------------------- */
 
+  /**
+   * L'enveloppe, en trois couches distinctes de l'exterieur vers l'interieur :
+   *
+   *   paroi          — chitine et glucanes, 0,1 a 0,3 um, rigide
+   *   periplasme     — l'espace ou le materiau deverse est assemble
+   *   membrane       — la membrane plasmique, 7 nm
+   *
+   * La distinction est le mecanisme meme : une vesicule fusionne avec la
+   * MEMBRANE et libere son contenu dans le periplasme ; la paroi se
+   * construit de l'exterieur de la membrane. Dessiner une seule ligne
+   * rendait ce mecanisme faux a l'ecran.
+   *
+   * Periplasme et membrane sont exageres d'un facteur ~20 : a l'echelle ils
+   * font ensemble un quinzieme de pixel. La paroi, elle, est a peu pres a
+   * l'echelle — et son epaisseur est en pixels ECRAN, jamais en um, sinon
+   * le tube devient une saucisse des qu'on zoome.
+   */
   paroi(hy, P, opts) {
     const { w, h, dist, mask } = this;
     const sc = this.sc;
     const b = this.box;
     const cP = hexToRgba(P.paroi), cJ = hexToRgba(P.paroiJeune);
     const cH = hexToRgba(P.halo);
+    const cM = hexToRgba(P.membrane), cPer = hexToRgba(P.periplasme);
     const halo = opts.halo === false ? 0 : P.haloForce;
+    const peau = opts.membrane !== false;
 
-    /* Epaisseur ECRAN. Une paroi hyphale fait 0,1 a 0,3 um : a ce
-       grossissement c'est 1 a 3 px, et ca ne doit jamais grossir avec le
-       zoom, sinon le tube devient une saucisse. */
     const e = clamp(0.19 * this.pxUm, 1.0, 2.6);
+    const gp = peau ? clamp(0.055 * this.pxUm, 0.7, 1.5) : 0;
+    const em = peau ? clamp(0.050 * this.pxUm, 0.8, 1.3) : 0;
     const ax = this.sx(hy.x), ay = this.sy(hy.y);
     const invPx = 1 / this.pxUm;
 
@@ -367,12 +498,29 @@ export class Scene {
         const dedans = mask[o] !== 0;
         const s = Math.hypot(x - ax, y - ay) * invPx;
         const mat = hy.maturite(s);
-        const c = mix32(cJ, cP, mat);
-        const ep = e * (0.72 + 0.28 * mat);
+        /* Texture de paroi indexee sur le MATERIAU (abscisse cumulee depuis
+           l'origine), pas sur la distance a l'apex. Indexee sur s elle
+           serait figee dans le repere de l'apex et la paroi aurait l'air
+           immobile ; indexee sur q elle glisse vers l'arriere a mesure que
+           l'apex avance, et c'est ce glissement qu'on veut voir. Symetrique
+           gauche-droite : une paroi de revolution depose des anneaux. */
+        const q = hy.total - s;
+        const gr = noise1(q * 1.7, 3) - 0.5;
+        const c = mix32(cJ, cP, clamp(mat + gr * 0.22, 0, 1));
+        const ep = e * (0.72 + 0.28 * mat) * (1 + gr * 0.16);
         if (d <= ep) {
           /* bande centree sur le contour, un peu plus dedans que dehors */
           const k = dedans ? d / (ep * 1.05) : d / (ep * 0.72);
-          if (k <= 1) { sc.plot(x, y, fade32(c, 1 - 0.45 * k * k)); continue; }
+          if (k <= 1) { sc.plot(x, y, fade32(c, (1 - 0.45 * k * k) * (1 + gr * 0.2))); continue; }
+        }
+        if (dedans && peau) {
+          if (d <= ep + gp) { sc.plot(x, y, fade32(cPer, 0.62)); continue; }
+          if (d <= ep + gp + em) {
+            /* La membrane est nette meme ou la paroi est encore jeune :
+               elle ne murit pas, elle est posee d'un coup par les fusions. */
+            sc.plot(x, y, fade32(cM, 0.88));
+            continue;
+          }
         }
         if (!dedans && halo > 0 && d < BANDE) {
           const k = 1 - (d - ep * 0.72) / (BANDE - ep * 0.72);
@@ -395,6 +543,53 @@ export class Scene {
           sc.plot(x, y, fade32(cH, k * k * halo * 0.55));
         }
       }
+    }
+  }
+
+  /**
+   * Traces de paroi neuve. Chacune est posee par une exocytose, a la
+   * latitude ou elle a eu lieu, puis remonte le profil du pole vers
+   * l'epaule et descend le flanc jusqu'a sortir du champ.
+   *
+   * C'est la reponse a « on ne voit pas que la paroi formee a la pointe se
+   * retrouve sur les bords » : une paroi uniforme a l'air immobile, meme
+   * quand l'apex avance de trois pixels par seconde.
+   */
+  tracesParoi(hy, co, P) {
+    const sc = this.sc, T = hy.table(S_MAX + 2, 0.3);
+    const a = this._pd || (this._pd = { s: 0, v: 0, jeune: false });
+    const p1 = this.pt, p2 = this._pt2 || (this._pt2 = { x: 0, y: 0 });
+    const p3 = this._pt3 || (this._pt3 = { x: 0, y: 0 });
+    const cF = hexToRgba(P.paroiFraiche), cP = hexToRgba(P.paroi);
+    const ep = clamp(0.19 * this.pxUm, 1.0, 2.6);
+    sc.layer(4);
+    for (const d of co.depots) {
+      co.posDepot(d, a);
+      if (a.s > S_MAX) continue;
+      versMonde(T, a.s, a.v, p1);
+      const x = this.sx(p1.x), y = this.sy(p1.y);
+      if (x < -6 || y < -6 || x > this.w + 6 || y > this.h + 6) continue;
+      /* Orientation : la tangente a la SURFACE, prise entre deux points du
+         contour — pas la tangente a l'axe. Avec l'axe, une trace posee au
+         pole etait dessinee perpendiculairement a la paroi et sortait du
+         tube comme une epingle. */
+      const s1 = Math.max(a.s - 0.25, 0), s2 = a.s + 0.25;
+      versMonde(T, s1, d.cote * hy.W(s1), p2);
+      versMonde(T, s2, d.cote * hy.W(s2), p3);
+      const ang = Math.atan2(this.sy(p3.y) - this.sy(p2.y), this.sx(p3.x) - this.sx(p2.x));
+      /* Eclat a la pose, puis une marque faible qui persiste : c'est la
+         PERSISTANCE qui rend le deplacement lisible, pas l'eclat. */
+      /* On le dessine DANS LE PERIPLASME, la ou le materiau deverse est
+         reellement assemble — pas sur la paroi, ou un trait clair sur une
+         paroi deja claire est invisible. Il glisse ensuite du pole vers
+         l'epaule avec le materiau. */
+      versMonde(T, a.s, 0, p2);
+      let ix = this.sx(p2.x) - x, iy = this.sy(p2.y) - y;
+      const il = Math.hypot(ix, iy) || 1; ix /= il; iy /= il;
+      const dec = ep * 1.25;
+      const al = 0.10 + 0.62 * Math.exp(-d.t / 2.6);
+      sc.cap(x + ix * dec, y + iy * dec, 0.5 * this.pxUm, ep * 0.9, ang,
+             fade32(mix32(cP, cF, 0.5), al * d.force));
     }
   }
 

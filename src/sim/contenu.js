@@ -37,12 +37,24 @@ import { distParoi } from './hyphe.js';
 export const S_MAX = 34;          // um simules derriere l'apex
 const FLUX = 1.2;                 // um/s, vitesse du flux de masse pres du front
 const ZONE_APICALE = 7.5;         // um : zone d'exclusion des organites
-const Q_FUSION = 0.277;           // um d'extension apportes par une fusion
+/* 0,243 um verses par fusion moyenne. Mesure : a 0,277 la croissance
+   sortait a 22,8 um/min contre les 20 de Neurospora. Deux `sed` precedents
+   avaient echoue en silence sur cette ligne et je l'ai crue changee — c'est
+   exactement le defaut que CLAUDE.md decrit : un chiffre documente sans
+   avoir ete mesure est un chiffre qu'on croit seulement avoir. */
+const Q_FUSION = 0.243;
 const TAUX_LIBERATION = 0.10;     // /s par vesicule retenue, x le pulse Ca2+
 /* La coalescence entre vesicules est un ornement, pas un debit. A 0,85 /s
    par paire en contact elle vidait le reservoir a 8 fusions/s, vingt fois
    plus vite que l'exocytose : le Spitzenkorper ne se formait jamais. */
 const TAUX_COALESCENCE = 0.045;
+/* Epaisseur de l'enveloppe : paroi (0,1-0,3 um) + espace periplasmique +
+   membrane plasmique (7 nm). Une vesicule fusionne avec la MEMBRANE, pas
+   avec la paroi : elle s'arrete donc a PEAU du contour exterieur, et son
+   contenu est deverse entre les deux. Le chiffre est exagere — la membrane
+   fait 7 nm, soit un quinzieme de pixel — mais la distinction est le
+   mecanisme meme de la croissance parietale. */
+const PEAU = 0.14;
 
 /** Tirage gaussien reduit, Box-Muller. */
 function gauss(rng) {
@@ -63,6 +75,11 @@ export class Contenu {
     this.grains = [];
     this.organites = [];
     this.mols = [];
+    /* Traces de paroi neuve. Chaque exocytose en pose une ; elle glisse
+       ensuite du pole vers l'epaule puis descend le flanc et sort du champ.
+       C'est le seul repere qui rend la croissance apicale VISIBLE : sans
+       lui, une paroi uniforme a l'air immobile meme quand l'apex avance. */
+    this.depots = [];
     this.fusions = 0;             // compteur, sert au banc
 
     /* Bilan de croissance. Les fusions versent dans la reserve, l'hyphe
@@ -187,6 +204,7 @@ export class Contenu {
     this.majGrains(dt, da);
     this.majOrganites(dt, da);
     this.majMolecules(dt, da);
+    this.majDepots(dt);
 
     /* Constante 0,55 s : c'est la duree pendant laquelle une vesicule
        fusionnee verse son materiau dans la paroi. */
@@ -289,7 +307,9 @@ export class Contenu {
       if (p.s > S_MAX + 2.5) { ves[i] = this.naitreVesicule(); continue; }
 
       /* --- paroi : contrainte exacte, calotte comprise ------------------- */
-      const dw = distParoi(hy, p.s, p.v, dp);
+      /* On soustrait PEAU : la vesicule bute sur la membrane plasmique,
+         qui est en retrait de la paroi. */
+      const dw = distParoi(hy, p.s, p.v, dp) - PEAU;
       if (dw < p.r) {
         const pen = p.r - dw;
         p.s += dp.ds * pen; p.v += dp.dv * pen;
@@ -365,27 +385,78 @@ export class Contenu {
    * amortisseur ajoute apres coup, c'est le temps qu'il faut au nuage de
    * vesicules pour se deplacer.
    */
+  /**
+   * Livraison. La vesicule a fusionne avec la MEMBRANE PLASMIQUE ; son
+   * contenu part dans l'espace periplasmique, entre la membrane et la
+   * paroi, ou il est assemble. C'est le seul mecanisme qui fait avancer
+   * l'hyphe : l'apex n'a pas de moteur.
+   */
   livrer(p) {
-    /* 0,168 um par fusion moyenne. Calibre pour ~2,5 fusions/s, soit
-       20 um/min : moins de fusions mais chacune lisible, conformement a
-       « chaque vesicule qui arrive porte un sens et un role ». */
     const q = Q_FUSION * (p.grosse ? 1.30 : 0.55);
     this.reserveA += q * Math.cos(p.phi);
     this.reserveC += q * Math.sin(p.phi);
     this.fusions++;
+
+    /* La trace de paroi neuve, posee a la latitude ou la fusion a eu lieu.
+       `u` est la fraction du trajet pole -> epaule ; elle avance ensuite
+       avec la croissance, pas avec le temps. */
+    const psi = clamp(Math.abs(p.phi), 0, Math.PI / 2);
+    this.depots.push({
+      u0: psi / (Math.PI / 2),
+      g0: this.hy.longueur,
+      cote: p.phi >= 0 ? 1 : -1,
+      force: p.grosse ? 1 : 0.6,
+      t: 0,
+    });
+    if (this.depots.length > 260) this.depots.shift();
+
+    /* Les molecules de precurseur : elles sortent de la membrane et
+       glissent dans le periplasme jusqu'a s'incorporer a la paroi. Elles ne
+       partent plus « un peu nulle part » — chacune a une paroi a rejoindre. */
     const n = p.grosse ? 11 : 6;
     for (let k = 0; k < n; k++) {
-      const a = p.phi + (this.rng() * 2 - 1) * 0.9;
+      const a = (this.rng() * 2 - 1) * 1.15;      // dispersion tangentielle
       this.mols.push({
-        s: Math.max(p.s + (this.rng() * 2 - 1) * 0.2, 0.05),
-        v: p.v + (this.rng() * 2 - 1) * 0.2,
-        vs: Math.sin(a) * 1.3 * (this.rng() * 0.8 + 0.4),
-        vv: -Math.cos(a) * 1.3 * (this.rng() * 2 - 1),
+        s: Math.max(p.s + (this.rng() * 2 - 1) * 0.16, 0.04),
+        v: p.v + (this.rng() * 2 - 1) * 0.16,
+        vs: Math.sin(a) * (0.45 + this.rng() * 0.5) * (this.rng() < 0.5 ? 1 : -1),
+        vv: Math.cos(a) * (0.45 + this.rng() * 0.5) * (p.v >= 0 ? 1 : -1),
         z: p.z,
         t: 0,
-        vie: 1.1 + this.rng() * 1.1,
+        vie: 0.9 + this.rng() * 0.9,
       });
     }
+  }
+
+  /** Vieillissement des traces ; on jette celles sorties du champ simule. */
+  majDepots(dt) {
+    const hy = this.hy, Lc = hy.Lc, d = this.depots;
+    for (let i = d.length - 1; i >= 0; i--) {
+      d[i].t += dt;
+      const g = hy.longueur - d[i].g0;
+      const u = d[i].u0 + g / Lc;
+      if (u >= 1 && Lc + (g - (1 - d[i].u0) * Lc) > S_MAX) d.splice(i, 1);
+    }
+  }
+
+  /**
+   * Position d'une trace : (s, v) dans le tube.
+   * Tant que u < 1 elle remonte le profil du pole vers l'epaule — c'est la
+   * paroi apicale qui s'etale en passant sous le dome, l'expansion
+   * orthogonale de Reinhardt reprise par Lew 2011 (fig. 2). Une fois a
+   * l'epaule la paroi est rigide : elle ne fait plus que s'eloigner.
+   */
+  posDepot(d, out) {
+    const hy = this.hy, Lc = hy.Lc;
+    const g = hy.longueur - d.g0;
+    const u = d.u0 + g / Lc;
+    let s;
+    if (u < 1) s = Lc * (1 - Math.cos(u * Math.PI / 2));
+    else s = Lc + (g - (1 - d.u0) * Lc);
+    out.s = s;
+    out.v = d.cote * hy.W(s);
+    out.jeune = u < 1;
+    return out;
   }
 
   majMolecules(dt, da) {
@@ -396,30 +467,44 @@ export class Contenu {
       if (m.t > m.vie) { mols.splice(i, 1); continue; }
       m.s += da + m.vs * dt;
       m.v += m.vv * dt;
-      m.vs *= 1 - clamp(2.6 * dt, 0, 0.9);
-      m.vv *= 1 - clamp(2.6 * dt, 0, 0.9);
-      /* Elles glissent le long de la paroi et s'y incorporent. */
-      const d = distParoi(hy, m.s, m.v, dp);
-      if (d < 0.05) { m.s += dp.ds * (0.05 - d); m.v += dp.dv * (0.05 - d); }
+      m.vs *= 1 - clamp(3.2 * dt, 0, 0.9);
+      m.vv *= 1 - clamp(3.2 * dt, 0, 0.9);
       if (m.s < 0.02) m.s = 0.02;
+      /* Elles restent dans l'espace periplasmique : plaquees contre la face
+         interne de la paroi, elles glissent le long d'elle et s'y
+         incorporent. Avant, elles derivaient vers l'interieur du tube et on
+         les voyait « partir un peu nulle part ». */
+      const d = distParoi(hy, m.s, m.v, dp);
+      const cible = PEAU * 0.45;
+      /* `dp` pointe vers l'INTERIEUR. Pour ramener la molecule vers la
+         paroi il faut donc soustraire, pas ajouter : avec le signe inverse
+         elles s'enfoncaient dans le cytoplasme et formaient une bande
+         sombre en travers du tube, exactement le « ca part un peu nulle
+         part » qu'on voulait corriger. */
+      const k = clamp(6 * dt, 0, 1);
+      m.s -= dp.ds * (d - cible) * k;
+      m.v -= dp.dv * (d - cible) * k;
     }
-    if (mols.length > 420) mols.splice(0, mols.length - 420);
+    if (mols.length > 460) mols.splice(0, mols.length - 460);
   }
 
   majGrains(dt, da) {
     const hy = this.hy, g = this.grains, rng = this.rng;
+    const dp = { ds: 0, dv: 0, phi: 0 };
     for (let i = 0; i < g.length; i++) {
       const p = g[i];
-      p.s += da - flux(p.s) * dt + (rng() * 2 - 1) * 0.35 * dt;
+      /* Plancher de 0,62 um/s sur le flux, soit nettement au-dessus de la
+         croissance (0,33). Sans lui, `da - flux.dt` change de signe vers
+         s = 1,6 um : les granules s'y accumulaient et dessinaient une
+         BANDE SOMBRE en travers du tube, juste derriere le Spitzenkorper.
+         Avec le plancher ils avancent toujours vers la pointe, y sont
+         consommes, et repartent du fond du champ. */
+      const f = Math.max(flux(p.s), 0.62);
+      p.s += da - f * dt + (rng() * 2 - 1) * 0.35 * dt;
       p.v += (rng() * 2 - 1) * 0.35 * dt;
-      if (p.s > S_MAX) { g[i] = this.naitreGrain(S_MAX); continue; }
-      if (p.s < 0.05) p.s = 0.05;
-      const w = distParoi(hy, p.s, p.v, null);
-      if (w < 0.12) {
-        const dp = { ds: 0, dv: 0, phi: 0 };
-        distParoi(hy, p.s, p.v, dp);
-        p.s += dp.ds * (0.12 - w); p.v += dp.dv * (0.12 - w);
-      }
+      if (p.s > S_MAX || p.s < 0.6) { g[i] = this.naitreGrain(S_MAX - rng() * 1.2); continue; }
+      const w = distParoi(hy, p.s, p.v, dp);
+      if (w < 0.12) { p.s += dp.ds * (0.12 - w); p.v += dp.dv * (0.12 - w); }
     }
   }
 

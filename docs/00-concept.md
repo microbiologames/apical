@@ -23,6 +23,21 @@ Il n'y a pas de but, pas de score, pas de fin. C'est le point.
 
 ## Les partis pris
 
+**L'enveloppe a trois couches.** Paroi, espace périplasmique, membrane
+plasmique. La vésicule fusionne avec la **membrane** et déverse dans le
+**périplasme** : c'est là que le matériau de paroi est assemblé. Dessiner une
+seule ligne rendait le mécanisme faux — la vésicule avait l'air de cogner dans
+la paroi.
+
+**La paroi neuve migre du pôle vers le flanc.** Chaque exocytose pose une trace
+qui remonte le profil de l'apex, atteint la pleine largeur en 17 secondes, puis
+descend le flanc et sort du champ. C'est le seul repère qui rend la croissance
+apicale visible : une paroi uniforme a l'air immobile.
+
+**Le milieu extérieur a du grain.** Gélose, débris, corps réfringents, tirés
+d'un hachage en coordonnées monde. Sans repère fixe hors du tube, l'apex a
+l'air de faire du surplace.
+
 **Le tube est un seul objet.** Détaillé dans `CLAUDE.md`, règle 1. C'est la
 contrainte qui a fait échouer le projet précédent et c'est la première chose
 qui a été construite ici.

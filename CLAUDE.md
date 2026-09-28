@@ -72,7 +72,39 @@ la paroi se construise : **10,7 s mesurées** pour atteindre 63 % de la vitesse
 angulaire. On ne peut pas raccourcir ce délai sans casser le mécanisme — c'est
 exactement l'inertie demandée.
 
-### 3. Le Spitzenkörper n'est jamais dessiné
+### 3. Trois couches, pas une
+
+De l'extérieur vers l'intérieur : **paroi** (chitine et glucanes, 0,1–0,3 µm,
+rigide), **espace périplasmique**, **membrane plasmique** (7 nm). La
+distinction n'est pas décorative, c'est le mécanisme : une vésicule fusionne
+avec la **membrane** et déverse son contenu dans le **périplasme**, où le
+matériau est assemblé en paroi. Une seule ligne rendait ce mécanisme faux à
+l'écran.
+
+Périplasme et membrane sont exagérés d'un facteur ~20 — ensemble ils font un
+quinzième de pixel. La paroi, elle, est à peu près à l'échelle.
+
+### 4. La paroi neuve migre, et ça doit se voir
+
+Une hyphe s'allonge par son apex : la paroi formée à la pointe se retrouve
+progressivement sur les flancs, puis hors champ. Une paroi uniforme a l'air
+immobile même quand l'apex avance de trois pixels par seconde. Deux dispositifs
+rendent ce déplacement lisible :
+
+- chaque exocytose pose une **trace** (`Contenu.depots`) à la latitude où elle
+  a eu lieu. Elle remonte le profil du pôle vers l'épaule — l'expansion
+  orthogonale de Reinhardt, reprise par Lew 2011 fig. 2 — puis descend le flanc
+  à vitesse constante. **Mesuré : pleine largeur après 17 s, 70 µm derrière
+  l'apex après 200 s.**
+- la **texture de paroi** est indexée sur l'abscisse cumulée depuis l'origine,
+  pas sur la distance à l'apex. Indexée sur `s` elle serait figée dans le
+  repère de l'apex ; indexée sur le matériau elle glisse vers l'arrière.
+
+Même raisonnement pour le milieu extérieur : le grain de gélose et les débris
+sont tirés d'un hachage de cellules en **coordonnées monde**. Sans repère fixe
+hors du tube, il n'y a aucune impression de progression.
+
+### 5. Le Spitzenkörper n'est jamais dessiné
 
 C'est une densité, pas un objet : un puits de rétention à ~2 µm de la pointe,
 et le nuage apparaît tout seul. Le dessiner net était la mauvaise réponse
@@ -85,13 +117,15 @@ solution »).
 
 | | mesuré | référence |
 |---|---|---|
-| croissance | 18,8 µm/min | 20 µm/min (*Neurospora*, Lew 2011) |
-| exocytoses | 1,6 /s, une toutes les 0,62 s | — |
-| extension par fusion | 194 nm | — |
-| rayon de virage, consigne pleine | 79 µm | unité de croissance hyphale ~110 µm |
-| inertie du cap (63 %) | 10,7 s | — |
+| croissance | 18,9 µm/min | 20 µm/min (*Neurospora*, Lew 2011) |
+| exocytoses | 1,73 /s, une toutes les 0,58 s | — |
+| extension par fusion | 184 nm | — |
+| rayon de virage, consigne pleine | 82 µm | unité de croissance hyphale ~110 µm |
+| inertie du cap (63 %) | 7,2 s | — |
+| migration de la paroi neuve | pleine largeur en 17 s, 70 µm en 200 s | — |
+| matériau déversé hors périplasme | 7,1 % | — |
 | étanchéité | 0 vésicule hors du tube sur 4 × 30 s | — |
-| budget logique | 0,17 ms/image | 16,7 ms disponibles |
+| budget logique | 0,18 ms/image | 16,7 ms disponibles |
 
 Un chiffre documenté sans avoir été mesuré est un chiffre qu'on croit seulement
 avoir. Ça s'est déjà payé.
@@ -125,3 +159,21 @@ partie du travail**, pas après, pendant.
 - Le recul de caméra se calcule sur l'**étendue du cadre en pixels**, pas sur
   une constante en µm — et la `Scene` doit connaître sa taille **avant** la
   première simulation, sinon la caméra part à NaN et l'image est vide.
+- `distParoi` renvoie la direction **rentrante**. Pour ramener une molécule
+  vers la paroi il faut donc **soustraire**. Avec le signe inverse, les
+  molécules libérées s'enfonçaient dans le cytoplasme au lieu de s'incorporer,
+  et 100 % d'entre elles finissaient à plus de 0,3 µm de la paroi — visible à
+  l'écran comme une bande sombre en travers du tube.
+- `flux(s)` descend sous la vitesse de croissance près de la pointe. Les
+  granules y trouvaient donc un **point de stagnation vers s = 1,6 µm** et s'y
+  accumulaient en une barre sombre. D'où le plancher à 0,62 µm/s dans
+  `majGrains` : ils avancent toujours, sont consommés à l'apex, et repartent du
+  fond du champ.
+- Une trace de paroi s'oriente sur la tangente à la **surface**, jamais sur
+  celle de l'axe : au pôle les deux sont perpendiculaires et la trace sortait
+  du tube comme une épingle.
+- **Un `sed` qui ne trouve pas son motif ne dit rien.** Deux remplacements
+  successifs de `Q_FUSION` ont échoué en silence et j'ai documenté une valeur
+  que le fichier n'avait pas. Seul le banc l'a vu (22,8 µm/min au lieu de 20).
+  Vérifier le fichier après chaque substitution, ou passer par Python avec un
+  `assert`.

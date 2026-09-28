@@ -36,6 +36,7 @@ export class App {
 
     this.opts = {
       vesicules: true, granulation: true, organites: true,
+      membrane: true, depots: true, milieu: true,
       halo: true, grain: true, echelle: true,
       exocytose: true, fusion: true,
     };

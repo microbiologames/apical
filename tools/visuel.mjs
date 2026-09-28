@@ -41,6 +41,8 @@ for (const e of (plan.length ? plan : defaut)) {
   if (e.vit) await page.click(`[data-vit="${e.vit}"]`);
   if (e.cal) await page.$eval('#cCal', (el, v) => { el.value = v; el.dispatchEvent(new Event('input')); }, String(e.cal));
   if (e.zoom) await page.$eval('#cZoom', (el, v) => { el.value = v; el.dispatchEvent(new Event('input')); }, String(e.zoom));
+  for (const o of (e.off || [])) await page.$eval(`[data-opt="${o}"]`, (el) => { if (el.checked) { el.checked = false; el.dispatchEvent(new Event('change')); } });
+  for (const o of (e.on || [])) await page.$eval(`[data-opt="${o}"]`, (el) => { if (!el.checked) { el.checked = true; el.dispatchEvent(new Event('change')); } });
   await page.waitForTimeout(e.attente ?? 1200);
   if (e.vit) await page.click('[data-vit="1"]');
   await page.locator('#vue').screenshot({ path: `${OUT}/${e.nom}.png` });

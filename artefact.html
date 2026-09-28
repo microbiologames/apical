@@ -215,6 +215,9 @@ td.n{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:now
         <label class="bascule"><input id="oVes" type="checkbox" data-opt="vesicules" checked>vésicules</label>
         <label class="bascule"><input id="oGra" type="checkbox" data-opt="granulation" checked>granulation</label>
         <label class="bascule"><input id="oOrg" type="checkbox" data-opt="organites" checked>organites</label>
+        <label class="bascule"><input id="oMem" type="checkbox" data-opt="membrane" checked>membrane</label>
+        <label class="bascule"><input id="oDep" type="checkbox" data-opt="depots" checked>paroi neuve</label>
+        <label class="bascule"><input id="oMil" type="checkbox" data-opt="milieu" checked>milieu</label>
         <label class="bascule"><input id="oHal" type="checkbox" data-opt="halo" checked>halo de phase</label>
         <label class="bascule"><input id="oGrn" type="checkbox" data-opt="grain" checked>grain de capteur</label>
         <label class="bascule"><input id="oEch" type="checkbox" data-opt="echelle" checked>échelle</label>
@@ -226,8 +229,9 @@ td.n{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:now
 
   <p class="legende"><strong>Pointeur</strong> déplace la consigne du gradient de calcium, pas le
   cap : comptez une dizaine de secondes avant que la géométrie bouge. <strong>Calotte</strong> et
-  <strong>profil</strong> règlent la fermeture de l'apex ; c'est le point à trancher en premier.
-  La barre d'échelle fait 10 µm.</p>
+  <strong>profil</strong> règlent la fermeture de l'apex. <strong>Paroi neuve</strong> montre les
+  traces déposées par chaque exocytose — regardez-les remonter du pôle vers le flanc, c'est
+  l'allongement apical lui-même. La barre d'échelle fait 10 µm.</p>
 
   <div class="colonnes">
     <section>
@@ -244,13 +248,43 @@ td.n{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:now
     </section>
 
     <section>
+      <h2>Trois couches, pas une</h2>
+      <p>De l'extérieur vers l'intérieur : la <strong>paroi</strong> — chitine et glucanes,
+      0,1 à 0,3 µm, rigide —, l'<strong>espace périplasmique</strong>, et la <strong>membrane
+      plasmique</strong>. La distinction n'est pas décorative, c'est le mécanisme : la vésicule
+      fusionne avec la <em>membrane</em>, en figure d'oméga, et déverse son contenu dans le
+      <em>périplasme</em>, où le matériau est assemblé en paroi.</p>
+      <p>Les précurseurs libérés restent plaqués contre la face interne de la paroi et s'y
+      incorporent — <strong>7,1 %</strong> seulement s'en écartent de plus de 0,3 µm. Ils ne
+      partent plus nulle part.</p>
+      <p>Périplasme et membrane sont exagérés d'un facteur vingt : ensemble ils font un quinzième
+      de pixel. La paroi, elle, est à peu près à l'échelle — et son épaisseur est en pixels écran,
+      jamais en micromètres, sinon le tube devient une saucisse dès qu'on zoome.</p>
+    </section>
+
+    <section>
+      <h2>La paroi neuve migre</h2>
+      <p>Une hyphe s'allonge par son apex : la paroi formée à la pointe se retrouve
+      progressivement sur les flancs, puis hors champ. Chaque exocytose pose une trace à la
+      latitude où elle a eu lieu ; la trace remonte le profil du pôle vers l'épaule — l'expansion
+      orthogonale décrite par Reinhardt en 1892 — puis descend le flanc à vitesse constante.</p>
+      <p><strong>Mesuré :</strong> une trace posée à 0,24 µm de la pointe atteint la pleine
+      largeur après 17 s, et se trouve 70 µm derrière l'apex au bout de trois minutes.</p>
+      <p>La texture de la paroi suit la même règle : elle est indexée sur le matériau, pas sur la
+      distance à l'apex. Indexée sur l'apex elle serait figée et la paroi aurait l'air immobile
+      même quand le tube avance de trois pixels par seconde. Le grain du milieu extérieur est
+      lui aussi fixe dans le monde — sans repère hors du tube, il n'y a pas de progression, juste
+      une forme qui palpite.</p>
+    </section>
+
+    <section>
       <h2>L'apex n'a pas de moteur</h2>
       <p>Rien n'impose un cap à la géométrie. Une vésicule qui fusionne avec la membrane verse
-      194 nm d'extension à l'angle où elle a touché. L'hyphe ne fait que consommer ce bilan, à
+      184 nm d'extension à l'angle où elle a touché. L'hyphe ne fait que consommer ce bilan, à
       travers un passe-bas de 0,55 s — la paroi ne se construit pas en une image.</p>
       <p>Le pilotage ne déplace donc que la consigne angulaire du gradient de Ca²⁺, c'est-à-dire
       l'endroit d'où les vésicules partent. Entre la demande et le virage, il faut que le nuage se
-      décale, qu'il fusionne, et que la paroi se construise : <strong>10,7 s mesurées</strong> pour
+      décale, qu'il fusionne, et que la paroi se construise : <strong>7,2 s mesurées</strong> pour
       atteindre 63 % de la vitesse angulaire. On ne peut pas raccourcir ce délai sans casser le
       mécanisme. C'est l'inertie demandée, obtenue par sa cause plutôt que par un amortisseur.</p>
     </section>
@@ -270,16 +304,19 @@ td.n{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:now
       <h2>Mesuré</h2>
       <div class="wrap"><table>
         <tr><th>Grandeur</th><th>Ici</th><th>Référence</th></tr>
-        <tr><td>Croissance</td><td class="n">18,8 µm/min</td><td class="n">20 µm/min</td></tr>
-        <tr><td>Exocytoses</td><td class="n">1,6 /s</td><td class="n">—</td></tr>
-        <tr><td>Extension par fusion</td><td class="n">194 nm</td><td class="n">—</td></tr>
-        <tr><td>Rayon de virage</td><td class="n">79 µm</td><td class="n">~110 µm*</td></tr>
-        <tr><td>Inertie du cap (63 %)</td><td class="n">10,7 s</td><td class="n">—</td></tr>
+        <tr><td>Croissance</td><td class="n">18,9 µm/min</td><td class="n">20 µm/min</td></tr>
+        <tr><td>Exocytoses</td><td class="n">1,73 /s</td><td class="n">—</td></tr>
+        <tr><td>Extension par fusion</td><td class="n">184 nm</td><td class="n">—</td></tr>
+        <tr><td>Rayon de virage</td><td class="n">82 µm</td><td class="n">~110 µm*</td></tr>
+        <tr><td>Inertie du cap (63 %)</td><td class="n">7,2 s</td><td class="n">—</td></tr>
+        <tr><td>Paroi neuve : pleine largeur</td><td class="n">17 s</td><td class="n">—</td></tr>
+        <tr><td>Précurseurs hors périplasme</td><td class="n">7,1 %</td><td class="n">—</td></tr>
         <tr><td>Fuites de vésicules</td><td class="n">0 / 120 s</td><td class="n">0</td></tr>
-        <tr><td>Budget logique</td><td class="n">0,17 ms/image</td><td class="n">16,7 ms</td></tr>
+        <tr><td>Budget logique</td><td class="n">0,18 ms/image</td><td class="n">16,7 ms</td></tr>
       </table></div>
       <p style="margin-top:12px"><em>* unité de croissance hyphale, Trinci. Les valeurs de
-      référence de croissance sont celles de</em> Neurospora crassa.</p>
+      référence de croissance sont celles de</em> Neurospora crassa. <em>Neuf verdicts, mesurés
+      sans rendu à chaque modification.</em></p>
     </section>
 
     <section>

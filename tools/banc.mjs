@@ -86,6 +86,64 @@ function dire(ok, titre, detail) { R.push({ ok, titre, detail }); }
     `${apicales} vesicules sur ${nVes} retenues dans le reservoir apical, ${nMol} molecules en vol`);
 }
 
+/* 8. la paroi neuve migre du pole vers le flanc */
+{
+  const hy = new Hyphe({ graine: 9 });
+  const co = new Contenu(hy, { graine: 9 });
+  const dt = 1 / 60;
+  let t = 0, trace = null;
+  const a = { s: 0, v: 0, jeune: false };
+  while (t < 140) {
+    co.maj(dt, 0, {});
+    hy.avancer(co.avance, dt);
+    if (!trace && co.depots.length) trace = co.depots[0];
+    t += dt;
+  }
+  /* on reprend le tout premier depot et on regarde ou il en est */
+  const suivi = [];
+  {
+    const hy2 = new Hyphe({ graine: 9 });
+    const co2 = new Contenu(hy2, { graine: 9 });
+    let t2 = 0, d0 = null;
+    while (t2 < 200) {
+      co2.maj(dt, 0, {});
+      hy2.avancer(co2.avance, dt);
+      /* On suit une trace posee PRES DU POLE : une trace nee a l'epaule
+         n'a plus de trajet a faire, elle ne mesure rien. */
+      if (!d0) d0 = co2.depots.find((z) => z.u0 < 0.22) || null;
+      if (d0) { co2.posDepot(d0, a); suivi.push({ t: t2, s: a.s, v: Math.abs(a.v) }); }
+      t2 += dt;
+    }
+    var R2 = hy2.R, Lc2 = hy2.Lc;
+  }
+  const debut = suivi[0], fin = suivi[suivi.length - 1];
+  const epaule = suivi.find((p) => p.v > R2 * 0.97);
+  dire(debut.v < R2 * 0.55 && !!epaule && fin.s > 20,
+    'la paroi neuve migre du pole vers le flanc puis sort du champ',
+    `posee a ${debut.s.toFixed(2)} um / ${debut.v.toFixed(2)} um de l'axe, `
+    + `pleine largeur (${R2} um) apres ${epaule ? epaule.t.toFixed(0) : '—'} s, `
+    + `a ${fin.s.toFixed(0)} um derriere l'apex a la fin`);
+}
+
+/* 9. le materiau deverse reste dans le periplasme */
+{
+  const hy = new Hyphe({ graine: 11 });
+  const co = new Contenu(hy, { graine: 11 });
+  const dt = 1 / 60;
+  let t = 0, loin = 0, total = 0;
+  while (t < 60) {
+    co.maj(dt, 0, {});
+    hy.avancer(co.avance, dt);
+    /* La bonne mesure est la DISTANCE a la paroi, pas le rapport au rayon :
+       au pole une molecule posee sur la surface a v = 0 et W = 0. */
+    for (const m of co.mols) { total++; if (distParoi(hy, m.s, m.v, null) > 0.30) loin++; }
+    t += dt;
+  }
+  const part = total ? loin / total : 1;
+  dire(part < 0.12, 'le materiau deverse reste plaque contre la paroi',
+    `${(part * 100).toFixed(1)} % des molecules-images a plus de 0,30 um de la paroi (seuil 12 %), sur ${total} echantillons`);
+}
+
 /* 7. budget */
 {
   const t0 = performance.now();
