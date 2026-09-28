@@ -1,0 +1,47 @@
+<title>Apex</title>
+<style>
+:root{ color-scheme: dark; --ombre:#07080a; --encre:#cfd3da; --trait:#22252b; --laiton:#cfae6c; }
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--ombre);overflow:hidden;
+  font:12px/1.4 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--encre)}
+#vue{position:fixed;inset:0;display:grid;place-items:center;background:var(--ombre);overflow:hidden}
+canvas{image-rendering:pixelated;image-rendering:crisp-edges;display:block;touch-action:none}
+#barre{
+  position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(16px + env(safe-area-inset-bottom,0px));
+  display:flex;gap:6px;align-items:center;padding:6px;border-radius:999px;
+  background:rgba(12,14,17,.82);border:1px solid var(--trait);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  opacity:0;pointer-events:none;transition:opacity .45s ease;
+}
+#barre.vu{opacity:1;pointer-events:auto}
+button{
+  font:inherit;font-size:12px;color:var(--encre);background:transparent;
+  border:1px solid transparent;border-radius:999px;padding:5px 12px;cursor:pointer;
+}
+button:hover{background:#1a1d22}
+button:focus-visible{outline:2px solid var(--laiton);outline-offset:1px}
+button[aria-pressed="true"]{background:var(--laiton);color:#14110a;font-weight:600}
+#bPause,#bNeuf{min-width:34px;padding:5px 10px;font-size:13px}
+.sep{width:1px;align-self:stretch;background:var(--trait);margin:2px 3px}
+@media (prefers-reduced-motion:reduce){#barre{transition:none}}
+</style>
+
+<div id="vue"><canvas id="toile"></canvas></div>
+<div id="barre">
+  <button id="bPause" aria-pressed="false" aria-label="Pause">&#8214;</button>
+  <span class="sep"></span>
+  <button data-pal="phase" aria-pressed="true">Phase</button>
+  <button data-pal="noir" aria-pressed="false">Fond noir</button>
+  <button data-pal="met" aria-pressed="false">MET</button>
+  <span class="sep"></span>
+  <button id="bNeuf" aria-label="Une autre hyphe">&#8635;</button>
+</div>
+
+<script type="module">
+import { App } from './src/main.js';
+import { PALETTES } from './src/data/palette.js';
+import { brancherCadre } from './src/cadre.js';
+brancherCadre(new App(document.getElementById('toile'), document.getElementById('vue')), PALETTES);
+</script>

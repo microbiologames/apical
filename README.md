@@ -11,6 +11,9 @@ npm run visuel    # captures de contrôle
 
 Trois optiques : contraste de phase, fond noir, microscopie électronique.
 
+`cadre.html` est la version contemplative figée : la simulation seule, plein
+cadre, sans panneau. Une hyphe différente à chaque chargement.
+
 `ramification.html` est une proposition : trois concepts d'animation pour la
 ramification, avec les silhouettes calculées (union adoucie de deux distances
 signées) qui prouvent qu'une branche reste un seul objet. En attente d'arbitrage.

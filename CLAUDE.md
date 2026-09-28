@@ -34,7 +34,7 @@ que l'exocytose » évite de refaire l'erreur.
 
 ---
 
-## Les huit règles de fond
+## Les neuf règles de fond
 
 ### 1. L'hyphe est UN objet
 
@@ -203,12 +203,31 @@ Les silhouettes de la page sont extraites au niveau zéro de ce champ : c'est la
 géométrie exacte que le moteur devra produire, vérifiée avant d'écrire une
 ligne de moteur.
 
-Reste à arbitrer par l'auteur : le mécanisme (second Spitzenkörper sub-apical,
-ou bifurcation apicale en Y), la caméra (rester sur la mère, reculer, ou ouvrir
-un second cadre), et si la branche a son propre cytoplasme ou hérite de celui
-du parent.
+**Arbitré.** Mécanisme **A**, second Spitzenkörper sub-apical ; la bifurcation
+apicale reste en réserve comme événement rare. La caméra **peut suivre la
+fille** — c'est l'intérêt de brancher : l'apex ne tourne pas serré (58 µm de
+rayon), la branche part à 60–80°, donc **brancher est la seule façon de tourner
+vite**. Détail et suite dans `docs/02-thalle-et-jeu.md`, qui fixe aussi
+l'architecture à deux échelles.
 
-### 8. Le Spitzenkörper n'est jamais dessiné
+### 8. Deux échelles, un seul axe — *à construire*
+
+`docs/02-thalle-et-jeu.md`. Le macro simule tout le mycélium en permanence
+(axe grossier, cap, vitesse, règle de ramification, 2–5 Hz, front seulement) ;
+le micro n'existe que pour l'hyphe regardée. **Le code porte déjà la
+séparation** : `Hyphe` tient l'axe et la croissance, `Contenu` et `Membrane`
+sont des pièces attachées. Zoomer, c'est attacher un intérieur à un axe qui
+existe déjà — pas instancier une nouvelle hyphe.
+
+Deux contraintes non négociables : la vitesse macro est **calibrée sur la
+micro**, jamais choisie (sinon la forme de la colonie dépend de l'endroit qu'on
+regarde) ; et le fondu de transition dure **exactement le temps du
+préchauffage**, ce n'est pas un cache, c'est une horloge.
+
+`cadre.html` est la version contemplative **figée** : la simulation seule, sans
+panneau. Le travail sur le jeu part d'ailleurs et n'y touche pas.
+
+### 9. Le Spitzenkörper n'est jamais dessiné
 
 C'est une densité, pas un objet : un puits de rétention à ~2 µm de la pointe,
 et le nuage apparaît tout seul. Le dessiner net était la mauvaise réponse
