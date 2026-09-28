@@ -11,6 +11,9 @@ npm run visuel    # captures de contrôle
 
 Trois optiques : contraste de phase, fond noir, microscopie électronique.
 
+`artefact.html` est la version publiée sur claude.ai : même simulation, sans
+squelette HTML (la plateforme le fournit), avec le texte de présentation.
+
 Cohérent avec Lew RR, *How does a hypha grow? The biophysics of pressurized
 growth in fungi*, Nature Reviews Microbiology 9:509 (2011) — voir
 `docs/01-physiologie.md` pour ce qui est repris et ce qui est simplifié.

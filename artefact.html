@@ -1,0 +1,334 @@
+<title>Croissance apicale</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;450;600&display=swap">
+<style>
+:root{
+  color-scheme: light;
+  --ground:#efece4;        /* gélose pâle */
+  --surface:#e3ded2;
+  --surface-2:#d8d2c4;
+  --ink:#1d1f22;
+  --ink-2:#5d5f64;
+  --ink-3:#8a8b8f;
+  --rule:#c8c1b0;
+  --brass:#8a6520;         /* le laiton d'un vieux tube d'objectif */
+  --brass-soft:#b08b3d;
+  --stage:#0a0b0d;
+  --serif:"Fraunces",Georgia,"Times New Roman",serif;
+  --sans:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --ground:#0c0d10;
+    --surface:#15171b;
+    --surface-2:#1d2026;
+    --ink:#e9e6df;
+    --ink-2:#a2a49f;
+    --ink-3:#74767b;
+    --rule:#2a2e35;
+    --brass:#cfae6c;
+    --brass-soft:#9d854f;
+    --stage:#08090b;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --ground:#0c0d10;
+  --surface:#15171b;
+  --surface-2:#1d2026;
+  --ink:#e9e6df;
+  --ink-2:#a2a49f;
+  --ink-3:#74767b;
+  --rule:#2a2e35;
+  --brass:#cfae6c;
+  --brass-soft:#9d854f;
+  --stage:#08090b;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--sans); font-size:15px; line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+.page{max-width:1120px; margin:0 auto; padding-inline:16px; padding-block:28px 64px}
+
+/* ---- en-tête ---- */
+.eyebrow{
+  font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--brass); margin:0 0 10px;
+}
+h1{
+  font-family:var(--serif); font-optical-sizing:auto; font-weight:600;
+  font-size:clamp(2rem,6vw,3.1rem); line-height:1.04; letter-spacing:-.015em;
+  margin:0 0 12px; text-wrap:balance;
+}
+.lead{margin:0 0 26px; max-width:62ch; color:var(--ink-2); font-size:clamp(15px,1.9vw,17px)}
+.lead b{color:var(--ink); font-weight:600}
+
+/* ---- instrument ---- */
+.instrument{
+  border:1px solid var(--rule); border-radius:3px; overflow:hidden;
+  background:var(--surface); box-shadow:0 1px 0 rgba(0,0,0,.05);
+}
+#vue{
+  position:relative; background:var(--stage); overflow:hidden;
+  display:grid; place-items:center;
+  height:min(68vh,760px); min-height:380px;
+}
+canvas{image-rendering:pixelated; image-rendering:crisp-edges; display:block; touch-action:none}
+#titre{
+  position:absolute; top:0; left:0; right:0; display:flex; gap:12px;
+  justify-content:space-between; align-items:baseline; pointer-events:none;
+  padding:9px 13px; font-family:var(--mono); font-size:10.5px;
+  letter-spacing:.09em; text-transform:uppercase; color:#8f9299;
+  text-shadow:0 1px 3px rgba(0,0,0,.7);
+}
+#mesures{text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums}
+#mesures b{color:#d6bc86; font-weight:500}
+
+/* ---- pupitre ---- */
+#panneau{
+  background:var(--surface-2); border-top:1px solid var(--rule);
+  padding:11px 13px; display:flex; flex-direction:column; gap:9px;
+}
+.rangee{display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center}
+.groupe{display:flex; align-items:center; gap:6px; flex-wrap:wrap}
+.groupe>span,.curseur{
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--ink-3);
+}
+button{
+  font-family:var(--sans); font-size:12.5px; font-weight:450; color:var(--ink);
+  background:transparent; border:1px solid var(--rule); border-radius:2px;
+  padding:4px 10px; cursor:pointer; transition:background .12s,border-color .12s;
+}
+button:hover{background:var(--surface); border-color:var(--brass-soft)}
+button:focus-visible{outline:2px solid var(--brass); outline-offset:1px}
+button[aria-pressed="true"]{
+  background:var(--brass); border-color:var(--brass); color:var(--ground); font-weight:600;
+}
+label.bascule{
+  display:inline-flex; align-items:center; gap:5px; cursor:pointer;
+  font-size:12.5px; color:var(--ink-3);
+}
+label.bascule input{accent-color:var(--brass); margin:0}
+label.bascule:has(input:checked){color:var(--ink)}
+.curseur{display:flex; align-items:center; gap:7px}
+.curseur input[type=range]{width:104px; accent-color:var(--brass)}
+.curseur output{
+  font-family:var(--mono); font-size:11px; text-transform:none; letter-spacing:0;
+  color:var(--ink); min-width:3.2em; font-variant-numeric:tabular-nums;
+}
+#notice{display:none}
+.legende{
+  margin:10px 2px 0; font-size:12.5px; color:var(--ink-3); max-width:76ch;
+}
+
+/* ---- texte ---- */
+.colonnes{
+  margin-top:44px; display:grid; gap:34px 46px;
+  grid-template-columns:repeat(auto-fit,minmax(290px,1fr));
+  align-items:start;
+}
+h2{
+  font-family:var(--mono); font-size:11px; font-weight:500; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--brass); margin:0 0 10px;
+  padding-bottom:7px; border-bottom:1px solid var(--rule);
+}
+.colonnes p{margin:0 0 12px; max-width:62ch}
+.colonnes p:last-child{margin-bottom:0}
+strong{font-weight:600}
+em{font-style:italic; color:var(--ink-2)}
+table{border-collapse:collapse; width:100%; font-size:13.5px}
+th,td{text-align:left; padding:5px 10px 5px 0; border-bottom:1px solid var(--rule); vertical-align:top}
+th{font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase;
+   color:var(--ink-3); font-weight:500}
+td.n{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:nowrap}
+.wrap{overflow-x:auto}
+.source{
+  margin-top:40px; padding-top:16px; border-top:1px solid var(--rule);
+  font-size:12.5px; color:var(--ink-3); max-width:76ch;
+}
+.source a{color:var(--brass); text-underline-offset:2px}
+@media (max-width:620px){
+  #vue{height:62vh; min-height:400px}
+  .curseur input[type=range]{width:84px}
+  /* Le bandeau de gauche passait sur quatre lignes et recouvrait l'apex. */
+  #titre>span:first-child{display:none}
+  #titre{font-size:9.5px; letter-spacing:.06em}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="page">
+  <p class="eyebrow">Simulation — concept visuel, étape 1</p>
+  <h1>Croissance apicale</h1>
+  <p class="lead">L'extrémité d'une hyphe de moisissure, vue de côté sous un objectif dont la
+  mise au point n'est jamais tout à fait juste. Des vésicules dérivent, se heurtent, coalescent,
+  s'accumulent à la pointe, fusionnent avec la membrane et y déversent le matériau de paroi.
+  <b>C'est la seule chose qui fait avancer le tube.</b> Il n'y a ni but, ni score, ni fin.</p>
+
+  <div class="instrument">
+    <div id="vue">
+      <canvas id="toile"></canvas>
+      <div id="titre">
+        <span>Croissance apicale — <i id="optiqueNom" style="font-style:normal"></i></span>
+        <span id="mesures"></span>
+      </div>
+    </div>
+
+    <div id="panneau">
+      <div class="rangee">
+        <div class="groupe">
+          <button id="bPause" aria-pressed="false">Pause</button>
+          <span>vitesse</span>
+          <button data-vit="1" aria-pressed="true">×1</button>
+          <button data-vit="2" aria-pressed="false">×2</button>
+          <button data-vit="4" aria-pressed="false">×4</button>
+        </div>
+        <div class="groupe">
+          <span>optique</span>
+          <button data-pal="phase" aria-pressed="true">Phase</button>
+          <button data-pal="noir" aria-pressed="false">Fond noir</button>
+          <button data-pal="met" aria-pressed="false">MET</button>
+        </div>
+        <div class="groupe">
+          <span>pilotage</span>
+          <button data-pil="auto" aria-pressed="true">Auto</button>
+          <button data-pil="souris" aria-pressed="false">Pointeur</button>
+        </div>
+      </div>
+      <div class="rangee">
+        <label class="curseur" for="cCal">calotte
+          <input id="cCal" type="range" min="0.55" max="1.40" step="0.01" value="1.00"><output id="oCal"></output></label>
+        <label class="curseur" for="cPro">profil
+          <input id="cPro" type="range" min="1.6" max="3.2" step="0.05" value="2"><output id="oPro"></output></label>
+        <label class="curseur" for="cZoom">zoom
+          <input id="cZoom" type="range" min="0.55" max="1.8" step="0.01" value="1"><output id="oZoom"></output></label>
+        <label class="curseur" for="cFoc">mise au point
+          <input id="cFoc" type="range" min="-1" max="1" step="0.01" value="0"><output id="oFoc"></output></label>
+        <button id="bFocAuto" aria-pressed="true">auto</button>
+      </div>
+      <div class="rangee">
+        <label class="bascule"><input id="oVes" type="checkbox" data-opt="vesicules" checked>vésicules</label>
+        <label class="bascule"><input id="oGra" type="checkbox" data-opt="granulation" checked>granulation</label>
+        <label class="bascule"><input id="oOrg" type="checkbox" data-opt="organites" checked>organites</label>
+        <label class="bascule"><input id="oHal" type="checkbox" data-opt="halo" checked>halo de phase</label>
+        <label class="bascule"><input id="oGrn" type="checkbox" data-opt="grain" checked>grain de capteur</label>
+        <label class="bascule"><input id="oEch" type="checkbox" data-opt="echelle" checked>échelle</label>
+        <button id="bReset">Relancer</button>
+      </div>
+      <p id="notice"></p>
+    </div>
+  </div>
+
+  <p class="legende"><strong>Pointeur</strong> déplace la consigne du gradient de calcium, pas le
+  cap : comptez une dizaine de secondes avant que la géométrie bouge. <strong>Calotte</strong> et
+  <strong>profil</strong> règlent la fermeture de l'apex ; c'est le point à trancher en premier.
+  La barre d'échelle fait 10 µm.</p>
+
+  <div class="colonnes">
+    <section>
+      <h2>Le tube est un seul objet</h2>
+      <p>Il n'existe qu'un axe, qu'une fonction de demi-largeur <em>W(s)</em> mesurée depuis la
+      pointe, et qu'un polygone fermé. <em>W(0) = 0</em> : les deux flancs se rejoignent à l'apex,
+      le tube se referme tout seul. Le remplissage du cytoplasme, le liseré de paroi et le halo
+      lisent le même polygone et la même distance.</p>
+      <p>Il n'y a donc nulle part où dessiner « la calotte » séparément. C'est exactement ce qui
+      avait fait échouer l'essai précédent, et c'est la première chose qui a été construite ici.</p>
+      <p>Le contenu vit en coordonnées de tube — abscisse depuis la pointe, écart latéral — et
+      n'est projeté dans le plan image qu'au moment du rendu. Rien ne peut sortir du tube : la
+      contrainte est vérifiée avant le dessin, pas après.</p>
+    </section>
+
+    <section>
+      <h2>L'apex n'a pas de moteur</h2>
+      <p>Rien n'impose un cap à la géométrie. Une vésicule qui fusionne avec la membrane verse
+      194 nm d'extension à l'angle où elle a touché. L'hyphe ne fait que consommer ce bilan, à
+      travers un passe-bas de 0,55 s — la paroi ne se construit pas en une image.</p>
+      <p>Le pilotage ne déplace donc que la consigne angulaire du gradient de Ca²⁺, c'est-à-dire
+      l'endroit d'où les vésicules partent. Entre la demande et le virage, il faut que le nuage se
+      décale, qu'il fusionne, et que la paroi se construise : <strong>10,7 s mesurées</strong> pour
+      atteindre 63 % de la vitesse angulaire. On ne peut pas raccourcir ce délai sans casser le
+      mécanisme. C'est l'inertie demandée, obtenue par sa cause plutôt que par un amortisseur.</p>
+    </section>
+
+    <section>
+      <h2>Le Spitzenkörper n'est pas dessiné</h2>
+      <p>Aucune forme ne le représente. Il y a un puits de rétention à environ 2 µm de la pointe,
+      et le nuage apparaît tout seul — une densité, pas un objet. Les pulses de calcium, de période
+      ~5,5 s, cadencent la libération des vésicules vers la membrane : l'extension se fait par
+      marches, comme dans la réalité, sans qu'on ait eu à la scénariser.</p>
+      <p>La calotte ne contient que des vésicules. Noyau, mitochondries et vacuoles sont tenus à
+      distance par un répoussoir doux — c'est une observation de microscopie électronique, et c'est
+      aussi ce qui garde la pointe lisible.</p>
+    </section>
+
+    <section>
+      <h2>Mesuré</h2>
+      <div class="wrap"><table>
+        <tr><th>Grandeur</th><th>Ici</th><th>Référence</th></tr>
+        <tr><td>Croissance</td><td class="n">18,8 µm/min</td><td class="n">20 µm/min</td></tr>
+        <tr><td>Exocytoses</td><td class="n">1,6 /s</td><td class="n">—</td></tr>
+        <tr><td>Extension par fusion</td><td class="n">194 nm</td><td class="n">—</td></tr>
+        <tr><td>Rayon de virage</td><td class="n">79 µm</td><td class="n">~110 µm*</td></tr>
+        <tr><td>Inertie du cap (63 %)</td><td class="n">10,7 s</td><td class="n">—</td></tr>
+        <tr><td>Fuites de vésicules</td><td class="n">0 / 120 s</td><td class="n">0</td></tr>
+        <tr><td>Budget logique</td><td class="n">0,17 ms/image</td><td class="n">16,7 ms</td></tr>
+      </table></div>
+      <p style="margin-top:12px"><em>* unité de croissance hyphale, Trinci. Les valeurs de
+      référence de croissance sont celles de</em> Neurospora crassa.</p>
+    </section>
+
+    <section>
+      <h2>Simplifié, et assumé</h2>
+      <p>Une vésicule fait 70 à 100 nm, soit un pixel à ce grossissement : ni rebond, ni
+      coalescence, ni fusion ne seraient lisibles. Elles sont grossies <strong>six fois</strong>.
+      Le Spitzenkörper d'un <em>Neurospora</em> en contient environ dix mille ; on en simule 120,
+      pour qu'on puisse en suivre une des yeux.</p>
+      <p>Le flux de masse est ramené de 5 à 1,2 µm/s. À 5 µm/s — la valeur mesurée — tout traverse
+      le champ en cinq secondes : ce n'est plus apaisant, c'est un torrent.</p>
+      <p>La turgescence, 600 kPa, et le cytosquelette ne sont pas modélisés : ils sont invisibles,
+      et leur seul effet visible est déjà porté par les fusions. Il en reste une trace, tout de
+      même — une vésicule tractée vers la membrane écarte le réservoir au lieu de s'y arrêter.</p>
+    </section>
+
+    <section>
+      <h2>Trois optiques</h2>
+      <p>La consigne était « quelque chose entre le contraste de phase et la MET ». Ce sont deux
+      inversions opposées : en phase le cytoplasme est plus sombre que le fond et la paroi porte un
+      halo clair ; en microscopie électronique tout est sombre sur résine claire, sans halo.</p>
+      <p>Plutôt que d'inventer un compromis, voici les deux bornes et le rendu de la vidéo de
+      référence. Le moteur ne connaît aucun des trois cas : il pose toujours fond, cytoplasme,
+      grain, paroi, halo — c'est la palette qui décide du sens.</p>
+    </section>
+
+    <section>
+      <h2>Pas encore là</h2>
+      <p>La ramification. Elle est dans la vidéo de référence et elle est belle, mais une branche
+      est une <em>deuxième</em> silhouette : c'est précisément le terrain où l'essai précédent s'est
+      cassé. Elle viendra une fois le tube unique validé, comme un second axe partageant le même
+      polygone — pas comme une forme posée sur le flanc.</p>
+      <p>Le septum, les corps de Woronin, les noyaux qui migrent. Et tout ce qui ressemble à du
+      gameplay : l'étape d'après, si le concept tient, sera un jeu de stratégie.</p>
+    </section>
+  </div>
+
+  <p class="source">Cohérent avec Lew RR, <em>How does a hypha grow? The biophysics of pressurized
+  growth in fungi</em>, Nature Reviews Microbiology 9:509–518 (2011) — turgescence 600 kPa,
+  croissance 20 µm/min chez <em>Neurospora crassa</em>, flux de masse 5 µm/s, et le gradient de
+  Ca²⁺ apical qui déclenche la fusion des vésicules. Rendu d'après la vidéo
+  <a href="https://www.youtube.com/watch?v=Rxh5zFzA8Zk" target="_blank" rel="noopener">Hyphal growth
+  and branching</a> (amazingfungi) et les planches de microscopie du dossier de références.
+  Code : <a href="https://github.com/microbiologames/apical/tree/claude/serene-thompson-2jhjhj"
+  target="_blank" rel="noopener">microbiologames/apical</a>.</p>
+</div>
+
+<script type="module">
+import { App } from './src/main.js';
+import { PALETTES } from './src/data/palette.js';
+import { brancher } from './src/ui.js';
+brancher(new App(document.getElementById('toile'), document.getElementById('vue')), PALETTES);
+</script>

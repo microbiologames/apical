@@ -59,7 +59,9 @@ export function brancher(app, PALETTES) {
     c.onchange = () => { app.opts[c.dataset.opt] = c.checked; };
   });
 
-  $('#notice').innerHTML = NOTICE;
+  /* La page publiee ecrit son propre texte ; on ne remplit que si vide. */
+  const nota = $('#notice');
+  if (nota && !nota.innerHTML.trim()) nota.innerHTML = NOTICE;
 
   /* Le cap et la calotte survivent a un « Relancer » : ce sont des reglages
      de concept, pas un etat de simulation. */
