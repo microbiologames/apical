@@ -12,7 +12,17 @@
    sens. Ajouter une optique = ajouter une entree ici, rien d'autre.
 
    Regle apprise a la dure : une vesicule remplie de la couleur du cytoplasme
-   est une vesicule invisible. `vesicule` doit trancher NETTEMENT sur `cyto`.
+   est une vesicule invisible. Le lumen doit trancher NETTEMENT sur `cyto`.
+
+   IDENTITE DE COULEUR, et ce n'est pas un raccourci de rendu. Une vesicule
+   n'a pas de couleur a elle :
+     - sa membrane est de la membrane, donc `membrane` ;
+     - son lumen devient le periplasme au moment de la fusion, donc
+       `periplasme`.
+   C'est cette identite qui rend la fusion lisible sans rien expliquer : les
+   deux traits se touchent, le pore s'ouvre, et le contenu est DEJA de la
+   couleur de l'espace ou il se deverse. Il n'y a donc volontairement pas
+   d'entree `vesicule` dans cette table.
 --------------------------------------------------------------------------- */
 
 export const PALETTES = {
@@ -29,8 +39,6 @@ export const PALETTES = {
     paroiJeune: '#ddd9e6',    // la paroi apicale est mince et peu contrastee
     halo: '#ffffff',
     haloForce: 0.40,
-    vesicule: '#d9d6e4',
-    vesiculeRim: '#ffffff',
     molecule: '#f6f4fa',
     membrane: '#55515f',
     periplasme: '#bcb8c8',
@@ -61,11 +69,9 @@ export const PALETTES = {
     paroiJeune: '#9aa0ac',
     halo: '#8f97a6',
     haloForce: 0.24,
-    vesicule: '#aab0bd',
-    vesiculeRim: '#f2f5fa',
     molecule: '#cfd5e0',
     membrane: '#949ba6',
-    periplasme: '#575d67',
+    periplasme: '#6b727e',
     paroiFraiche: '#ffffff',
     milieuGrain: '#191b20',
     milieuDebris: '#252930',
@@ -93,8 +99,6 @@ export const PALETTES = {
     paroiJeune: '#6f6a60',
     halo: '#5a544b',
     haloForce: 0.12,
-    vesicule: '#55503f',      // les chitosomes sont electrodenses : SOMBRES
-    vesiculeRim: '#2e2b26',
     molecule: '#3d3932',
     /* En MET la membrane plasmique EST une ligne sombre : c'est la seule
        des trois optiques ou on la voit vraiment. */

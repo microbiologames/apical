@@ -245,6 +245,25 @@ export class Screen {
     }
   }
 
+  /**
+   * Arc d'ellipse parametrique, de t0 a t1 (radians, dans le repere de
+   * l'ellipse : t = 0 est l'extremite du demi-axe `a`).
+   *
+   * Sert a une seule chose, mais elle est centrale : dessiner la membrane
+   * d'une vesicule EN OMETTANT le pore de fusion. Un contour ferme ne peut
+   * pas montrer une membrane qui s'ouvre.
+   */
+  arcE(cx, cy, a, b, rot, c, t0, t1, ep = 1) {
+    const n = Math.max(12, Math.ceil((t1 - t0) * Math.max(a, b) * 1.6));
+    const ca = Math.cos(rot), sa = Math.sin(rot);
+    for (let i = 0; i <= n; i++) {
+      const t = t0 + (t1 - t0) * (i / n);
+      const lx = a * Math.cos(t), ly = b * Math.sin(t);
+      const px = cx + lx * ca - ly * sa, py = cy + lx * sa + ly * ca;
+      if (ep > 1.3) this.dot(px, py, 1.0, c); else this.plot(px, py, c);
+    }
+  }
+
   /** Capsule : segment epais a bouts ronds (mitochondrie, brin de RE). */
   cap(cx, cy, len, width, ang, fill, rim = 0) {
     const r = width / 2;

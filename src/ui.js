@@ -80,6 +80,10 @@ export function brancher(app, PALETTES) {
       + `<b>${fus.toFixed(1)}</b> exocytose/s · Spk <b>${spk}</b> · ${Math.round(app.fps)} i/s`;
   }, 700);
 
+  /* Poignee de mise au point : le banc visuel s'en sert pour attendre
+     qu'une fusion soit en cours avant de declencher la capture. */
+  globalThis.apical = app;
+
   maj();
   app.demarrer();
 }

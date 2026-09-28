@@ -18,10 +18,19 @@ Il n'y a pas de but, pas de score, pas de fin. C'est le point.
 | `Apex_references/Art/a.jpg`, `e.jpg`, `f.jpg` | L'échelle du thalle, pour plus tard. |
 | `Apex_references/Mecanisms/a.jpg` | Le schéma de trafic : Golgi → vésicules sécrétoires → sécrétion apicale. |
 | `Apex_references/Mecanisms/e.jpg` | Le gradient d'extension : maximal à la pointe, nul dès la pleine largeur atteinte. |
+| `Apex_references/Mecanisms/Vesicule mecanisme.png` | Les trois temps de la fusion, et surtout : la membrane de la vésicule et la membrane plasmique sont **du même trait**, son lumen et le périplasme sont **de la même couleur**. |
 | `Apex_references/Mecanisms/Capture…png` | Le gradient de Ca²⁺ : InsP₃ libère le Ca²⁺ interne à la pointe, le Ca²⁺ déclenche la fusion des vésicules, le RE et les mitochondries le repompent juste derrière. |
 | [amazingfungi, *Hyphal growth and branching 01*](https://www.youtube.com/watch?v=Rxh5zFzA8Zk) | **La référence décisive.** Tube gris granuleux, liseré clair continu, fond noir, apex en ogive émoussée. C'est la palette « fond noir ». |
 
 ## Les partis pris
+
+**Une vésicule n'a pas de couleur à elle.** Sa membrane est de la membrane,
+son lumen est du périplasme — il le devient à la seconde où le pore s'ouvre.
+C'est cette identité de couleur qui rend la fusion lisible sans qu'on ait rien
+à expliquer : les deux traits se touchent, l'ouverture naît au centre du
+contact et s'élargit, la vésicule se rabat en oméga, et le contenu déversé est
+déjà de la couleur de l'espace où il arrive. Schéma de référence :
+`Apex_references/Mecanisms/Vesicule mecanisme.png`.
 
 **L'enveloppe a trois couches.** Paroi, espace périplasmique, membrane
 plasmique. La vésicule fusionne avec la **membrane** et déverse dans le

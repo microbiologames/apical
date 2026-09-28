@@ -227,7 +227,9 @@ td.n{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:now
     </div>
   </div>
 
-  <p class="legende"><strong>Pointeur</strong> déplace la consigne du gradient de calcium, pas le
+  <p class="legende"><strong>Zoomez à fond et regardez une vésicule atteindre la membrane :</strong>
+  elle ralentit, les deux traits se touchent, un pore s'ouvre au centre et s'élargit, et le contenu
+  passe dans l'espace entre membrane et paroi. <strong>Pointeur</strong> déplace la consigne du gradient de calcium, pas le
   cap : comptez une dizaine de secondes avant que la géométrie bouge. <strong>Calotte</strong> et
   <strong>profil</strong> règlent la fermeture de l'apex. <strong>Paroi neuve</strong> montre les
   traces déposées par chaque exocytose — regardez-les remonter du pôle vers le flanc, c'est
@@ -252,14 +254,28 @@ td.n{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:now
       <p>De l'extérieur vers l'intérieur : la <strong>paroi</strong> — chitine et glucanes,
       0,1 à 0,3 µm, rigide —, l'<strong>espace périplasmique</strong>, et la <strong>membrane
       plasmique</strong>. La distinction n'est pas décorative, c'est le mécanisme : la vésicule
-      fusionne avec la <em>membrane</em>, en figure d'oméga, et déverse son contenu dans le
-      <em>périplasme</em>, où le matériau est assemblé en paroi.</p>
-      <p>Les précurseurs libérés restent plaqués contre la face interne de la paroi et s'y
-      incorporent — <strong>7,1 %</strong> seulement s'en écartent de plus de 0,3 µm. Ils ne
-      partent plus nulle part.</p>
+      fusionne avec la <em>membrane</em> et déverse son contenu dans le <em>périplasme</em>, où le
+      matériau est assemblé en paroi.</p>
       <p>Périplasme et membrane sont exagérés d'un facteur vingt : ensemble ils font un quinzième
       de pixel. La paroi, elle, est à peu près à l'échelle — et son épaisseur est en pixels écran,
       jamais en micromètres, sinon le tube devient une saucisse dès qu'on zoome.</p>
+    </section>
+
+    <section>
+      <h2>Une vésicule n'a pas de couleur à elle</h2>
+      <p>Sa membrane <em>est</em> de la membrane. Son lumen <em>est</em> du périplasme — il le
+      devient à la seconde où le pore s'ouvre. Il n'y a donc volontairement pas d'entrée
+      « vésicule » dans la palette : deux entrées séparées finiraient par diverger, et c'est
+      précisément cette identité qui rend la fusion lisible sans qu'on ait rien à expliquer.</p>
+      <p>La fusion dure 0,85 s et se joue en trois temps. <strong>Contact</strong> : la vésicule
+      décélère en approchant et les deux membranes se touchent — à vitesse constante on voyait un
+      choc, pas un contact. <strong>Pore</strong> : une ouverture naît au centre du contact et
+      s'élargit ; c'est un secteur du contour qu'on cesse de dessiner, car un contour fermé ne peut
+      pas montrer une membrane qui s'ouvre. <strong>Oméga</strong> : la vésicule se rabat dans la
+      membrane plasmique, bombée vers le cytoplasme et ouverte vers l'extérieur, et son contenu —
+      déjà de la couleur du périplasme — s'y confond.</p>
+      <p>Les précurseurs libérés restent ensuite plaqués contre la face interne de la paroi et s'y
+      incorporent : <strong>7,1 %</strong> seulement s'en écartent de plus de 0,3 µm.</p>
     </section>
 
     <section>
@@ -280,7 +296,7 @@ td.n{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:now
     <section>
       <h2>L'apex n'a pas de moteur</h2>
       <p>Rien n'impose un cap à la géométrie. Une vésicule qui fusionne avec la membrane verse
-      184 nm d'extension à l'angle où elle a touché. L'hyphe ne fait que consommer ce bilan, à
+      157 nm d'extension à l'angle où elle a touché. L'hyphe ne fait que consommer ce bilan, à
       travers un passe-bas de 0,55 s — la paroi ne se construit pas en une image.</p>
       <p>Le pilotage ne déplace donc que la consigne angulaire du gradient de Ca²⁺, c'est-à-dire
       l'endroit d'où les vésicules partent. Entre la demande et le virage, il faut que le nuage se
@@ -304,9 +320,10 @@ td.n{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:now
       <h2>Mesuré</h2>
       <div class="wrap"><table>
         <tr><th>Grandeur</th><th>Ici</th><th>Référence</th></tr>
-        <tr><td>Croissance</td><td class="n">18,9 µm/min</td><td class="n">20 µm/min</td></tr>
-        <tr><td>Exocytoses</td><td class="n">1,73 /s</td><td class="n">—</td></tr>
-        <tr><td>Extension par fusion</td><td class="n">184 nm</td><td class="n">—</td></tr>
+        <tr><td>Croissance</td><td class="n">19,1 µm/min</td><td class="n">20 µm/min</td></tr>
+        <tr><td>Exocytoses</td><td class="n">1,89 /s</td><td class="n">—</td></tr>
+        <tr><td>Extension par fusion</td><td class="n">157 nm</td><td class="n">—</td></tr>
+        <tr><td>Durée d'une fusion</td><td class="n">0,85 s</td><td class="n">—</td></tr>
         <tr><td>Rayon de virage</td><td class="n">82 µm</td><td class="n">~110 µm*</td></tr>
         <tr><td>Inertie du cap (63 %)</td><td class="n">7,2 s</td><td class="n">—</td></tr>
         <tr><td>Paroi neuve : pleine largeur</td><td class="n">17 s</td><td class="n">—</td></tr>

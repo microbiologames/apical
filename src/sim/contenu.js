@@ -55,6 +55,10 @@ const TAUX_COALESCENCE = 0.045;
    fait 7 nm, soit un quinzieme de pixel — mais la distinction est le
    mecanisme meme de la croissance parietale. */
 const PEAU = 0.14;
+/* Duree d'une fusion membranaire. A 0,42 s l'evenement passait avant qu'on
+   ait pu le lire ; c'est le moment central de la simulation, il a droit a
+   une seconde. */
+export const DUREE_FUSION = 0.85;
 
 /** Tirage gaussien reduit, Box-Muller. */
 function gauss(rng) {
@@ -246,7 +250,7 @@ export class Contenu {
       /* --- exocytose en cours : arrimee, elle ne derive plus ------------- */
       if (p.etat === 1) {
         p.tf += dt;
-        if (p.tf > 0.42) { this.livrer(p); ves[i] = this.naitreVesicule(); }
+        if (p.tf > DUREE_FUSION) { this.livrer(p); ves[i] = this.naitreVesicule(); }
         continue;
       }
 
@@ -285,7 +289,10 @@ export class Contenu {
         p.tf += dt;
         const ds = p.cs - p.s, dv = p.cv - p.v;
         const d = Math.hypot(ds, dv) || 1e-6;
-        const vit = 1.7;
+        /* Elle ralentit en arrivant. A vitesse constante elle percutait la
+           membrane, et « les deux membranes se touchent » ne se lisait pas :
+           on voyait un choc, pas un contact. */
+        const vit = 0.32 + 1.45 * smoothstep(0.12, 1.5, d);
         p.vs += (ds / d * vit - p.vs) * clamp(dt * 4.0, 0, 1);
         p.vv += (dv / d * vit - p.vv) * clamp(dt * 4.0, 0, 1);
         p.vs += (rng() * 2 - 1) * 0.8 * dt;

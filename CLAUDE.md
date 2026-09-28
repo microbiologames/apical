@@ -13,7 +13,7 @@ les captures de contrôle.
 | Commande | Ce qu'elle fait |
 |---|---|
 | `npm run serve` | sert le dépôt tel quel |
-| `npm run banc` | 7 verdicts de mesure, sans rendu, en node |
+| `npm run banc` | 9 verdicts de mesure, sans rendu, en node |
 | `npm run visuel` | captures dans `/tmp/apical-shots` (Playwright) |
 
 ---
@@ -34,7 +34,7 @@ que l'exocytose » évite de refaire l'erreur.
 
 ---
 
-## Les trois règles de fond
+## Les six règles de fond
 
 ### 1. L'hyphe est UN objet
 
@@ -84,7 +84,36 @@ l'écran.
 Périplasme et membrane sont exagérés d'un facteur ~20 — ensemble ils font un
 quinzième de pixel. La paroi, elle, est à peu près à l'échelle.
 
-### 4. La paroi neuve migre, et ça doit se voir
+### 4. Une vésicule n'a pas de couleur à elle
+
+Sa membrane **est** de la membrane (`P.membrane`), son lumen **est** du
+périplasme (`P.periplasme`) — il le devient à la seconde où le pore s'ouvre.
+Il n'y a volontairement **pas d'entrée `vesicule`** dans la palette : deux
+entrées séparées finiraient par diverger, et c'est précisément cette identité
+qui rend la fusion lisible sans qu'on ait rien à expliquer. Le contenu déversé
+est déjà de la couleur de l'espace où il se déverse.
+
+La fusion (`Scene.fusions`, 0,85 s) suit le schéma de référence
+`Apex_references/Mecanisms/Vesicule mecanisme.png`, en trois temps :
+
+1. **contact** — les deux membranes se touchent. La vésicule décélère en
+   approchant (`0,32 + 1,45·smoothstep` sur la distance restante) : à vitesse
+   constante on voyait un choc, pas un contact.
+2. **pore** — une ouverture naît au centre du contact et s'élargit. C'est
+   `Screen.arcE` qui la dessine, en omettant un secteur angulaire du contour :
+   un contour fermé ne peut pas montrer une membrane qui s'ouvre.
+3. **oméga** — la vésicule se rabat dans la membrane plasmique, ouverte vers
+   l'extérieur, et son lumen se confond avec le périplasme.
+
+L'oméga bombe **vers le cytoplasme**, jamais vers l'extérieur : c'est son
+ouverture qui donne sur le périplasme, pas son corps. Poussée dehors, elle se
+dessinait par-dessus la paroi — un lumen pâle sur une paroi pâle, donc rien.
+
+Ces événements sont dessinés **après** `paroi()`, dans `fusions()`. Dessinés
+avant, la bande de périplasme et le trait de membrane leur passaient dessus :
+ni le pore ni le matériau déversé n'étaient visibles.
+
+### 5. La paroi neuve migre, et ça doit se voir
 
 Une hyphe s'allonge par son apex : la paroi formée à la pointe se retrouve
 progressivement sur les flancs, puis hors champ. Une paroi uniforme a l'air
@@ -104,7 +133,7 @@ Même raisonnement pour le milieu extérieur : le grain de gélose et les débri
 sont tirés d'un hachage de cellules en **coordonnées monde**. Sans repère fixe
 hors du tube, il n'y a aucune impression de progression.
 
-### 5. Le Spitzenkörper n'est jamais dessiné
+### 6. Le Spitzenkörper n'est jamais dessiné
 
 C'est une densité, pas un objet : un puits de rétention à ~2 µm de la pointe,
 et le nuage apparaît tout seul. Le dessiner net était la mauvaise réponse
@@ -117,9 +146,10 @@ solution »).
 
 | | mesuré | référence |
 |---|---|---|
-| croissance | 18,9 µm/min | 20 µm/min (*Neurospora*, Lew 2011) |
-| exocytoses | 1,73 /s, une toutes les 0,58 s | — |
-| extension par fusion | 184 nm | — |
+| croissance | 19,1 µm/min | 20 µm/min (*Neurospora*, Lew 2011) |
+| exocytoses | 1,89 /s, une toutes les 0,53 s | — |
+| extension par fusion | 157 nm | — |
+| durée d'une fusion | 0,85 s | — |
 | rayon de virage, consigne pleine | 82 µm | unité de croissance hyphale ~110 µm |
 | inertie du cap (63 %) | 7,2 s | — |
 | migration de la paroi neuve | pleine largeur en 17 s, 70 µm en 200 s | — |
@@ -172,6 +202,12 @@ partie du travail**, pas après, pendant.
 - Une trace de paroi s'oriente sur la tangente à la **surface**, jamais sur
   celle de l'axe : au pôle les deux sont perpendiculaires et la trace sortait
   du tube comme une épingle.
+- **Un liseré de membrane sur une vésicule de 2,2 px recouvre son lumen** :
+  la vésicule se lit alors comme un anneau sombre, le compartiment disparaît
+  au profit de son contour. Seuil à 2,6 px ; en dessous, disque plein.
+- Une trace de paroi neuve mélangée à moitié vers le blanc et à 0,72 d'alpha
+  devient, en fond noir, un **rectangle lumineux posé sur la paroi** : on lit
+  un artefact, pas du matériau neuf. 0,22 de mélange, 0,43 d'alpha au pic.
 - **Un `sed` qui ne trouve pas son motif ne dit rien.** Deux remplacements
   successifs de `Q_FUSION` ont échoué en silence et j'ai documenté une valeur
   que le fichier n'avait pas. Seul le banc l'a vu (22,8 µm/min au lieu de 20).

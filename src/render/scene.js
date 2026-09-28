@@ -21,7 +21,7 @@
 import { Screen, hexToRgba, mix32, fade32, shade32, rgba, bayer } from '../core/pixel.js';
 import { clamp, lerp, smoothstep, fbm2, noise2, hash2, noise1, TAU } from '../core/util.js';
 import { versMonde } from '../sim/hyphe.js';
-import { S_MAX } from '../sim/contenu.js';
+import { S_MAX, DUREE_FUSION } from '../sim/contenu.js';
 
 const BANDE = 6;          // px : portee de la bande de distance (halo compris)
 const MAX_SOMMETS = 4096;
@@ -89,6 +89,7 @@ export class Scene {
     this.cytoplasme(hy, P, t, opts);
     this.contenu(hy, co, P, opts);
     this.paroi(hy, P, opts);
+    this.fusions(hy, co, P, opts);
     if (opts.depots !== false) this.tracesParoi(hy, co, P);
     if (opts.milieu !== false) this.milieuAvant(P);
 
@@ -381,72 +382,109 @@ export class Scene {
     }
 
     if (opts.vesicules !== false) {
-      const cv = hexToRgba(P.vesicule), cr = hexToRgba(P.vesiculeRim);
-      const cm = hexToRgba(P.membrane);
+      /* Une vesicule n'a pas de couleur a elle : sa membrane EST de la
+         membrane, son lumen EST du periplasme — il le devient a la seconde
+         ou le pore s'ouvre. C'est cette identite de couleur qui rend la
+         fusion lisible sans qu'on ait rien a expliquer. */
+      const cLum = hexToRgba(P.periplasme), cMb = hexToRgba(P.membrane);
       for (const v of co.ves) {
+        if (v.etat === 1) continue;     // dessinee apres la paroi, cf. fusions()
         versMonde(T, v.s, v.v, pt);
         const x = this.sx(pt.x), y = this.sy(pt.y);
         if (x < -8 || y < -8 || x > this.w + 8 || y > this.h + 8) continue;
         const pl = this.plan(v.z);
         sc.layer(pl.idx);
+        const r = v.r * K;
         if (v.pont > 0) {
-          /* Le pont de fusion : deux vesicules qui n'en font plus qu'une
-             passent par un halteres. Sans ca la fusion est une disparition. */
+          /* Coalescence : deux vesicules qui n'en font plus qu'une passent
+             par un halteres. Sans lui, la fusion est une disparition. */
           versMonde(T, v.pontS, v.pontV, pt);
           const x2 = this.sx(pt.x), y2 = this.sy(pt.y);
-          sc.cap((x + x2) / 2, (y + y2) / 2, Math.hypot(x2 - x, y2 - y) + v.r * K * 1.4,
-                 v.r * K * 1.15, Math.atan2(y2 - y, x2 - x), cv, cr);
+          sc.cap((x + x2) / 2, (y + y2) / 2, Math.hypot(x2 - x, y2 - y) + r * 1.4,
+                 r * 1.15, Math.atan2(y2 - y, x2 - x), cLum, cMb);
         }
-        if (v.etat === 1) {
-          /* Une fusion se passe CONTRE la membrane : elle est dans le plan,
-             donc nette. Floutee elle donnait une trainee blanche. */
-          sc.layer(this.plan(v.z, 0, 1).idx);
-          /* Fusion membranaire, en figure d'omega. La vesicule ne « cogne »
-             pas dans la paroi : sa membrane s'ouvre dans la membrane
-             plasmique, le col s'elargit, et le contenu part dans le
-             periplasme. On dessine donc DEUX choses — la vesicule qui
-             s'aplatit et disparait, et l'arc de membrane qui bombe. */
-          const k = clamp(v.tf / 0.42, 0, 1);
-          const r = v.r * K;
-          /* Normale sortante au point de contact : le cap de l'apex tourne
-             de phi. C'est exactement l'angle qui a servi a choisir la cible. */
-          const nx = -Math.sin(hy.th), ny = Math.cos(hy.th);
-          const ox = Math.cos(hy.th) * Math.cos(v.phi) + nx * Math.sin(v.phi);
-          const oy = Math.sin(hy.th) * Math.cos(v.phi) + ny * Math.sin(v.phi);
-          const ang = Math.atan2(oy, ox);
-          sc.ell(x, y, r * (1 - 0.72 * k), r * (1 + 0.55 * k), ang,
-                 fade32(mix32(cv, cr, k * 0.45), 1 - k * 0.75));
-          /* L'arc : perpendiculaire a la normale, pousse vers l'exterieur,
-             il s'elargit puis se rabat. */
-          const bomb = Math.sin(Math.PI * k);
-          sc.cap(x + ox * (r * 0.5 + bomb * r * 0.5), y + oy * (r * 0.5 + bomb * r * 0.5),
-                 r * (1.1 + 1.5 * k), Math.max(clamp(0.05 * K, 0.8, 1.3), 1),
-                 ang + Math.PI / 2, fade32(cm, 0.35 + 0.55 * bomb));
-        } else {
-          /* Bille refringente : disque plein + coeur plus clair. Le liseré
-             clair en BORDURE (disc(..., fill, rim)) faisait l'inverse — un
-             anneau blanc avec un centre sombre, une lecture de bulle. */
-          const r = v.r * K;
-          sc.dot(x, y, r, fade32(cv, 0.94 - pl.dz * 0.14));
-          if (r > 2.2) sc.dot(x, y, r * 0.40, fade32(cr, 0.7 - pl.dz * 0.25));
-        }
+        const af = 0.94 - pl.dz * 0.14;
+        sc.dot(x, y, r, fade32(cLum, af));
+        /* Le liseré de membrane n'a de sens qu'au-dessus de 2,6 px de rayon.
+           A 2,2 il recouvrait presque tout le lumen et la vesicule se
+           lisait comme un anneau sombre : le compartiment disparaissait au
+           profit de son contour. */
+        if (r > 2.6) sc.arcE(x, y, r - 0.4, r - 0.4, 0, fade32(cMb, af * 0.9), 0, TAU);
       }
     }
+  }
 
-    if (opts.vesicules !== false) {
-      const cm = hexToRgba(P.molecule);
-      for (const m of co.mols) {
-        versMonde(T, m.s, m.v, pt);
-        const x = this.sx(pt.x), y = this.sy(pt.y);
-        /* Toujours net : un pixel isole floute par une boite de 3 devient
-           une croix, et le champ se couvre d'etoiles. */
-        sc.layer(Screen.layerFor(m.z - this.zFocus, 0));
-        const k = 1 - m.t / m.vie;
-        /* Deux pixels, pas un : le materiau de paroi deverse doit se voir
-           sortir de la vesicule, c'est la moitie de ce qu'on est venu
-           regarder. */
-        sc.dot(x, y, k > 0.55 ? 1.0 : 0.6, fade32(cm, (0.35 + 0.65 * k * k)));
-      }
+  /**
+   * Les evenements de membrane, dessines APRES la paroi.
+   *
+   * Ils se passent DANS l'enveloppe : dessines avant, la bande de periplasme
+   * et le trait de membrane leur passaient dessus et on ne voyait ni le pore
+   * ni le materiau deverse.
+   *
+   * La fusion suit le schema de reference en trois temps : les deux
+   * membranes se touchent ; un pore s'ouvre au centre du contact et
+   * s'elargit ; la vesicule se rabat dans la membrane plasmique en figure
+   * d'omega, ouverte vers l'exterieur, et son lumen — deja de la couleur du
+   * periplasme — se confond avec lui.
+   */
+  fusions(hy, co, P, opts) {
+    if (opts.vesicules === false) return;
+    const sc = this.sc, T = hy.table(S_MAX + 2, 0.3), pt = this.pt, K = this.pxUm;
+    const cLum = hexToRgba(P.periplasme), cMb = hexToRgba(P.membrane);
+    const cMol = hexToRgba(P.molecule);
+    const cth = Math.cos(hy.th), sth = Math.sin(hy.th);
+    const nx = -sth, ny = cth;
+
+    for (const v of co.ves) {
+      if (v.etat !== 1) continue;
+      versMonde(T, v.s, v.v, pt);
+      const x = this.sx(pt.x), y = this.sy(pt.y);
+      if (x < -12 || y < -12 || x > this.w + 12 || y > this.h + 12) continue;
+      /* Normale sortante au point de contact : le cap de l'apex tourne de
+         phi. C'est l'angle meme qui a servi a choisir la cible. */
+      const ox = cth * Math.cos(v.phi) + nx * Math.sin(v.phi);
+      const oy = sth * Math.cos(v.phi) + ny * Math.sin(v.phi);
+      const ang = Math.atan2(oy, ox);
+
+      const k = clamp(v.tf / DUREE_FUSION, 0, 1);
+      const e = smoothstep(0, 1, k);
+      /* Une macrovesicule fait 3 px de rayon a l'echelle du cadre : l'omega
+         en ferait 7 de large et l'evenement passerait inapercu. On l'etale
+         donc jusqu'a 2,2 fois son rayon — c'est le moment central de la
+         simulation, il a le droit d'occuper de la place. */
+      const r = v.r * K * 1.22;
+      /* Le centre ne glisse PAS vers l'exterieur. Sur le schema de
+         reference, l'omega bombe VERS LE CYTOPLASME : c'est son ouverture
+         qui donne sur le periplasme, pas son corps. Pousse dehors, elle se
+         dessinait par-dessus la paroi — un lumen pale sur une paroi pale,
+         donc rien. */
+      const cx = x + ox * r * 0.08;
+      const cy = y + oy * r * 0.08;
+      const rr = r * (1 - 0.55 * e);          // demi-axe radial
+      const rt = r * (1 + 1.60 * e);          // demi-axe tangentiel
+      /* Demi-angle du pore, mesure depuis la normale sortante. Il s'ouvre
+         APRES le contact, pas pendant : les deux membranes se touchent
+         d'abord, le pore nait au centre du contact, puis il s'elargit. */
+      const pore = smoothstep(0.18, 0.88, k) * 1.48;
+      /* Le lumen vire vers la couleur du materiau a mesure qu'il se deverse :
+         on voit sortir quelque chose, pas seulement une forme s'aplatir. */
+      const lum = mix32(cLum, cMol, 0.45 + 0.50 * e);
+
+      sc.layer(4);
+      sc.ell(cx, cy, rr, rt, ang, fade32(lum, 1 - 0.28 * e));
+      sc.arcE(cx, cy, rr, rt, ang, cMb, pore, TAU - pore, 2.0);
+      /* Repere pour le banc visuel : il cadre sur l'evenement en cours. */
+      this.derniereFusion = { x: cx, y: cy, k };
+    }
+
+    /* Le materiau deverse, dans le periplasme. */
+    sc.layer(4);
+    for (const m of co.mols) {
+      versMonde(T, m.s, m.v, pt);
+      const x = this.sx(pt.x), y = this.sy(pt.y);
+      if (x < -4 || y < -4 || x > this.w + 4 || y > this.h + 4) continue;
+      const k = 1 - m.t / m.vie;
+      sc.dot(x, y, k > 0.55 ? 1.0 : 0.6, fade32(cMol, 0.35 + 0.65 * k * k));
     }
   }
 
@@ -587,9 +625,12 @@ export class Scene {
       let ix = this.sx(p2.x) - x, iy = this.sy(p2.y) - y;
       const il = Math.hypot(ix, iy) || 1; ix /= il; iy /= il;
       const dec = ep * 1.25;
-      const al = 0.10 + 0.62 * Math.exp(-d.t / 2.6);
-      sc.cap(x + ix * dec, y + iy * dec, 0.5 * this.pxUm, ep * 0.9, ang,
-             fade32(mix32(cP, cF, 0.5), al * d.force));
+      /* Discret. A 0,72 d'alpha et melange a moitie vers le blanc, en fond
+         noir chaque trace devenait un rectangle lumineux pose sur la paroi :
+         on lisait des artefacts, pas du materiau neuf. */
+      const al = 0.09 + 0.34 * Math.exp(-d.t / 2.6);
+      sc.cap(x + ix * dec, y + iy * dec, 0.42 * this.pxUm, ep * 0.8, ang,
+             fade32(mix32(cP, cF, 0.22), al * d.force));
     }
   }
 

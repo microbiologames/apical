@@ -37,6 +37,7 @@ const defaut = [
   { nom: '04-met-20s', pal: 'met', vit: 4, attente: 5200 },
 ];
 for (const e of (plan.length ? plan : defaut)) {
+  await page.evaluate(() => { if (globalThis.apical) globalThis.apical.pause = false; });
   if (e.pal) await page.click(`[data-pal="${e.pal}"]`);
   if (e.vit) await page.click(`[data-vit="${e.vit}"]`);
   if (e.cal) await page.$eval('#cCal', (el, v) => { el.value = v; el.dispatchEvent(new Event('input')); }, String(e.cal));
@@ -44,8 +45,34 @@ for (const e of (plan.length ? plan : defaut)) {
   for (const o of (e.off || [])) await page.$eval(`[data-opt="${o}"]`, (el) => { if (el.checked) { el.checked = false; el.dispatchEvent(new Event('change')); } });
   for (const o of (e.on || [])) await page.$eval(`[data-opt="${o}"]`, (el) => { if (!el.checked) { el.checked = true; el.dispatchEvent(new Event('change')); } });
   await page.waitForTimeout(e.attente ?? 1200);
+  if (e.fusion) {
+    /* On attend qu'une exocytose soit a mi-parcours : c'est l'instant qu'on
+       veut voir, et il dure moins d'une seconde sur quinze. */
+    await page.waitForFunction((cible) => {
+      const a = globalThis.apical;
+      if (!a) return false;
+      return a.co.ves.some((v) => v.etat === 1 && Math.abs(v.tf / 0.85 - cible) < 0.09);
+    }, e.fusion, { timeout: 60000, polling: 16 }).catch(() => console.log('  (pas de fusion vue)'));
+    await page.evaluate(() => { globalThis.apical.pause = true; });
+    if (e.crop === 'fusion') {
+      const c = await page.evaluate(() => {
+        const a = globalThis.apical, f = a.scene.derniereFusion;
+        const ech = a.canvas.getBoundingClientRect().width / a.canvas.width;
+        const cr = a.canvas.getBoundingClientRect(), vr = document.getElementById('vue').getBoundingClientRect();
+        return f ? { x: cr.left - vr.left + f.x * ech, y: cr.top - vr.top + f.y * ech, ech } : null;
+      });
+      if (c) e.crop = [Math.max(0, c.x - 110), Math.max(0, c.y - 80), 220, 160];
+      else e.crop = null;
+    }
+  }
   if (e.vit) await page.click('[data-vit="1"]');
-  await page.locator('#vue').screenshot({ path: `${OUT}/${e.nom}.png` });
+  if (e.crop) {
+    const b = await page.locator('#vue').boundingBox();
+    await page.screenshot({ path: `${OUT}/${e.nom}.png`,
+      clip: { x: b.x + e.crop[0], y: b.y + e.crop[1], width: e.crop[2], height: e.crop[3] } });
+  } else {
+    await page.locator('#vue').screenshot({ path: `${OUT}/${e.nom}.png` });
+  }
   const m = await page.$eval('#mesures', (n) => n.textContent);
   console.log(e.nom, '|', m);
 }
