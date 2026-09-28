@@ -6,6 +6,7 @@ import { clamp, angleDelta, noise1 } from '../src/core/util.js';
 import { omega, zonesFusion } from '../src/sim/membrane.js';
 import { DUREE_FUSION } from '../src/sim/contenu.js';
 import { Scene } from '../src/render/scene.js';
+import { Thalle, V_MICRO, UCH, R_VIRAGE } from '../src/sim/thalle.js';
 
 const KOM = 0.016, TAU_OM = 3.5;
 
@@ -338,6 +339,77 @@ function dire(ok, titre, detail) { R.push({ ok, titre, detail }); }
     `${etapes} ages de branche : ${composantes} silhouette(s) en deux morceaux, `
     + `${conge} px de conge concave (dont ${congeLoin} a plus de 9 um de la jonction), `
     + `${fuite} px de fuite ; a la naissance le bourgeon ajoute ${aNaissance} px a la mere`);
+}
+
+/* 13. macro et micro poussent a la meme vitesse */
+{
+  /* LA contrainte de l'architecture a deux echelles. La vitesse macro est
+     CALIBREE sur la micro, jamais choisie : l'apex micro pousse parce que
+     ses vesicules fusionnent, c'est un resultat. Si le macro avait sa propre
+     vitesse, la forme de la colonie dependrait de l'endroit qu'on regarde et
+     zoomer changerait le jeu. */
+  const dt = 1 / 60;
+
+  /* (a) la micro, six manches, comme le verdict 1. */
+  let umMin = 0;
+  for (let g = 1; g <= 6; g++) {
+    const m = manche({ duree: 60, graine: g });
+    umMin += (m.hy.longueur / 60) * 60;
+  }
+  umMin /= 6;
+
+  /* (b) une pointe macro SEULE, matrice neutralisee a 1 : c'est le meme
+         regime que celui dans lequel la micro a ete mesuree. */
+  const th = new Thalle({ graine: 3, vMicro: V_MICRO });
+  th.matrice = () => 1;
+  th.pointes.length = 1; th.axes.length = 1;
+  const p = th.pointes[0];
+  let t = 0;
+  while (t < 60) { th.pas(0.25); t += 0.25; }
+  const macro = (p.l / 60) * 60;
+
+  /* (c) et le rayon de virage macro doit etre celui du banc, pas un chiffre
+         d'auteur : omMax = v/R. */
+  const rMacro = (V_MICRO / 60) / th.omMax;
+
+  const ecart = Math.abs(macro - umMin) / umMin;
+  const ecartR = Math.abs(rMacro - R_VIRAGE) / R_VIRAGE;
+  dire(ecart < 0.05 && ecartR < 0.01 && Math.abs(V_MICRO - umMin) / umMin < 0.08,
+    'macro et micro poussent a la meme vitesse',
+    `micro ${umMin.toFixed(1)} um/min, macro ${macro.toFixed(1)} um/min `
+    + `(ecart ${(ecart * 100).toFixed(1)} %) ; la constante de calibration vaut ${V_MICRO} ; `
+    + `rayon de virage macro ${rMacro.toFixed(0)} um pour ${R_VIRAGE} mesures`);
+}
+
+/* 14. la colonie obeit a l'unite de croissance hyphale, et reste realiste */
+{
+  /* Un banc mesure des durees et des densites, pas une silhouette — mais il
+     voit trois emballements qui ont chacun coute une iteration :
+     la regle de Trinci qui tourne a vide, l'anastomose qui tue les branches
+     a la naissance, et la densite qui depasse 100 % de couverture. */
+  const th = new Thalle({ graine: 11, vMicro: V_MICRO });
+  const jalons = [];
+  for (const h of [1800, 7200, 14400]) {
+    while (th.t < h) th.maj(2);
+    const r = th.diametre / 2 / 1000;
+    jalons.push({
+      h, mm: th.total / 1000, pointes: th.vives,
+      dens: th.total / 1000 / Math.max(Math.PI * r * r, 1e-6),
+      uch: th.total / Math.max(th.vives, 1),
+    });
+  }
+  const fin = jalons[jalons.length - 1];
+  const ext = (th.diametre / 2) / (th.t / 60);      // um/min
+  /* Une hyphe fait 11 um de large : au-dela de ~45 mm/mm2 le mycelium
+     couvrirait la moitie du substrat, ce qu'aucune colonie ne fait au front. */
+  const ok = fin.dens < 45 && fin.dens > 1 && th.vives > 30
+          && th.branchements > 100 && th.anastomoses < th.branchements
+          && ext > 5 && ext < V_MICRO;
+  dire(ok, 'la colonie obeit a l unite de croissance hyphale',
+    jalons.map((j) => `${(j.h / 3600).toFixed(0)} h : ${j.mm.toFixed(1)} mm, ${j.pointes} pointes, `
+      + `${j.dens.toFixed(1)} mm/mm2`).join(' | ')
+    + ` ; extension radiale ${ext.toFixed(1)} um/min (pointe : ${V_MICRO}), `
+    + `${th.branchements} ramifications pour ${th.anastomoses} anastomoses, UCH cible ${UCH} um`);
 }
 
 /* 7. budget */

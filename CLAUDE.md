@@ -13,9 +13,10 @@ les captures de contrôle.
 | Commande | Ce qu'elle fait |
 |---|---|
 | `npm run serve` | sert le dépôt tel quel |
-| `npm run banc` | 12 verdicts de mesure, sans rendu, en node |
+| `npm run banc` | 14 verdicts de mesure, sans rendu, en node |
 | `npm run visuel` | captures dans `/tmp/apical-shots` (Playwright) |
 | `npm run visuel:branche` | captures de la page ramification |
+| `npm run visuel:thalle` | captures de la page colonie |
 
 ---
 
@@ -246,19 +247,39 @@ ramification n'est pas encore autonome — c'est `App.brancher` qui la déclench
 `ramification.html` reste la proposition qui a précédé ; la bifurcation apicale
 y reste en réserve comme événement rare.
 
-### 8. Deux échelles, un seul axe — *à construire*
+### 8. Deux échelles, un seul axe — *le macro est là, le pont non*
 
-`docs/02-thalle-et-jeu.md`. Le macro simule tout le mycélium en permanence
-(axe grossier, cap, vitesse, règle de ramification, 2–5 Hz, front seulement) ;
-le micro n'existe que pour l'hyphe regardée. **Le code porte déjà la
-séparation** : `Hyphe` tient l'axe et la croissance, `Contenu` et `Membrane`
-sont des pièces attachées. Zoomer, c'est attacher un intérieur à un axe qui
-existe déjà — pas instancier une nouvelle hyphe.
+`src/sim/thalle.js`, `thalle.html`. Le macro simule tout le mycélium : par
+pointe un axe grossier, un cap avec inertie, une vitesse, une règle de
+ramification. Rien d'autre — ni vésicule, ni membrane. Un point d'axe tous les
+**6 µm** et non 0,22 : au pas micro, dix mètres de mycélium feraient 45 millions
+de points.
 
-Deux contraintes non négociables : la vitesse macro est **calibrée sur la
-micro**, jamais choisie (sinon la forme de la colonie dépend de l'endroit qu'on
-regarde) ; et le fondu de transition dure **exactement le temps du
-préchauffage**, ce n'est pas un cache, c'est une horloge.
+**La vitesse macro est calibrée sur la micro, jamais choisie.** `V_MICRO` ne se
+règle pas ici : c'est ce que le banc mesure sur l'apex, où le tube avance parce
+que ses vésicules fusionnent. `omMax` est `v/R` avec le rayon de virage mesuré.
+**Le verdict 13 fait tourner les deux côte à côte et refuse l'écart** — sinon la
+forme de la colonie dépendrait de l'endroit qu'on regarde, et zoomer changerait
+le jeu.
+
+Trois mécanismes font une colonie plutôt qu'une éponge :
+
+- **la règle de Trinci**, et une seule : on ramifie quand la longueur moyenne
+  construite par pointe *depuis sa dernière branche* dépasse l'unité de
+  croissance hyphale (110 µm). Sur « longueur totale / nombre de pointes », les
+  hyphes mortes continuaient de pousser au branchement et le rapport
+  s'emballait à 3 564 µm ;
+- **l'autotropisme négatif**, lu sur le gradient d'une grille de densité ;
+- **le substrat qui se consomme.** C'est ce qui limite la colonie, et sans lui
+  le modèle s'emballe : les pointes doublent toutes les six minutes pendant que
+  la colonie ne s'étend que linéairement, et on obtenait 140 mm d'hyphe par
+  mm² — plus de 100 % de couverture. C'est aussi, mot pour mot, le plateau de
+  jeu.
+
+**Le pont entre les deux échelles reste à faire.** Zoomer, ce sera attacher un
+`Contenu` et une `Membrane` à un axe macro qui existe déjà — pas instancier une
+nouvelle hyphe. Et le fondu de transition doit durer **exactement le temps du
+préchauffage** : ce n'est pas un cache, c'est une horloge.
 
 `cadre.html` est la version contemplative **figée** : la simulation seule, sans
 panneau. Le travail sur le jeu part d'ailleurs et n'y touche pas.
@@ -303,6 +324,16 @@ Et pour la ramification :
 | diamètre au col | 5,2 µm, soit 0,47 × la mère | ~0,6 × (Trinci) |
 | calibre plein atteint | 9,5 µm après 32 µm de pousse | — |
 | coût de la portée large | +2,8 ms par image et par tube | conditionnelle |
+
+Et pour la colonie :
+
+| | mesuré | référence |
+|---|---|---|
+| pointe micro / pointe macro | 20,0 / 19,4 µm/min | écart 2,9 % |
+| rayon de virage macro | 58 µm | `v/R`, R mesuré sur la micro |
+| extension radiale de la colonie | 19,0 µm/min | un peu sous la vitesse de pointe |
+| colonie à 4 h | 590 mm, 386 pointes | 1 704 branches, 1 214 anastomoses |
+| densité au front | 9,1 mm/mm² | ~10 % de couverture |
 
 Un chiffre documenté sans avoir été mesuré est un chiffre qu'on croit seulement
 avoir. Ça s'est déjà payé.
@@ -402,6 +433,24 @@ partie du travail**, pas après, pendant.
   sans allonger le contenu — un tube dessiné mais vide. Il y a maintenant
   trois portées, et chacune a sa raison : 200 µm dessinés, 70 µm peuplés,
   34 µm de membrane simulée.
+- **Les calques avant vont de 0 à 3 par flou CROISSANT.** Le 3 a 4 px de rayon
+  et un gain de 4,2. En y dessinant le mycélium en croyant y trouver le net,
+  les hyphes sortaient cinq fois trop épaisses et la colonie se remplissait de
+  blanc.
+- **Des traits sous-pixel empilés en src-over saturent, et baisser l'opacité
+  ne corrige rien** — ça ne fait que déplacer le seuil. À 48 µm par pixel, une
+  hyphe fait un vingtième de pixel et 590 mm de mycélium tombent sur 12 000 px
+  dans un disque de 17 600 : dix passages sur le même pixel donnent
+  1 − (1−a)¹⁰. Vu de loin, on accumule donc la **surface** réellement occupée
+  et on en tire l'opacité une seule fois, à la fin.
+- Une pointe macro **se freinait sur sa propre trace** : elle lisait le substrat
+  sous elle, où elle venait de déposer 60 µm d'hyphe dans une cellule qui sature
+  à 150. Une pointe isolée en milieu neutre poussait à 18,6 µm/min au lieu de
+  19,4 — et toute la colonie s'étendait 25 % trop lentement. Une hyphe consomme
+  **derrière** elle, pas devant.
+- Une grille de simulation lue telle quelle au rendu **se voit comme un
+  damier** : on lit une structure de données, pas un substrat. Interpolation
+  bilinéaire au rendu, la maille brute pour la simulation.
 - **Un `sed` qui ne trouve pas son motif ne dit rien.** Deux remplacements
   successifs de `Q_FUSION` ont échoué en silence et j'ai documenté une valeur
   que le fichier n'avait pas. Seul le banc l'a vu (22,8 µm/min au lieu de 20).

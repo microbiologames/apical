@@ -7,6 +7,7 @@
   "scripts": {
     "serve": "npx --yes http-server -p 8080 -c-1 .",
     "banc": "node tools/banc.mjs",
+    "visuel:thalle": "node tools/visuel-thalle.mjs",
     "visuel:branche": "node tools/visuel-branche.mjs",
     "visuel": "node tools/visuel.mjs"
   },

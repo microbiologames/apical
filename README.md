@@ -5,9 +5,10 @@ en pixel art vu au microscope. Sans dépendance, sans build.
 
 ```
 npm run serve           # http://localhost:8080/
-npm run banc            # 12 verdicts de mesure
+npm run banc            # 14 verdicts de mesure
 npm run visuel          # captures de contrôle
 npm run visuel:branche  # captures de la page ramification
+npm run visuel:thalle   # captures de la page colonie
 ```
 
 Trois optiques : contraste de phase, fond noir, microscopie électronique.
@@ -19,6 +20,11 @@ cadre, sans panneau. Une hyphe différente à chaque chargement.
 second axe, la silhouette est l'union des deux tubes (minimum adouci de leurs
 deux distances signées), et la fille a son propre Spitzenkörper. On peut suivre
 la jonction, la mère ou la fille.
+
+`thalle.html` est l'**échelle macro** : une spore germe, la colonie ramifie
+toutes les 110 µm d'hyphe construite, s'auto-évite, s'anastomose et consomme son
+substrat. La vitesse des pointes n'y est pas choisie — c'est celle que le banc
+mesure sur la simulation apicale, et un verdict refuse l'écart.
 
 `ramification.html` est la proposition qui a précédé : trois concepts
 d'animation, avec les silhouettes calculées hors ligne. Le mécanisme retenu

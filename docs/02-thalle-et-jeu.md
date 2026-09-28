@@ -12,9 +12,16 @@ Décisions prises par l'auteur, à conserver.
 > `branche.html`. Une branche est un second axe dans `App.tiges`, la silhouette
 > est l'union des tubes (`Scene.unir`, congé circulaire de 2,5 µm), la fille a
 > son propre Spitzenkörper et perce la paroi de sa mère 16 s après sa
-> naissance. Ce qui reste : le pool de vésicules **partagé** (l'apex mère ne
-> ralentit pas encore quand la fille démarre), la ramification **autonome**, et
-> tout le macro ci-dessous.
+> naissance. Ce qui reste de ce côté : le pool de vésicules **partagé** (l'apex
+> mère ne ralentit pas encore quand la fille démarre) et la ramification
+> **autonome**.
+>
+> Le **macro** l'est aussi : `src/sim/thalle.js`, `thalle.html`. Une spore
+> germe, la colonie applique la règle de Trinci, s'auto-évite, s'anastomose et
+> consomme son substrat. La vitesse des pointes est celle mesurée sur la micro,
+> et le **verdict 13** refuse l'écart — c'est la contrainte n° 2 ci-dessous,
+> tenue. Ce qui reste : **le pont entre les deux échelles** (contraintes 1, 3
+> et 4), c'est-à-dire cliquer sur une hyphe pour redescendre sur son apex.
 
 Le reste n'est pas encore codé ; c'est l'architecture à respecter quand ça le
 sera.
