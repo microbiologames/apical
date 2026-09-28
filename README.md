@@ -11,6 +11,10 @@ npm run visuel    # captures de contrôle
 
 Trois optiques : contraste de phase, fond noir, microscopie électronique.
 
+`ramification.html` est une proposition : trois concepts d'animation pour la
+ramification, avec les silhouettes calculées (union adoucie de deux distances
+signées) qui prouvent qu'une branche reste un seul objet. En attente d'arbitrage.
+
 `livraison.html` est une page de mise au point dédiée à la fusion des vésicules :
 même simulation, caméra collée à l'événement, curseur de rembobinage.
 

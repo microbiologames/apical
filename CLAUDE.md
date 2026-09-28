@@ -34,7 +34,7 @@ que l'exocytose » évite de refaire l'erreur.
 
 ---
 
-## Les sept règles de fond
+## Les huit règles de fond
 
 ### 1. L'hyphe est UN objet
 
@@ -191,7 +191,24 @@ Même raisonnement pour le milieu extérieur : le grain de gélose et les débri
 sont tirés d'un hachage de cellules en **coordonnées monde**. Sans repère fixe
 hors du tube, il n'y a aucune impression de progression.
 
-### 7. Le Spitzenkörper n'est jamais dessiné
+### 7. Une branche n'est pas un second objet — *à construire*
+
+`ramification.html` est la proposition, pas l'implémentation. Ce qui y est
+tranché : une branche est un **second axe**, et la silhouette est l'**union**
+des deux tubes, calculée comme un **minimum adouci** de leurs deux distances
+signées. L'adoucissement produit l'évasement concave qu'une vraie branche a à
+sa base. On n'a jamais deux contours, on a un contour qui a un Y dedans.
+
+Les silhouettes de la page sont extraites au niveau zéro de ce champ : c'est la
+géométrie exacte que le moteur devra produire, vérifiée avant d'écrire une
+ligne de moteur.
+
+Reste à arbitrer par l'auteur : le mécanisme (second Spitzenkörper sub-apical,
+ou bifurcation apicale en Y), la caméra (rester sur la mère, reculer, ou ouvrir
+un second cadre), et si la branche a son propre cytoplasme ou hérite de celui
+du parent.
+
+### 8. Le Spitzenkörper n'est jamais dessiné
 
 C'est une densité, pas un objet : un puits de rétention à ~2 µm de la pointe,
 et le nuage apparaît tout seul. Le dessiner net était la mauvaise réponse
