@@ -14,7 +14,7 @@
 import { Screen } from './core/pixel.js';
 import { clamp, lerp, smoothstep, angleDelta, noise1, TAU } from './core/util.js';
 import { PALETTES, ORDRE_PALETTES } from './data/palette.js';
-import { Hyphe } from './sim/hyphe.js';
+import { Hyphe, brancherSur } from './sim/hyphe.js';
 import { Contenu, S_MAX } from './sim/contenu.js';
 import { Scene } from './render/scene.js';
 
@@ -66,10 +66,36 @@ export class App {
   reset(graine = 20260928) {
     this.hy = new Hyphe({ graine });
     this.co = new Contenu(this.hy, { graine });
+    /* Une hyphe est une TIGE : un axe et son interieur. Une branche est une
+       tige de plus, jamais un second objet — la silhouette reste l'union
+       des tubes (Scene.unir). `hy`/`co` restent la mere, c'est elle que
+       le panneau regle et que la camera suit par defaut. */
+    this.tiges = [{ hy: this.hy, co: this.co, phiCible: 0, graine }];
+    this.active = 0;            // la tige que le pilotage dirige
+    this.suivi = 0;             // la tige que la camera suit
     this.phiCible = 0;
     this.scene.cam.x = this.hy.x;
     this.scene.cam.y = this.hy.y;
     this.horloge = 0;
+  }
+
+  /** Fait naitre une branche sur la tige `i`. Voir `brancherSur`. */
+  brancher(i = 0, o = {}) {
+    const rnd = () => Math.random();
+    const graine = o.graine ?? ((rnd() * 1e9) | 0);
+    const hy = brancherSur(this.tiges[i].hy, {
+      graine,
+      s: o.s ?? (9 + rnd() * 6),
+      cote: o.cote ?? (rnd() < 0.5 ? -1 : 1),
+      angle: o.angle ?? (60 + rnd() * 20) * Math.PI / 180,
+      R: o.R,
+    });
+    /* 0,4 um de marge sous la calotte arriere : le contenu ne doit jamais
+       entrer dans le fond du bourgeon, ou W(s) tend vers zero et ou une
+       vesicule serait ecrasee contre la paroi. */
+    const co = new Contenu(hy, { graine, sMax: Math.max(1, hy.total - hy.Lb - 0.4) });
+    this.tiges.push({ hy, co, phiCible: 0, graine });
+    return this.tiges.length - 1;
   }
 
   layout() {
@@ -101,32 +127,45 @@ export class App {
   /* --- simulation --------------------------------------------------------- */
 
   maj(dt) {
-    const hy = this.hy, co = this.co, sc = this.scene;
+    const sc = this.scene;
     this.horloge += dt;
 
-    /* 1. Consigne angulaire du gradient de Ca2+. */
-    let cible = 0;
-    if (this.pilotage === 'souris' && this.pointeur) {
-      const wx = (this.pointeur.x - sc.w * 0.5) / sc.pxUm + sc.cam.x;
-      const wy = (this.pointeur.y - sc.h * 0.5) / sc.pxUm + sc.cam.y;
-      const d = Math.hypot(wx - hy.x, wy - hy.y);
-      if (d > 0.8) cible = clamp(angleDelta(hy.th, Math.atan2(wy - hy.y, wx - hy.x)), -0.85, 0.85);
-    } else {
-      /* Derive lente : une hyphe libre n'est pas droite, elle serpente. */
-      cible = (noise1(this.horloge * 0.055, 31) - 0.5) * 1.5;
+    for (let i = 0; i < this.tiges.length; i++) {
+      const tg = this.tiges[i], hy = tg.hy, co = tg.co;
+
+      /* 1. Consigne angulaire du gradient de Ca2+. Une seule tige est
+            pilotee ; les autres serpentent pour leur compte. */
+      let cible = 0;
+      if (i === this.active && this.pilotage === 'souris' && this.pointeur) {
+        const wx = (this.pointeur.x - sc.w * 0.5) / sc.pxUm + sc.cam.x;
+        const wy = (this.pointeur.y - sc.h * 0.5) / sc.pxUm + sc.cam.y;
+        const d = Math.hypot(wx - hy.x, wy - hy.y);
+        if (d > 0.8) cible = clamp(angleDelta(hy.th, Math.atan2(wy - hy.y, wx - hy.x)), -0.85, 0.85);
+      } else {
+        /* Derive lente : une hyphe libre n'est pas droite, elle serpente. */
+        cible = (noise1(this.horloge * 0.055, 31 + i * 17) - 0.5) * 1.5;
+      }
+      tg.phiCible += (cible - tg.phiCible) * clamp(dt * 0.9, 0, 1);
+      if (i === 0) this.phiCible = tg.phiCible;
+
+      /* 2. Le contenu vit, et fusionne. */
+      co.maj(dt, tg.phiCible, this.opts);
+
+      /* 3. L'hyphe ne fait que consommer le bilan des fusions. */
+      const da = co.avance;
+      const omCible = (co.couple / Math.max(dt, 1e-4)) * KOM;
+      hy.om += (omCible - hy.om) * clamp(dt / TAU_OM, 0, 1);
+      hy.avancer(da, dt);
+
+      /* 4. Une branche allonge son domaine simule a mesure qu'elle pousse :
+            elle nait avec un demi-micrometre de tube et finira par en avoir
+            34. La calotte arriere est retranchee, c'est le fond du
+            bourgeon, le tube y est deja referme. */
+      if (hy.branche) co.etendre(hy.total - hy.Lb - 0.4);
     }
-    this.phiCible += (cible - this.phiCible) * clamp(dt * 0.9, 0, 1);
+    const hy = this.tiges[this.suivi].hy;
 
-    /* 2. Le contenu vit, et fusionne. */
-    co.maj(dt, this.phiCible, this.opts);
-
-    /* 3. L'hyphe ne fait que consommer le bilan des fusions. */
-    const da = co.avance;
-    const omCible = (co.couple / Math.max(dt, 1e-4)) * KOM;
-    hy.om += (omCible - hy.om) * clamp(dt / TAU_OM, 0, 1);
-    hy.avancer(da, dt);
-
-    /* 4. Camera. L'apex se tient a 30 % du bord d'attaque, quel que soit
+    /* 5. Camera. L'apex se tient a 30 % du bord d'attaque, quel que soit
        son cap et quel que soit le format de la fenetre : on calcule donc
        le recul en pixels sur l'etendue du cadre dans la direction du cap,
        pas en um sur une constante. */
@@ -142,7 +181,7 @@ export class App {
     sc.cam.x += (tx - sc.cam.x) * k;
     sc.cam.y += (ty - sc.cam.y) * k;
 
-    /* 5. Mise au point : elle derive, comme sur une platine qui travaille. */
+    /* 6. Mise au point : elle derive, comme sur une platine qui travaille. */
     sc.zFocus = this.miseAuPoint !== null
       ? this.miseAuPoint
       : 0.30 * Math.sin(this.horloge * 0.105) + 0.18 * (noise1(this.horloge * 0.07, 5) - 0.5);
@@ -165,7 +204,7 @@ export class App {
     }
 
     const sc = this.scene;
-    sc.dessiner(this.hy, this.co, PALETTES[this.palette], this.t, this.opts);
+    sc.dessiner(this.tiges, PALETTES[this.palette], this.t, this.opts);
     this.screen.present();
   }
 

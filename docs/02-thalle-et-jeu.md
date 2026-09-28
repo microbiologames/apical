@@ -6,8 +6,18 @@
 > revient pas. *(Le tag `contemplation-v1` existe en local ; l'intégration
 > GitHub de cette session n'accepte que les pushs de branches, pas de tags.)*
 
-Décisions prises par l'auteur, à conserver. Rien de ce qui suit n'est encore
-codé ; c'est l'architecture à respecter quand ça le sera.
+Décisions prises par l'auteur, à conserver.
+
+> **Fait depuis.** La **ramification micro** est implémentée et visible :
+> `branche.html`. Une branche est un second axe dans `App.tiges`, la silhouette
+> est l'union des tubes (`Scene.unir`, congé circulaire de 2,5 µm), la fille a
+> son propre Spitzenkörper et perce la paroi de sa mère 16 s après sa
+> naissance. Ce qui reste : le pool de vésicules **partagé** (l'apex mère ne
+> ralentit pas encore quand la fille démarre), la ramification **autonome**, et
+> tout le macro ci-dessous.
+
+Le reste n'est pas encore codé ; c'est l'architecture à respecter quand ça le
+sera.
 
 ---
 

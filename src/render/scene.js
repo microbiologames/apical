@@ -24,7 +24,23 @@ import { versMonde } from '../sim/hyphe.js';
 import { S_MAX, DUREE_FUSION } from '../sim/contenu.js';
 import { omega, PAS as PAS_MEMB } from '../sim/membrane.js';
 
-const BANDE = 6;          // px : portee de la bande de distance (halo compris)
+/* Portee du champ de distance.
+
+   Une hyphe SEULE n'a besoin que du halo : 7 px, comme avant. Des qu'il y a
+   DEUX tubes il faut beaucoup plus, parce que l'union est un minimum adouci
+   et qu'on ne peut pas raccorder plus large que ce qu'on mesure : le conge
+   d'une base de branche fait 2,5 um, soit 27 px au cadrage par defaut. A
+   1 um la jonction se lisait encore comme un V — deux tubes poses l'un sur
+   l'autre, exactement ce qu'on ne veut pas.
+
+   Mesure a 126 kpx, en rendu logiciel : la portee large coute 2,8 ms par
+   image et par tube. C'est pour ca qu'elle est CONDITIONNELLE — l'hyphe
+   seule, qui est le cas courant, ne paye rien.
+
+   Le HALO, lui, reste a 6 px dans tous les cas : c'est un reglage d'oeil,
+   pas une portee de calcul. */
+const BANDE = 30;
+const HALO = 6;
 const MAX_SOMMETS = 4096;
 
 /* Fonte 4x6, juste de quoi ecrire la barre d'echelle. */
@@ -64,7 +80,12 @@ export class Scene {
       }
     }
     this.dist = new Float32Array(w * h);
+    this.portee = HALO + 1;
     this.dist.fill(BANDE + 1);
+    /* Quel tube est le plus proche : sert a savoir de quelle hyphe un pixel
+       de paroi tient sa maturite et sa texture. */
+    this.own = new Uint8Array(w * h);
+    this.champs = null;
     this.box = { x0: 0, y0: 0, x1: w - 1, y1: h - 1 };
   }
 
@@ -75,24 +96,46 @@ export class Scene {
 
   /* --- passes ------------------------------------------------------------ */
 
-  dessiner(hy, co, pal, t, opts) {
+  /**
+   * `tiges` : [{hy, co}, ...]. Une hyphe seule est un tableau d'un element.
+   *
+   * On ne dessine JAMAIS deux silhouettes. On calcule un champ de distance
+   * signe par tube, on en prend le minimum adouci, et tout le reste — le
+   * remplissage, la paroi, le halo — lit ce champ-la. Il ne peut donc pas y
+   * avoir deux contours qui se croisent : il y a un contour, avec un Y
+   * dedans.
+   */
+  dessiner(tiges, pal, t, opts) {
     const sc = this.sc;
     this.alloc(sc.w, sc.h);
     const P = pal;
+    const n = tiges.length;
+    this.portee = n > 1 ? BANDE : HALO + 1;
 
     const fond = hexToRgba(P.fond);
     sc.beginFrame(fond);
 
     this.fond(P, opts);
     if (opts.milieu !== false) this.milieu(P, t);
-    this.contourEcran(hy);
-    this.bandeDistance();
-    this.cytoplasme(hy, P, t, opts);
-    this.contenu(hy, co, P, opts);
-    this.paroi(hy, P, opts);
-    this.membraneLigne(hy, co, P, opts);
-    this.fusions(hy, co, P, opts);
-    if (opts.depots !== false) this.tracesParoi(hy, co, P);
+
+    for (let i = 0; i < n; i++) {
+      const f = this.champ(i);
+      f.actif = true;
+      this.contourEcran(tiges[i].hy, f);
+      this.bandeDistance(f);
+      this.remplirMasque(f);
+    }
+    for (let i = n; i < (this.champs?.length ?? 0); i++) this.champs[i].actif = false;
+    this.unir(n);
+
+    this.cytoplasme(tiges, P, t, opts);
+    for (let i = 0; i < n; i++) this.contenu(tiges[i].hy, tiges[i].co, P, opts);
+    this.paroi(tiges, P, opts);
+    for (let i = 0; i < n; i++) {
+      this.membraneLigne(tiges[i].hy, tiges[i].co, P, opts, i);
+      this.fusions(tiges[i].hy, tiges[i].co, P, opts, i);
+      if (opts.depots !== false) this.tracesParoi(tiges[i].hy, tiges[i].co, P, i);
+    }
     if (opts.milieu !== false) this.milieuAvant(P);
 
     sc.composite(P.dither);
@@ -199,13 +242,33 @@ export class Scene {
     }
   }
 
-  contourEcran(hy) {
-    const n = hy.contour(this.xs, this.ys, S_MAX, 32);
-    for (let i = 0; i < n; i++) {
-      this.xs[i] = this.sx(this.xs[i]);
-      this.ys[i] = this.sy(this.ys[i]);
+  /* --- silhouette : un champ par tube, puis leur union ------------------- */
+
+  /**
+   * Le champ de distance d'UN tube. Alloue a la demande : une hyphe seule
+   * n'en paye qu'un, et c'est le cas le plus frequent.
+   */
+  champ(i) {
+    const c = this.champs || (this.champs = []);
+    const n = this.w * this.h;
+    if (!c[i] || c[i].dist.length !== n) {
+      c[i] = {
+        dist: new Float32Array(n), mask: new Uint8Array(n),
+        xs: new Float32Array(MAX_SOMMETS), ys: new Float32Array(MAX_SOMMETS), n: 0,
+        box: { x0: 0, y0: 0, x1: this.w - 1, y1: this.h - 1 }, actif: false,
+      };
+      c[i].dist.fill(this.portee + 1);
     }
-    this.n = n;
+    return c[i];
+  }
+
+  contourEcran(hy, f) {
+    const n = hy.contour(f.xs, f.ys, S_MAX, 32);
+    for (let i = 0; i < n; i++) {
+      f.xs[i] = this.sx(f.xs[i]);
+      f.ys[i] = this.sy(f.ys[i]);
+    }
+    f.n = n;
   }
 
   /**
@@ -214,12 +277,14 @@ export class Scene {
    * double melange aux jointures, ce qui laissait des points sombres sur
    * chaque sommet quand on tracait arete par arete en src-over.
    */
-  bandeDistance() {
-    const { xs, ys, n, dist, w, h } = this;
-    const b = this.box;
+  bandeDistance(f) {
+    const { xs, ys, n, dist, mask } = f;
+    const w = this.w, h = this.h;
+    const b = f.box;
+    const BANDE = this.portee;
     for (let y = Math.max(0, b.y0); y <= Math.min(h - 1, b.y1); y++) {
       dist.fill(BANDE + 1, y * w + Math.max(0, b.x0), y * w + Math.min(w - 1, b.x1) + 1);
-      this.mask.fill(0, y * w + Math.max(0, b.x0), y * w + Math.min(w - 1, b.x1) + 1);
+      mask.fill(0, y * w + Math.max(0, b.x0), y * w + Math.min(w - 1, b.x1) + 1);
     }
     let X0 = w, Y0 = h, X1 = -1, Y1 = -1;
 
@@ -248,35 +313,22 @@ export class Scene {
         }
       }
     }
-    this.box = { x0: X0, y0: Y0, x1: X1, y1: Y1 };
+    f.box = { x0: X0, y0: Y0, x1: X1, y1: Y1 };
   }
 
   /**
-   * Remplissage du cytoplasme. Balayage pair-impair du polygone : une seule
-   * silhouette, aucune couture. C'est le remede au defaut qui a coule le
-   * prototype precedent, ou chaque troncon etait rasterise pour son compte
-   * et faisait onduler la paroi.
+   * Le plein du polygone, par balayage pair-impair : une seule silhouette,
+   * aucune couture. C'est le remede au defaut qui a coule le prototype
+   * precedent, ou chaque troncon etait rasterise pour son compte et faisait
+   * onduler la paroi.
+   *
+   * Le masque dit seulement « dedans / dehors ». La peinture, elle, est une
+   * passe separee, parce qu'avec deux tubes elle doit lire le champ UNI et
+   * non celui du tube qu'on vient de remplir.
    */
-  cytoplasme(hy, P, t, opts) {
-    const { xs, ys, n, w, h, mask, dist } = this;
-    const sc = this.sc;
-    const cCyto = hexToRgba(P.cyto);
-    const cBord = hexToRgba(P.cytoBord);
-    const force = opts.granulation === false ? 0 : (P.texture ?? P.bruit);
-
-    const ax = this.sx(hy.x), ay = this.sy(hy.y);
-    const cth = Math.cos(hy.th), sth = Math.sin(hy.th);
-    /* La texture derive AVEC le cytoplasme, pas avec la paroi : 0,9 um/s,
-       le flux de masse (1,2) moins la croissance (0,33). Sans ce terme le
-       tube est granuleux mais parfaitement immobile a l'interieur. */
-    const derive = -t * 0.9;
-    /* Frequences en um^-1 : 2,2 cycles/um pour les plages, 8,1 pour le
-       grain. En dessous de 1,5 px de periode la fine octave n'est plus que
-       du bruit qui scintille, on l'attenue. */
-    const invK = 1 / this.pxUm;
-    const F1 = 2.2, F2 = 8.1;
-    const attF2 = clamp(this.pxUm / (F2 * 1.5), 0, 1);
-
+  remplirMasque(f) {
+    const { xs, ys, n, mask } = f;
+    const w = this.w, h = this.h;
     let ymin = h, ymax = -1;
     for (let i = 0; i < n; i++) { const y = ys[i]; if (y < ymin) ymin = y; if (y > ymax) ymax = y; }
     const y0 = Math.max(0, Math.floor(ymin)), y1 = Math.min(h - 1, Math.ceil(ymax));
@@ -298,30 +350,202 @@ export class Scene {
       for (let k = 0; k + 1 < m; k += 2) {
         const xa = Math.max(0, Math.ceil(xsInt[k] - 0.5));
         const xb = Math.min(w - 1, Math.floor(xsInt[k + 1] - 0.5));
-        for (let x = xa; x <= xb; x++) {
-          const o = row + x;
-          mask[o] = 255;
-          const d = dist[o];
-          /* Assombrissement au bord : un cylindre vu de cote presente plus
-             d'epaisseur optique sur ses flancs. Tire de la MEME distance
-             que la paroi, donc rigoureusement concentrique. */
-          let c = mix32(cCyto, cBord, clamp(1 - d / 3.6, 0, 1) * 0.34);
-          if (force > 0) {
-            /* Coordonnees en MICROMETRES, pas en pixels. Indexee sur le
-               pixel, la granulation gardait la meme taille apparente quand
-               on zoomait : le tube grossissait, le grain non, et le fond
-               avait l'air pose sur un autre plan. En um, il grossit avec
-               tout le reste. Le terme de derive etait en um pendant que la
-               coordonnee etait en px : la texture ne coulait donc pas a la
-               bonne vitesse non plus. */
-            const lx = ((x - ax) * cth + (y - ay) * sth) * invK;
-            const ly = (-(x - ax) * sth + (y - ay) * cth) * invK;
-            const g = (fbm2((lx + derive) * F1, ly * F1, 17) - 0.5) * 0.62
-                    + (fbm2((lx + derive) * F2, ly * F2, 43) - 0.5) * 0.38 * attF2;
-            c = shade32(c, g * force * 3.0);
-          }
-          sc.px[o] = c | 0xff000000;
+        for (let x = xa; x <= xb; x++) mask[row + x] = 255;
+      }
+    }
+  }
+
+  /**
+   * UNION DES TUBES. Une branche n'est pas un second objet pose a cote de
+   * sa mere : c'est un second axe, et la silhouette est l'union des deux
+   * tubes, prise comme un MINIMUM ADOUCI de leurs deux distances signees.
+   *
+   *   u = max(k - a, 0), v = max(k - b, 0)
+   *   smin(a, b) = max(k, min(a, b)) - hypot(u, v)
+   *
+   * C'est le conge CIRCULAIRE, et le k qu'on lit est vraiment le rayon de
+   * raccordement. Le minimum polynomial, essaye d'abord, ne creuse que k/4 :
+   * a k = 1,1 um il rabotait la jonction de 0,25 um et l'angle rentrant se
+   * lisait encore comme un V — deux tubes poses l'un sur l'autre, exactement
+   * ce qu'on ne veut pas. Ici le rayon est le rayon.
+   *
+   * Il a aussi le bon comportement aux bords, sans rustine : des que les
+   * deux distances depassent k, u et v sont nuls et le resultat est le
+   * minimum EXACT. Le conge n'existe donc qu'a la jonction, et nulle part
+   * ailleurs — la ou la formule polynomiale, elle, laissait un terme k/4
+   * partout ou les deux champs saturaient a la meme valeur, soit un halo
+   * fantome a exactement BANDE pixels de la paroi.
+   *
+   * k = 1,1 um, borne par la portee du champ : on ne peut pas raccorder
+   * plus large que ce qu'on mesure.
+   */
+  unir(nt) {
+    const { w, h, dist, mask, own } = this;
+    const C = this.champs;
+    const BANDE = this.portee;
+    const k = clamp(2.5 * this.pxUm, 4, BANDE - 3);
+
+    let X0 = w, Y0 = h, X1 = -1, Y1 = -1;
+    for (let i = 0; i < nt; i++) {
+      const b = C[i].box;
+      if (b.x1 < b.x0) continue;
+      if (b.x0 < X0) X0 = b.x0; if (b.x1 > X1) X1 = b.x1;
+      if (b.y0 < Y0) Y0 = b.y0; if (b.y1 > Y1) Y1 = b.y1;
+    }
+    X0 = Math.max(0, X0); Y0 = Math.max(0, Y0);
+    X1 = Math.min(w - 1, X1); Y1 = Math.min(h - 1, Y1);
+    this.box = { x0: X0, y0: Y0, x1: X1, y1: Y1 };
+    if (X1 < X0) return;
+
+    /* Chaque tube ne nettoie son champ que sur SA boite. Hors de la, ce qui
+       traine est le reste de l'image precedente — ou de l'allocation. Lu tel
+       quel, un 8 perime passait pour une paroi a 8 px et le conge se mettait
+       a ponter n'importe quoi : 4 400 px de silhouette inventes loin de
+       toute jonction. On teste donc l'appartenance a la boite. */
+    const bx0 = this._ubx0 || (this._ubx0 = new Int32Array(8));
+    const bx1 = this._ubx1 || (this._ubx1 = new Int32Array(8));
+    const by0 = this._uby0 || (this._uby0 = new Int32Array(8));
+    const by1 = this._uby1 || (this._uby1 = new Int32Array(8));
+    for (let i = 0; i < nt; i++) {
+      const b = C[i].box;
+      bx0[i] = b.x0; bx1[i] = b.x1; by0[i] = b.y0; by1[i] = b.y1;
+    }
+    const SAT = BANDE + 1;
+
+    const d0 = C[0].dist, m0 = C[0].mask;
+    for (let y = Y0; y <= Y1; y++) {
+      const row = y * w;
+      const r0 = y >= by0[0] && y <= by1[0];
+      for (let x = X0; x <= X1; x++) {
+        const o = row + x;
+        let sg = (r0 && x >= bx0[0] && x <= bx1[0]) ? (m0[o] ? -d0[o] : d0[o]) : SAT;
+        let iw = 0, best = sg;
+        for (let i = 1; i < nt; i++) {
+          const f = C[i];
+          const dedans = y >= by0[i] && y <= by1[i] && x >= bx0[i] && x <= bx1[i];
+          const si = dedans ? (f.mask[o] ? -f.dist[o] : f.dist[o]) : SAT;
+          if (si < best) { best = si; iw = i; }
+          const u = k - sg, v = k - si;
+          if (u <= 0 && v <= 0) { sg = si < sg ? si : sg; continue; }
+          const uu = u > 0 ? u : 0, vv = v > 0 ? v : 0;
+          const lo = si < sg ? si : sg;
+          sg = (lo > k ? lo : k) - Math.sqrt(uu * uu + vv * vv);
         }
+        own[o] = iw;
+        mask[o] = sg < 0 ? 255 : 0;
+        const a = sg < 0 ? -sg : sg;
+        dist[o] = a > BANDE + 1 ? BANDE + 1 : a;
+      }
+    }
+  }
+
+  /**
+   * Un pixel est-il CACHE par un autre tube que `i` ? Sert a la membrane et
+   * aux traces de paroi : la base d'une branche est enfoncee dans sa mere,
+   * et sa paroi, la, n'existe pas — c'est du cytoplasme continu.
+   *
+   * On ne coupe qu'au-dela de l'epaisseur de l'enveloppe : a la jonction
+   * exacte les deux parois se confondent, et couper au premier pixel
+   * interieur aurait laisse un trou d'un pixel dans la ligne de membrane.
+   */
+  cache(i, x, y) {
+    const C = this.champs;
+    if (!C || C.length < 2) return false;
+    const xi = x | 0, yi = y | 0;
+    if (xi < 0 || yi < 0 || xi >= this.w || yi >= this.h) return false;
+    const o = yi * this.w + xi;
+    /* Dans le conge, la paroi de l'union s'est ecartee de celle du tube :
+       la membrane du tube y doublerait une paroi qui n'existe plus, et elle
+       coupait l'angle que la silhouette, elle, arrondit. On la coupe la
+       aussi. La marge de 0,8 um laisse passer le creux d'une fusion, qui
+       peut atteindre 0,6. */
+    if (this.dist[o] > this.peau().base + 0.8 * this.pxUm) return true;
+    /* Borne par la portee du champ : au fort grossissement l'enveloppe fait
+       7 px et 1,6 fois ca depassait la saturation du champ — le test ne
+       repondait plus jamais vrai et la membrane de la branche se voyait en
+       plein cytoplasme maternel, deux traits sombres en diagonale. */
+    const seuil = Math.min(this.peau().base * 1.6, this.portee - 2);
+    for (let j = 0; j < C.length; j++) {
+      if (j === i || !C[j].actif) continue;
+      const b = C[j].box;
+      if (xi < b.x0 || xi > b.x1 || yi < b.y0 || yi > b.y1) continue;
+      if (C[j].mask[o] && C[j].dist[o] > seuil) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Peinture du cytoplasme sur le masque UNI : le conge de la jonction se
+   * remplit donc tout seul, il n'y a rien a raccorder.
+   *
+   * La texture, elle, appartient a UN tube : elle coule le long de son axe.
+   * On donne la priorite au tube 0 — la mere — partout ou le pixel est chez
+   * elle, si bien que la couture entre les deux reperes tombe exactement sur
+   * la paroi de la mere, la ou le liseré et l'assombrissement de bord la
+   * couvrent. Prise sur le tube le plus proche, elle tombait en plein
+   * cytoplasme et se voyait comme un trait.
+   */
+  cytoplasme(tiges, P, t, opts) {
+    const { w, h, mask, dist, own } = this;
+    const sc = this.sc;
+    const b = this.box;
+    const nt = tiges.length;
+    const cCyto = hexToRgba(P.cyto);
+    const cBord = hexToRgba(P.cytoBord);
+    const force = opts.granulation === false ? 0 : (P.texture ?? P.bruit);
+
+    const AX = this._cyAX || (this._cyAX = new Float64Array(8));
+    const AY = this._cyAY || (this._cyAY = new Float64Array(8));
+    const CT = this._cyCT || (this._cyCT = new Float64Array(8));
+    const ST = this._cyST || (this._cyST = new Float64Array(8));
+    for (let i = 0; i < nt; i++) {
+      const hy = tiges[i].hy;
+      AX[i] = this.sx(hy.x); AY[i] = this.sy(hy.y);
+      CT[i] = Math.cos(hy.th); ST[i] = Math.sin(hy.th);
+    }
+    /* La texture derive AVEC le cytoplasme, pas avec la paroi : 0,9 um/s,
+       le flux de masse (1,2) moins la croissance (0,33). Sans ce terme le
+       tube est granuleux mais parfaitement immobile a l'interieur. */
+    const derive = -t * 0.9;
+    /* Frequences en um^-1 : 2,2 cycles/um pour les plages, 8,1 pour le
+       grain. En dessous de 1,5 px de periode la fine octave n'est plus que
+       du bruit qui scintille, on l'attenue. */
+    const invK = 1 / this.pxUm;
+    const F1 = 2.2, F2 = 8.1;
+    const attF2 = clamp(this.pxUm / (F2 * 1.5), 0, 1);
+    const C = this.champs;
+
+    for (let y = Math.max(0, b.y0); y <= Math.min(h - 1, b.y1); y++) {
+      const row = y * w;
+      for (let x = Math.max(0, b.x0); x <= Math.min(w - 1, b.x1); x++) {
+        const o = row + x;
+        if (!mask[o]) continue;
+        const d = dist[o];
+        /* Assombrissement au bord : un cylindre vu de cote presente plus
+           d'epaisseur optique sur ses flancs. Tire de la MEME distance
+           que la paroi, donc rigoureusement concentrique. */
+        let c = mix32(cCyto, cBord, clamp(1 - d / 3.6, 0, 1) * 0.34);
+        if (force > 0) {
+          let i = own[o];
+          for (let j = 0; j < nt; j++) {
+            const bj = C[j].box;
+            if (x >= bj.x0 && x <= bj.x1 && y >= bj.y0 && y <= bj.y1 && C[j].mask[o]) { i = j; break; }
+          }
+          /* Coordonnees en MICROMETRES, pas en pixels. Indexee sur le
+             pixel, la granulation gardait la meme taille apparente quand
+             on zoomait : le tube grossissait, le grain non, et le fond
+             avait l'air pose sur un autre plan. En um, il grossit avec
+             tout le reste. Le terme de derive etait en um pendant que la
+             coordonnee etait en px : la texture ne coulait donc pas a la
+             bonne vitesse non plus. */
+          const dx = x - AX[i], dy = y - AY[i];
+          const lx = (dx * CT[i] + dy * ST[i]) * invK;
+          const ly = (-dx * ST[i] + dy * CT[i]) * invK;
+          const g = (fbm2((lx + derive) * F1, ly * F1, 17) - 0.5) * 0.62
+                  + (fbm2((lx + derive) * F2, ly * F2, 43) - 0.5) * 0.38 * attF2;
+          c = shade32(c, g * force * 3.0);
+        }
+        sc.px[o] = c | 0xff000000;
       }
     }
   }
@@ -491,7 +715,7 @@ export class Scene {
    * zone de contact sont retires du chemin et remplaces par l'arc de son
    * propre contour. Le chemin reste une seule courbe.
    */
-  membraneLigne(hy, co, P, opts) {
+  membraneLigne(hy, co, P, opts, it = 0) {
     if (opts.membrane === false) return;
     const sc = this.sc, mb = co.membrane;
     const T = hy.table(S_MAX + 2, 0.3);
@@ -506,8 +730,14 @@ export class Scene {
       const ch = mb.ch[c], cote = c === 0 ? -1 : 1;
       const i0 = sens < 0 ? ch.n - 1 : 0, i1 = sens < 0 ? -1 : ch.n;
       for (let i = i0; i !== i1; i += sens) {
-        if (mb.sDepuisAge(ch.a[i]) > S_MAX) continue;
-        item.push(this.ptMembrane(mb, hy, T, cote * ch.a[i], ch.off[i], {}));
+        if (mb.sDepuisAge(ch.a[i]) > co.sMax) continue;
+        const q = this.ptMembrane(mb, hy, T, cote * ch.a[i], ch.off[i], {});
+        /* La base d'une branche est ENFONCEE dans sa mere : la, il n'y a ni
+           paroi ni membrane, c'est du cytoplasme continu. On marque le
+           noeud au lieu de le retirer — retire, la ligne se refermait d'un
+           trait droit en travers de la jonction. */
+        q.hid = this.cache(it, q.x, q.y);
+        item.push(q);
       }
     }
 
@@ -517,6 +747,7 @@ export class Scene {
       const z = zones[zi];
       const A = this.ptMembrane(mb, hy, T, z.w0 - z.hw, this.offW(mb, z.w0 - z.hw), {});
       const B = this.ptMembrane(mb, hy, T, z.w0 + z.hw, this.offW(mb, z.w0 + z.hw), {});
+      if (this.cache(it, A.x, A.y) || this.cache(it, B.x, B.y)) { zones.splice(zi, 1); continue; }
       z.pts = this.arcOmega(A, B, z.dep * K);
       z.A = A; z.B = B;
       let k0 = 0;
@@ -542,6 +773,7 @@ export class Scene {
     /* poches residuelles de la chaine, la ou elle s'est ecartee sans arc */
     for (let k = 0; k + 1 < item.length; k++) {
       const a = item[k], b = item[k + 1];
+      if (a.hid || b.hid) continue;
       if (Math.hypot(b.x - a.x, b.y - a.y) > 6) continue;
       const da = Math.hypot(a.x - a.wx, a.y - a.wy), db = Math.hypot(b.x - b.wx, b.y - b.wy);
       if (da < base + 1.2 && db < base + 1.2) continue;
@@ -555,6 +787,7 @@ export class Scene {
     /* --- 4. la ligne, d'un bout a l'autre ----------------------------- */
     for (let i = 0; i + 1 < item.length; i++) {
       const a = item[i], b = item[i + 1];
+      if (a.hid || b.hid) continue;
       if ((a.x < -2 && b.x < -2) || (a.y < -2 && b.y < -2)
           || (a.x > this.w + 2 && b.x > this.w + 2) || (a.y > this.h + 2 && b.y > this.h + 2)) continue;
       sc.line(a.x, a.y, b.x, b.y, cM);
@@ -631,7 +864,7 @@ export class Scene {
    * ligne se creusait, sans que les deux se raccordent jamais — « on voit
    * les vesicules disparaitre, mais pas de continuite de ligne pure ».
    */
-  fusions(hy, co, P, opts) {
+  fusions(hy, co, P, opts, it = 0) {
     if (opts.vesicules === false) return;
     const sc = this.sc, T = hy.table(S_MAX + 2, 0.3), pt = this.pt, K = this.pxUm;
     const cMol = hexToRgba(P.molecule);
@@ -652,6 +885,7 @@ export class Scene {
       versMonde(T, m.s, m.v, pt);
       const x = this.sx(pt.x), y = this.sy(pt.y);
       if (x < -4 || y < -4 || x > this.w + 4 || y > this.h + 4) continue;
+      if (this.cache(it, x, y)) continue;
       const k = 1 - m.t / m.vie;
       sc.dot(x, y, k > 0.55 ? 1.0 : 0.6, fade32(cMol, 0.35 + 0.65 * k * k));
     }
@@ -676,10 +910,11 @@ export class Scene {
    * l'echelle — et son epaisseur est en pixels ECRAN, jamais en um, sinon
    * le tube devient une saucisse des qu'on zoome.
    */
-  paroi(hy, P, opts) {
-    const { w, h, dist, mask } = this;
+  paroi(tiges, P, opts) {
+    const { w, h, dist, mask, own } = this;
     const sc = this.sc;
     const b = this.box;
+    const nt = tiges.length;
     const cP = hexToRgba(P.paroi), cJ = hexToRgba(P.paroiJeune);
     const cH = hexToRgba(P.halo);
     const cPer = hexToRgba(P.periplasme);
@@ -689,7 +924,12 @@ export class Scene {
     const pk = this.peau();
     const e = pk.ep;
     const gp = peau ? pk.gp : 0;
-    const ax = this.sx(hy.x), ay = this.sy(hy.y);
+    /* Chaque tube a son apex : la maturite de la paroi et sa texture se
+       comptent depuis LE SIEN. On prend celui dont le pixel est le plus
+       proche — c'est la paroi qu'on est en train de dessiner. */
+    const AX = this._paAX || (this._paAX = new Float64Array(8));
+    const AY = this._paAY || (this._paAY = new Float64Array(8));
+    for (let i = 0; i < nt; i++) { AX[i] = this.sx(tiges[i].hy.x); AY[i] = this.sy(tiges[i].hy.y); }
     const invPx = 1 / this.pxUm;
 
     const y0 = Math.max(0, b.y0), y1 = Math.min(h - 1, b.y1);
@@ -701,9 +941,11 @@ export class Scene {
       for (let x = x0; x <= x1; x++) {
         const o = row + x;
         const d = dist[o];
-        if (d > BANDE) continue;
+        if (d > HALO) continue;
         const dedans = mask[o] !== 0;
-        const s = Math.hypot(x - ax, y - ay) * invPx;
+        const iw = own[o];
+        const hy = tiges[iw].hy;
+        const s = Math.hypot(x - AX[iw], y - AY[iw]) * invPx;
         const mat = hy.maturite(s);
         /* Texture de paroi indexee sur le MATERIAU (abscisse cumulee depuis
            l'origine), pas sur la distance a l'apex. Indexee sur s elle
@@ -728,8 +970,8 @@ export class Scene {
           sc.plot(x, y, fade32(cPer, 0.62));
           continue;
         }
-        if (!dedans && halo > 0 && d < BANDE) {
-          const k = 1 - (d - ep * 0.72) / (BANDE - ep * 0.72);
+        if (!dedans && halo > 0 && d < HALO) {
+          const k = 1 - (d - ep * 0.72) / (HALO - ep * 0.72);
           if (k > 0) sc.plot(x, y, fade32(cH, k * k * halo * (0.45 + 0.55 * mat)));
         }
       }
@@ -744,8 +986,8 @@ export class Scene {
         for (let x = x0; x <= x1; x++) {
           const o = row + x;
           const d = dist[o];
-          if (d > BANDE || mask[o]) continue;
-          const k = 1 - d / BANDE;
+          if (d > HALO || mask[o]) continue;
+          const k = 1 - d / HALO;
           sc.plot(x, y, fade32(cH, k * k * halo * 0.55));
         }
       }
@@ -761,7 +1003,7 @@ export class Scene {
    * retrouve sur les bords » : une paroi uniforme a l'air immobile, meme
    * quand l'apex avance de trois pixels par seconde.
    */
-  tracesParoi(hy, co, P) {
+  tracesParoi(hy, co, P, it = 0) {
     const sc = this.sc, T = hy.table(S_MAX + 2, 0.3);
     const a = this._pd || (this._pd = { s: 0, v: 0, jeune: false });
     const p1 = this.pt, p2 = this._pt2 || (this._pt2 = { x: 0, y: 0 });
@@ -771,10 +1013,11 @@ export class Scene {
     sc.layer(4);
     for (const d of co.depots) {
       co.posDepot(d, a);
-      if (a.s > S_MAX) continue;
+      if (a.s > co.sMax) continue;
       versMonde(T, a.s, a.v, p1);
       const x = this.sx(p1.x), y = this.sy(p1.y);
       if (x < -6 || y < -6 || x > this.w + 6 || y > this.h + 6) continue;
+      if (this.cache(it, x, y)) continue;
       /* Orientation : la tangente a la SURFACE, prise entre deux points du
          contour — pas la tangente a l'axe. Avec l'axe, une trace posee au
          pole etait dessinee perpendiculairement a la paroi et sortait du

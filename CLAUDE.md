@@ -13,8 +13,9 @@ les captures de contrôle.
 | Commande | Ce qu'elle fait |
 |---|---|
 | `npm run serve` | sert le dépôt tel quel |
-| `npm run banc` | 11 verdicts de mesure, sans rendu, en node |
+| `npm run banc` | 12 verdicts de mesure, sans rendu, en node |
 | `npm run visuel` | captures dans `/tmp/apical-shots` (Playwright) |
+| `npm run visuel:branche` | captures de la page ramification |
 
 ---
 
@@ -191,24 +192,50 @@ Même raisonnement pour le milieu extérieur : le grain de gélose et les débri
 sont tirés d'un hachage de cellules en **coordonnées monde**. Sans repère fixe
 hors du tube, il n'y a aucune impression de progression.
 
-### 7. Une branche n'est pas un second objet — *à construire*
+### 7. Une branche n'est pas un second objet
 
-`ramification.html` est la proposition, pas l'implémentation. Ce qui y est
-tranché : une branche est un **second axe**, et la silhouette est l'**union**
-des deux tubes, calculée comme un **minimum adouci** de leurs deux distances
-signées. L'adoucissement produit l'évasement concave qu'une vraie branche a à
-sa base. On n'a jamais deux contours, on a un contour qui a un Y dedans.
+`branche.html`. Une branche est un **second axe** ; la silhouette est
+l'**union** des deux tubes, calculée comme un **minimum adouci** de leurs deux
+distances signées. On n'a jamais deux contours, on a un contour qui a un Y
+dedans. `App.tiges` est la liste des axes, `Scene.unir` fait l'union, tout le
+reste — remplissage, paroi, halo — lit ce seul champ.
 
-Les silhouettes de la page sont extraites au niveau zéro de ce champ : c'est la
-géométrie exacte que le moteur devra produire, vérifiée avant d'écrire une
-ligne de moteur.
+L'adoucissement retenu est le **congé circulaire**, `max(k, min(a,b)) −
+hypot(max(k−a,0), max(k−b,0))` : le k qu'on lit est vraiment le rayon de
+raccordement. Le minimum polynomial, essayé d'abord, ne creuse que k/4 — à
+k = 1,1 µm il rabotait la jonction de 0,25 µm et l'angle rentrant se lisait
+encore comme un V. **k = 2,5 µm.**
 
-**Arbitré.** Mécanisme **A**, second Spitzenkörper sub-apical ; la bifurcation
-apicale reste en réserve comme événement rare. La caméra **peut suivre la
-fille** — c'est l'intérêt de brancher : l'apex ne tourne pas serré (58 µm de
-rayon), la branche part à 60–80°, donc **brancher est la seule façon de tourner
-vite**. Détail et suite dans `docs/02-thalle-et-jeu.md`, qui fixe aussi
-l'architecture à deux échelles.
+On ne peut pas raccorder plus large que ce qu'on mesure : la portée du champ de
+distance doit donc dépasser k. Elle est **conditionnelle** — 7 px pour une
+hyphe seule, 30 px dès qu'il y en a deux, parce que la portée large coûte
+2,8 ms par image et par tube et que l'hyphe seule est le cas courant.
+
+**Le bourgeon naît dans le cytoplasme de sa mère.** Son apex est posé 3,2 µm
+sous la paroi (plus près, le congé ferait bomber la mère avant que la branche
+n'existe) et son axe d'amorce part **de l'axe maternel**, 7 µm en arrière, puis
+s'incurve vers le flanc. Deux raisons, toutes les deux mesurées : une branche a
+besoin de ~7 µm de tube dès sa naissance, sinon elle n'a pas la place d'un
+Spitzenkörper, donc elle ne fusionne pas, donc elle ne pousse pas ; mais 7 µm
+de tube **droit** planté en travers d'une mère de 11 µm de diamètre ressortent
+par le flanc opposé. C'est aussi exactement le mécanisme **A** : le second
+Spitzenkörper est sub-apical, il se forme dans le cytoplasme maternel avant que
+rien ne bombe à la surface.
+
+Le tube de la fille s'élargit avec son **matériau** — 0,55 R au col, le calibre
+plein après 25 µm — et non avec s, sinon l'élargissement resterait figé dans le
+repère de l'apex et la branche n'aurait jamais l'air de grossir.
+
+La caméra **peut suivre la fille** — c'est l'intérêt de brancher : l'apex ne
+tourne pas serré (58 µm de rayon), la branche part à 60–80°, donc **brancher
+est la seule façon de tourner vite**. Détail et suite dans
+`docs/02-thalle-et-jeu.md`, qui fixe aussi l'architecture à deux échelles.
+
+**Reste à faire.** Le pool de vésicules n'est pas partagé : chaque tige a le
+sien, donc l'apex mère ne ralentit pas quand la fille démarre. Et la
+ramification n'est pas encore autonome — c'est `App.brancher` qui la déclenche.
+`ramification.html` reste la proposition qui a précédé ; la bifurcation apicale
+y reste en réserve comme événement rare.
 
 ### 8. Deux échelles, un seul axe — *à construire*
 
@@ -253,7 +280,20 @@ solution »).
 | migration de la paroi neuve | pleine largeur en 20 s, 70 µm en 200 s | — |
 | matériau déversé hors périplasme | 0,0 % | — |
 | étanchéité | 0 vésicule hors du tube sur 4 × 30 s | — |
-| budget logique | 0,19 ms/image | 16,7 ms disponibles |
+| budget logique | 0,31 ms/image | 16,7 ms disponibles |
+
+Et pour la ramification :
+
+| | mesuré | référence |
+|---|---|---|
+| silhouette en deux morceaux | 0 sur 7 âges de branche | 0 |
+| congé hors de la jonction | 0 px au-delà de 9 µm | 0 |
+| ce que le bourgeon ajoute à sa naissance | 0 px, de 48° à 84° | 0 |
+| la fille perce la paroi | 16 s après sa naissance | — |
+| croissance de la fille | 16,0 µm/min sur 120 s | mère : 21,5 |
+| diamètre au col | 5,2 µm, soit 0,47 × la mère | ~0,6 × (Trinci) |
+| calibre plein atteint | 9,5 µm après 32 µm de pousse | — |
+| coût de la portée large | +2,8 ms par image et par tube | conditionnelle |
 
 Un chiffre documenté sans avoir été mesuré est un chiffre qu'on croit seulement
 avoir. Ça s'est déjà payé.
@@ -327,6 +367,26 @@ partie du travail**, pas après, pendant.
   porter un événement qui a lieu au pôle** : il en manque la moitié, et le côté
   retenu dépend du signe d'un écart latéral quasi nul. Une seule liste sur une
   abscisse signée, et le cas particulier disparaît.
+- Un **minimum polynomial adouci ne creuse que k/4**. À k = 1,1 µm il rabotait
+  la jonction de 0,25 µm et l'angle rentrant se lisait encore comme un V. Le
+  congé circulaire, lui, a le rayon qu'on lui donne. Et il n'a pas besoin de
+  garde-fou aux bords : dès que les deux distances dépassent k, il redonne le
+  minimum exact, là où la formule polynomiale laissait un terme k/4 partout où
+  les deux champs saturaient — un halo fantôme à exactement `BANDE` pixels de
+  la paroi.
+- **Un champ de distance n'est propre que dans sa boîte.** `bandeDistance` ne
+  nettoie que la sienne ; ailleurs traîne l'image précédente. `Scene.unir` lit
+  les deux champs sur la boîte **union**, donc plus large : un 8 périmé passait
+  pour une paroi à 8 px et le congé se mettait à ponter n'importe quoi,
+  4 400 px de silhouette inventés loin de toute jonction. Même piège dans le
+  banc, où une seule `Scene` servait à des cadrages différents.
+- **Une branche qui n'a pas la place d'un Spitzenkörper ne pousse pas.** Avec
+  3 µm d'enfoncement elle n'avait que 0,6 µm de domaine simulé — le réservoir
+  se tient à 2 µm de la pointe. Elle ne fusionnait pas, donc ne poussait pas,
+  donc n'avait toujours pas de tube : 1,5 µm en vingt secondes contre 6,4
+  attendus. Mais 7 µm de tube **droit** planté en travers d'une mère de 11 µm
+  ressortent par le flanc opposé. L'amorce part donc de l'axe maternel et
+  s'incurve.
 - **Un `sed` qui ne trouve pas son motif ne dit rien.** Deux remplacements
   successifs de `Q_FUSION` ont échoué en silence et j'ai documenté une valeur
   que le fichier n'avait pas. Seul le banc l'a vu (22,8 µm/min au lieu de 20).

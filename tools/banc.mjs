@@ -1,6 +1,6 @@
 /* Banc de mesure sans rendu. Un chiffre documente sans avoir ete mesure est
    un chiffre qu'on croit seulement avoir. */
-import { Hyphe, distParoi } from '../src/sim/hyphe.js';
+import { Hyphe, distParoi, brancherSur } from '../src/sim/hyphe.js';
 import { Contenu, S_MAX } from '../src/sim/contenu.js';
 import { clamp, angleDelta, noise1 } from '../src/core/util.js';
 import { omega, zonesFusion } from '../src/sim/membrane.js';
@@ -243,6 +243,97 @@ function dire(ok, titre, detail) { R.push({ ok, titre, detail }); }
     'l ancrage est le point de contact, et deux livraisons voisines n en font qu une',
     `${ancres} ancrages, ecart maximal au point de contact ${(pire * 100).toFixed(1)} % du rayon ; `
     + `${fenetres} fusions-images regroupees en ${groupes} poches, ${chevauche} chevauchement`);
+}
+
+/* 12. une branche n'est pas un second objet : la silhouette est l'UNION */
+{
+  const W = 240, H = 240;
+
+  /* Mere droite, cadrage centre sur la jonction. */
+  const mere = new Hyphe({ graine: 5, th: 0 });
+  for (let i = 0; i < 900; i++) mere.avancer(0.02, 1 / 60);
+
+  let composantes = 0, conge = 0, congeLoin = 0, fuite = 0, etapes = 0;
+  let aNaissance = 0;
+  const pile = new Int32Array(W * H);
+
+  for (const [pousse, cote, deg] of [[0, 1, 70], [0, -1, 84], [0, 1, 48],
+                                    [1.5, 1, 70], [5, -1, 84], [14, 1, 70], [28, 1, 60]]) {
+    const br = brancherSur(mere, { s: 11, cote, angle: deg * Math.PI / 180, graine: 2 });
+    const bx = br.x, by = br.y;
+    for (let i = 0; i < Math.round(pousse / 0.02); i++) br.avancer(0.02, 1 / 60);
+    /* Une Scene NEUVE par cas : hors de sa boite, un champ garde l'image
+       precedente, et deux cadrages differents ne sont pas comparables. */
+    const sc = new Scene(null);
+    sc.alloc(W, H);
+    sc.pxUm = 7.5;
+    sc.cam.x = bx; sc.cam.y = by;
+
+    const tiges = [{ hy: mere }, { hy: br }];
+    sc.portee = 30;
+    for (let i = 0; i < 2; i++) {
+      const f = sc.champ(i); f.actif = true;
+      sc.contourEcran(tiges[i].hy, f);
+      sc.bandeDistance(f);
+      sc.remplirMasque(f);
+    }
+    sc.unir(2);
+    const m = sc.mask, m0 = sc.champs[0].mask, m1 = sc.champs[1].mask;
+
+    /* (a) UN seul morceau. Deux morceaux = une branche qui flotte a cote de
+           sa mere, exactement le defaut qui a coule le prototype. */
+    const vu = new Uint8Array(W * H);
+    let n = 0, depart = -1;
+    for (let o = 0; o < W * H; o++) if (m[o]) { n++; if (depart < 0) depart = o; }
+    let atteint = 0, sp = 0;
+    if (depart >= 0) { pile[sp++] = depart; vu[depart] = 1; }
+    while (sp > 0) {
+      const o = pile[--sp]; atteint++;
+      const x = o % W, y = (o / W) | 0;
+      if (x > 0 && m[o - 1] && !vu[o - 1]) { vu[o - 1] = 1; pile[sp++] = o - 1; }
+      if (x < W - 1 && m[o + 1] && !vu[o + 1]) { vu[o + 1] = 1; pile[sp++] = o + 1; }
+      if (y > 0 && m[o - W] && !vu[o - W]) { vu[o - W] = 1; pile[sp++] = o - W; }
+      if (y < H - 1 && m[o + W] && !vu[o + W]) { vu[o + W] = 1; pile[sp++] = o + W; }
+    }
+    if (atteint !== n) composantes++;
+
+    /* (b) le conge : des pixels DANS l'union mais dans aucun des deux tubes.
+           C'est l'evasement concave de la base, et il ne doit exister que
+           la. 9 um : le rayon de la mere (5,5) plus le conge (2,5), plus
+           une marge. Au-dela il n'y a rien a raccorder. */
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const o = y * W + x;
+      if (!m[o] || m0[o] || m1[o]) continue;
+      conge++;
+      const dx = (x - W / 2) / sc.pxUm, dy = (y - H / 2) / sc.pxUm;
+      if (Math.hypot(dx, dy) > 9) congeLoin++;
+    }
+
+    /* (c) rien ne fuit : tout pixel de l'union est dans un tube ou a moins
+           de k du bord de l'un d'eux (k = 0,55 um, le rayon du conge). */
+    const k = Math.min(27, Math.max(4, 2.5 * sc.pxUm));
+    for (let o = 0; o < W * H; o++) {
+      if (!m[o] || m0[o] || m1[o]) continue;
+      if (Math.min(sc.champs[0].dist[o], sc.champs[1].dist[o]) > k + 1) fuite++;
+    }
+
+    if (pousse === 0) {
+      /* (d) a la naissance, le bourgeon est entierement dans sa mere : il ne
+             doit RIEN ajouter a la silhouette, conge compris. Teste aux
+             angles extremes, 48 et 84 deg — c'est au plus perpendiculaire
+             que le cul du bourgeon s'enfonce le plus loin en travers. */
+      let ajout = 0;
+      for (let o = 0; o < W * H; o++) if (m[o] && !m0[o]) ajout++;
+      aNaissance = Math.max(aNaissance, ajout);
+    }
+    etapes++;
+  }
+
+  dire(composantes === 0 && conge > 0 && congeLoin === 0 && fuite === 0 && aNaissance === 0,
+    'une branche n est pas un second objet : la silhouette est l union des deux tubes',
+    `${etapes} ages de branche : ${composantes} silhouette(s) en deux morceaux, `
+    + `${conge} px de conge concave (dont ${congeLoin} a plus de 9 um de la jonction), `
+    + `${fuite} px de fuite ; a la naissance le bourgeon ajoute ${aNaissance} px a la mere`);
 }
 
 /* 7. budget */

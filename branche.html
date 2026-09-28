@@ -1,0 +1,83 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ramification</title>
+<style>
+:root{ color-scheme: dark; --ombre:#07080a; --encre:#cfd3da; --gris:#8b919b; --trait:#22252b; --laiton:#cfae6c; }
+*{box-sizing:border-box}
+body{margin:0;background:var(--ombre);color:var(--encre);
+  font:13px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;}
+main{max-width:980px;margin:0 auto;padding:22px 18px 60px}
+h1{font-size:19px;font-weight:600;margin:0 0 2px;letter-spacing:.2px}
+.sous{color:var(--gris);margin:0 0 18px;font-size:12.5px}
+#vue{display:grid;place-items:center;background:#000;border:1px solid var(--trait);
+  border-radius:4px;overflow:hidden;height:min(72vh,720px)}
+canvas{image-rendering:pixelated;image-rendering:crisp-edges;display:block;touch-action:none}
+.barre{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:10px 0 0}
+button{font:inherit;font-size:12px;color:var(--encre);background:transparent;
+  border:1px solid var(--trait);border-radius:999px;padding:5px 12px;cursor:pointer}
+button:hover{background:#1a1d22}
+button[disabled]{opacity:.35;cursor:default}
+button[aria-pressed="true"]{background:var(--laiton);color:#14110a;border-color:var(--laiton);font-weight:600}
+.sep{width:1px;height:18px;background:var(--trait);margin:0 4px}
+label{display:inline-flex;align-items:center;gap:7px;color:var(--gris);font-size:12px}
+input[type=range]{width:120px;accent-color:var(--laiton)}
+#mesures{color:var(--gris);font-size:12px;margin-top:9px;font-variant-numeric:tabular-nums}
+#mesures b{color:var(--encre);font-weight:600}
+.notice{margin-top:22px;color:var(--gris);font-size:12.5px;max-width:64ch}
+.notice b{color:var(--encre)}
+</style>
+
+<main>
+  <h1>Ramification</h1>
+  <p class="sous">Le modèle dans le moteur, pas une silhouette calculée d'avance.</p>
+
+  <div id="vue"><canvas id="toile"></canvas></div>
+
+  <div class="barre">
+    <button id="bPause" aria-pressed="false">Pause</button>
+    <button id="bBrancher">Ramifier</button>
+    <button id="bNeuf">Une autre hyphe</button>
+    <span class="sep"></span>
+    <button data-vue="jonction" aria-pressed="true">Jonction</button>
+    <button data-vue="mere" aria-pressed="false">Mère</button>
+    <button data-vue="fille" aria-pressed="false">Fille</button>
+    <span class="sep"></span>
+    <button data-vit="1" aria-pressed="false">×1</button>
+    <button data-vit="2" aria-pressed="true">×2</button>
+    <button data-vit="4" aria-pressed="false">×4</button>
+    <span class="sep"></span>
+    <button data-pal="phase" aria-pressed="true">Phase</button>
+    <button data-pal="noir" aria-pressed="false">Fond noir</button>
+    <button data-pal="met" aria-pressed="false">MET</button>
+    <span class="sep"></span>
+    <label>Zoom <input id="cZoom" type="range" min="0.6" max="3.2" step="0.05" value="1.5"><span id="oZoom">×1.50</span></label>
+  </div>
+  <div id="mesures"></div>
+
+  <p class="notice">
+    <b>Une branche n'est pas un second objet.</b> C'est un second <b>axe</b>, et la
+    silhouette est l'<b>union</b> des deux tubes — prise comme un minimum adouci de
+    leurs deux distances signées. Le terme d'adoucissement s'annule dès que les deux
+    parois sont distantes de plus de 0,55 µm : l'évasement concave n'existe donc qu'à
+    la jonction, et nulle part ailleurs. On n'a jamais deux contours, on a un contour
+    qui a un Y dedans.<br><br>
+    Le bourgeon naît <b>1,5 µm sous la paroi</b> de sa mère et s'enfonce encore de
+    6 µm derrière : à la naissance il est entièrement dans le cytoplasme maternel,
+    donc invisible, et il émerge en grandissant. Son tube s'élargit avec son matériau
+    — 0,55 R au col, le calibre plein après 25 µm — au lieu de naître à sa taille
+    définitive.<br><br>
+    Elle a son propre intérieur : Spitzenkörper, vésicules, membrane plasmique, dépôts
+    de paroi neuve. Rien n'est partagé pour l'instant — le ralentissement de l'apex
+    mère, qui puise dans le même pool de vésicules, reste à faire.<br><br>
+    <b>Brancher est la seule façon de tourner vite&nbsp;:</b> l'apex ne vire qu'à
+    58 µm de rayon, la branche part à 60–80°.
+  </p>
+</main>
+
+<script type="module">
+import { App } from './src/main.js';
+import { PALETTES } from './src/data/palette.js';
+import { brancherPage } from './src/branche.js';
+brancherPage(new App(document.getElementById('toile'), document.getElementById('vue')), PALETTES);
+</script>

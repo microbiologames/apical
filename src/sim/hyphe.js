@@ -43,15 +43,62 @@ export class Hyphe {
     this.profil = opts.profil ?? 2.1;    // 2 = ogive ronde, 3 = nez plat
     this.graine = opts.graine ?? 1234;
 
-    this.x = 0; this.y = 0;              // apex
-    this.th = -Math.PI / 2;              // cap, y vers le bas donc -PI/2 = haut
+    this.x = opts.x ?? 0; this.y = opts.y ?? 0;     // apex
+    this.th = opts.th ?? -Math.PI / 2;   // cap, y vers le bas donc -PI/2 = haut
     this.om = 0;                         // vitesse angulaire, rad/s
     this.avanceFrame = 0;                // um avances a la derniere image
     this.longueur = 0;                   // um construits depuis le depart
 
+    /* Une BRANCHE demarre a sa base, elle n'a pas d'histoire derriere elle,
+       et son tube part etroit pour s'elargir : 0,55 R a la base, presque la
+       pleine largeur apres 25 um. C'est ce que fait une vraie branche, et
+       c'est aussi ce qui donne a la base sa lecture de jeune pousse. */
+    this.branche = !!opts.branche;
+    this.rBase = opts.rBase ?? 0.55;
+    this.rMonte = opts.rMonte ?? 25;
+
     /* Axe stocke du plus ancien au plus recent. al = abscisse cumulee. */
     this.ax = []; this.ay = []; this.al = [];
     this.enAttente = 0;
+
+    if (this.branche) {
+      /* L'axe de naissance. Il est ENFONCE dans le parent : sans ce
+         chevauchement l'union des deux tubes n'est pas connexe et la
+         branche flotte a cote de sa mere.
+
+         Et ce n'est PAS un segment droit. Deux raisons, mesurees toutes les
+         deux :
+
+           - la branche a besoin de ~7 um de tube des sa naissance. Avec
+             3 um elle n'avait que 0,6 um de domaine simule, donc pas la
+             place d'un Spitzenkorper, qui se tient a 2 um de la pointe :
+             elle ne fusionnait pas, donc ne poussait pas, donc n'avait
+             toujours pas de tube. 1,5 um en vingt secondes contre 6,4
+             attendus ;
+           - mais 7 um de tube DROIT plante en travers d'une mere de 11 um
+             de diametre ressortent par le flanc oppose. Le conge de
+             l'union, qui a 2,5 um de rayon, se mettait alors a ponter le
+             bourgeon a la paroi d'en face et faisait bomber la mere sur
+             toute sa longueur : 1 587 px ajoutes a la silhouette a la
+             naissance, la ou il n'en faut aucun.
+
+         L'axe part donc DE l'axe de la mere, dans son cytoplasme, et
+         s'incurve vers le flanc. C'est aussi le mecanisme A : le second
+         Spitzenkorper est sub-apical, il se forme dans le cytoplasme
+         maternel avant que rien ne bombe a la surface. Il reste a le
+         nourrir du pool de la mere ; pour l'instant chaque tige a le sien.
+         Voir `brancherSur`, qui construit cette amorce. */
+      const axe = opts.axe;
+      let l = 0;
+      for (let i = 0; i < axe.length; i++) {
+        if (i > 0) l += Math.hypot(axe[i][0] - axe[i - 1][0], axe[i][1] - axe[i - 1][1]);
+        this.ax.push(axe[i][0]); this.ay.push(axe[i][1]); this.al.push(l);
+      }
+      this.x = axe[axe.length - 1][0];
+      this.y = axe[axe.length - 1][1];
+      this.base = l;
+      return;
+    }
 
     /* On amorce avec 90 um de tube droit derriere : sans cette queue, au
        demarrage le tube s'arrete net au bord du champ. */
@@ -65,24 +112,50 @@ export class Hyphe {
     this.base = n * PAS;   // abscisse cumulee deja parcourue a l'amorce
   }
 
+  /**
+   * Rayon local du tube pour le MATERIAU a l'abscisse cumulee q depuis
+   * l'origine. Constant pour une hyphe mere ; croissant pour une branche.
+   * Indexe sur le materiau et non sur s, sinon l'elargissement resterait
+   * fige dans le repere de l'apex et la branche n'aurait jamais l'air de
+   * grossir.
+   */
+  rayonA(q) {
+    if (!this.branche) return this.R;
+    return this.R * (this.rBase + (1 - this.rBase) * smoothstep(0, this.rMonte, q));
+  }
+
+  /**
+   * Longueur de la calotte ARRIERE d'une branche. Une branche n'est pas un
+   * tube coupe net : c'est un bourgeon, ferme des deux bouts. Sans ce fond
+   * arrondi, sa section de base — un disque de 3 um de rayon pose a 3,2 um
+   * sous la paroi de la mere — depassait par endroits du tube parent, et
+   * l'union laissait voir une arete droite en travers du cytoplasme.
+   */
+  get Lb() { return this.branche ? 1.2 : 0; }
+
   /** Abscisse cumulee totale, apex compris. */
   get total() {
     const i = this.ax.length - 1;
     return this.al[i] + Math.hypot(this.x - this.ax[i], this.y - this.ay[i]);
   }
 
-  get Lc() { return this.calotte * this.R; }
+  get Lc() {
+    /* La calotte suit le rayon LOCAL de la pointe : une jeune branche a une
+       petite calotte, sinon son dome ferait deux fois son tube. */
+    return this.calotte * (this.branche ? this.rayonA(this.total) : this.R);
+  }
 
   /** Demi-largeur du tube a l'abscisse s (0 = pointe de l'apex). */
   W(s) {
     const Lc = this.Lc;
+    const R = this.branche ? this.rayonA(this.total - s) : this.R;
     let w;
     if (s >= Lc) {
-      w = this.R;
+      w = R;
     } else {
       const u = clamp((Lc - s) / Lc, 0, 1);
       const n = this.profil;
-      w = this.R * Math.pow(Math.max(1 - Math.pow(u, n), 0), 1 / n);
+      w = R * Math.pow(Math.max(1 - Math.pow(u, n), 0), 1 / n);
     }
     /* Ondulation de paroi. Elle doit etre FIGEE dans le materiau, pas dans
        s : s recule a chaque image quand l'apex avance, une ondulation
@@ -93,6 +166,19 @@ export class Hyphe {
       const k = smoothstep(Lc, Lc + 3.5, s);
       w *= 1 + 0.045 * k * (noise1(q * 0.28, this.graine) - 0.5) * 2
              + 0.022 * k * (noise1(q * 0.93, this.graine + 5) - 0.5) * 2;
+    }
+    /* Fond de la branche : meme ogive qu'a l'apex, mais sur l'abscisse
+       MATERIELLE depuis l'origine, donc figee a la base une fois pour
+       toutes. W(total) = 0 : le bourgeon est un volume ferme, et l'union
+       avec la mere n'a aucune arete a cacher. */
+    if (this.branche) {
+      const q = this.total - s;
+      const Lb = this.Lb;
+      if (q < Lb) {
+        const u = clamp((Lb - q) / Lb, 0, 1);
+        const n = this.profil;
+        w *= Math.pow(Math.max(1 - Math.pow(u, n), 0), 1 / n);
+      }
     }
     return w;
   }
@@ -169,20 +255,34 @@ export class Hyphe {
    * produirait une facette franche de plusieurs pixels.
    */
   contour(xs, ys, sMax, K = 30) {
-    const Lc = this.Lc;
     const tmp = { x: 0, y: 0, nx: 0, ny: 0, tx: 0, ty: 0 };
     let n = 0;
+
+    /* Une BRANCHE s'arrete a son propre materiau : au-dela, atS prolonge
+       l'axe en ligne droite et le tube lui poussait une queue de 34 um en
+       travers de sa mere. */
+    const sTot = this.branche ? Math.min(sMax, this.total) : sMax;
+    /* Les deux calottes ne peuvent pas se chevaucher : sur un bourgeon de
+       3 um, une calotte avant de 4,4 um et une calotte arriere de 2,6 um
+       se recouvrent et l'echantillonnage n'est plus monotone. */
+    const Lc = Math.min(this.Lc, sTot * 0.5);
+    const Lb = this.branche ? Math.min(this.Lb, sTot * 0.5) : 0;
 
     /* abscisses a echantillonner, de la pointe vers l'arriere */
     const ss = this._ss || (this._ss = []);
     ss.length = 0;
+    const pousser = (v) => {
+      v = v < 0 ? 0 : v > sTot ? sTot : v;
+      if (!ss.length || v > ss[ss.length - 1] + 1e-4) ss.push(v);
+    };
     for (let k = 0; k <= K; k++) {
       const psi = (k / K) * (Math.PI / 2);
-      ss.push(Lc * (1 - Math.cos(psi)));
+      pousser(Lc * (1 - Math.cos(psi)));
     }
     /* corps : pas fin pres de l'apex, plus large au loin (le tube y est droit) */
     let s = Lc;
-    while (s < sMax) {
+    const sCorps = sTot - Lb;
+    while (s < sCorps) {
       /* 1,2 um au maximum : a 2,4 um les facettes de l'ondulation se
          voyaient sur le flanc du tube. */
       /* 0,45 um au maximum. A 1,2 le polygone lissait l'ondulation de
@@ -190,7 +290,14 @@ export class Hyphe {
          fort grossissement les deux lignes s'ecartaient jusqu'a 0,6 um
          l'une de l'autre sans raison. */
       s += lerp(0.35, 0.45, smoothstep(Lc, Lc + 22, s));
-      ss.push(Math.min(s, sMax));
+      pousser(Math.min(s, sCorps));
+    }
+    /* Calotte ARRIERE du bourgeon, echantillonnee en angle pour la meme
+       raison qu'a l'avant : le profil y a une pente infinie, un pas
+       regulier en s y aurait produit une facette de plusieurs pixels. */
+    if (Lb > 0) for (let k = K; k >= 0; k--) {
+      const psi = (k / K) * (Math.PI / 2);
+      pousser(sTot - Lb * (1 - Math.cos(psi)));
     }
 
     /* cote +v, de la pointe vers l'arriere */
@@ -232,6 +339,64 @@ export class Hyphe {
   }
 }
 
+/**
+ * Fait naitre une branche sur `par`, a `s` um derriere son apex.
+ *
+ * Une branche n'est pas un second objet : c'est un second AXE, et la
+ * silhouette reste l'union des deux tubes (Scene.unir). Son apex nait
+ * 3,2 um SOUS la paroi de sa mere, et son bourgeon s'enfonce encore de 6 um
+ * derriere : a la naissance il est entierement dans le cytoplasme maternel,
+ * donc invisible, et il emerge en grandissant. Sans ce chevauchement
+ * l'union ne serait pas connexe et la branche flotterait a cote de sa mere.
+ *
+ * 3,2 um et non 1 : le conge de l'union a un rayon de 2,5 um, et un apex
+ * pose plus pres que ca faisait deja bomber la paroi de la mere avant que
+ * la branche n'existe. A la naissance il ne doit RIEN se passer — le
+ * renflement vient apres, des le premier micrometre de pousse.
+ *
+ * Angle 45-90 deg, le plus souvent 60-80 (Trinci) ; diametre initial
+ * ~0,6 fois celui du parent, d'ou rBase, et 0,86 a terme.
+ */
+export function brancherSur(par, o = {}) {
+  const cote = o.cote ?? 1;
+  const ang = o.angle ?? (70 * Math.PI / 180);
+  const s = o.s ?? 11;
+  const p = par.atS(s, {});
+  const w = par.W(s);
+  /* La tangente du parent basculee de `ang` vers le flanc choisi : a 0 la
+     branche partirait dans l'axe, a 90 deg droit sur le cote. */
+  const dx = Math.cos(ang) * p.tx + Math.sin(ang) * cote * p.nx;
+  const dy = Math.cos(ang) * p.ty + Math.sin(ang) * cote * p.ny;
+
+  /* Amorce : une Bezier quadratique P0 -> P1 -> P2.
+       P2 l'apex, 3,2 um SOUS la paroi — plus pres, le conge de 2,5 um
+          ferait deja bomber la mere alors que la branche n'existe pas ;
+       P1 en arriere de l'apex DANS la direction de la branche, ce qui fixe
+          la tangente de sortie : sans lui l'amorce arrivait a l'apex par la
+          radiale et il y avait un coude de 20 deg a la jonction ;
+       P0 sur l'axe de la mere, 4 um derriere : l'amorce part donc parallele
+          au tube parent, au coeur du cytoplasme, et ne peut pas en sortir. */
+  const P2 = [p.x + cote * p.nx * (w - 3.2), p.y + cote * p.ny * (w - 3.2)];
+  const P1 = [P2[0] - dx * 2.5, P2[1] - dy * 2.5];
+  const P0 = [P1[0] - p.tx * 4.0, P1[1] - p.ty * 4.0];
+  const axe = [];
+  const N = 30;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N, u = 1 - t;
+    axe.push([u * u * P0[0] + 2 * u * t * P1[0] + t * t * P2[0],
+              u * u * P0[1] + 2 * u * t * P1[1] + t * t * P2[1]]);
+  }
+
+  return new Hyphe({
+    graine: o.graine ?? 1,
+    branche: true,
+    R: par.R * (o.R ?? 0.86),
+    calotte: par.calotte, profil: par.profil,
+    axe,
+    th: Math.atan2(dy, dx),
+  });
+}
+
 /** Projection (s, v) -> monde, via la table. */
 export function versMonde(T, s, v, out) {
   const f = clamp(s / T.pas, 0, T.n - 1.001);
@@ -255,7 +420,11 @@ export function versMonde(T, s, v, out) {
  * On passe donc par la fonction implicite du profil.
  */
 export function distParoi(hy, s, v, out) {
-  const Lc = hy.Lc, R = hy.R, n = hy.profil;
+  /* Rayon LOCAL : sur une branche le tube s'elargit avec le materiau, et
+     une vesicule qui croirait le tube plein calibre se planterait dans la
+     paroi a mi-hauteur du bourgeon. */
+  const Lc = hy.Lc, n = hy.profil;
+  const R = hy.branche ? hy.rayonA(hy.total - s) : hy.R;
   if (s >= Lc) {
     const w = hy.W(s);
     const d = w - Math.abs(v);

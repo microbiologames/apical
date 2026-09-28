@@ -86,7 +86,12 @@ export class Contenu {
     this.depots = [];
     /* La membrane plasmique est une ligne continue ancree dans le materiau :
        c'est elle qui porte les figures de fusion, plus le rendu. */
-    this.membrane = new Membrane(hy, S_MAX);
+    /* Une BRANCHE ne simule pas 34 um : elle n'en a pas encore. `sMax` suit
+       la longueur reellement construite, moins la calotte arriere ou le
+       tube se referme — sans cette borne les vesicules s'entassaient dans
+       le fond du bourgeon, la ou W(s) tend vers zero. */
+    this.sMax = opts.sMax ?? S_MAX;
+    this.membrane = new Membrane(hy, this.sMax, S_MAX);
     this.zones = [];
     this.fusions = 0;             // compteur, sert au banc
 
@@ -97,11 +102,17 @@ export class Contenu {
     this.reserveA = 0; this.reserveC = 0;
     this.avance = 0; this.couple = 0;
 
-    this.nVes = opts.nVes ?? 95;
-    this.nGrains = opts.nGrains ?? 640;
+    this.nVes = opts.nVes ?? Math.round(2.79 * this.sMax);
+    this.nGrains = opts.nGrains ?? Math.round(18.82 * this.sMax);
+    /* Densites lineiques, relevees sur l'hyphe mere : 2,79 vesicule/um,
+       18,82 grain/um, 0,47 organite/um. Elles servent a `etendre` : une
+       branche qui s'allonge doit se peupler au meme regime, sinon son
+       cytoplasme s'eclaircit a mesure qu'elle grandit. */
+    this.densVes = this.nVes / this.sMax;
+    this.densGrains = this.nGrains / this.sMax;
 
-    for (let i = 0; i < this.nVes; i++) this.ves.push(this.naitreVesicule(this.rng() * S_MAX));
-    for (let i = 0; i < this.nGrains; i++) this.grains.push(this.naitreGrain(this.rng() * S_MAX));
+    for (let i = 0; i < this.nVes; i++) this.ves.push(this.naitreVesicule(this.rng() * this.sMax));
+    for (let i = 0; i < this.nGrains; i++) this.grains.push(this.naitreGrain(this.rng() * this.sMax));
     this.peuplerOrganites();
   }
 
@@ -113,7 +124,7 @@ export class Contenu {
        vesicule qui apparait en plein cadre se voit. Le tapis roulant
        s'auto-regule ensuite — si le pool se vide, il libere moins, donc il
        se remplit. */
-    if (s === undefined) s = S_MAX + this.rng() * 1.5;
+    if (s === undefined) s = this.sMax + this.rng() * 1.5;
     const w = hy.W(s);
     const r = this.rng();
     /* Deux populations. Les chitosomes (30-40 nm) portent la chitine
@@ -156,7 +167,50 @@ export class Contenu {
     };
   }
 
+  /**
+   * Allonge le domaine simule. Pour une BRANCHE uniquement : elle nait avec
+   * un demi-micrometre de tube et finit par en avoir 34.
+   *
+   * Les nouvelles particules naissent au FOND du champ (s = sMax), jamais
+   * au milieu : une vesicule qui apparait en plein cadre se voit. C'est la
+   * meme regle que pour le recyclage ordinaire.
+   */
+  etendre(sMax) {
+    const v = Math.min(sMax, S_MAX);
+    if (v <= this.sMax + 1e-6) return;
+    this.sMax = v;
+    this.membrane.sMax = v;
+    const nv = Math.round(this.densVes * v);
+    while (this.ves.length < nv) this.ves.push(this.naitreVesicule());
+    const ng = Math.round(this.densGrains * v);
+    while (this.grains.length < ng) this.grains.push(this.naitreGrain(v - this.rng() * 1.2));
+    const no = Math.round(0.47 * v);
+    while (this.organites.length < no) this.ajouterOrganite(v + this.rng() * 1.5);
+  }
+
+  /** Un organite de plus, tire au sort, pose a l'abscisse s. */
+  ajouterOrganite(s) {
+    const t = this.rng();
+    const [type, a, b] = t < 0.07 ? ['noyau', 1.30, 0.86]
+                       : t < 0.50 ? ['mito', 1.10, 0.26]
+                       : t < 0.70 ? ['vacuole', 0.62, 0.55]
+                       : ['re', 2.20, 0.09];
+    const w = this.hy.W(s);
+    this.organites.push({
+      type, s,
+      v: (this.rng() * 2 - 1) * w * 0.6,
+      vs: 0, vv: 0,
+      a: a * lerp(0.82, 1.2, this.rng()),
+      b: b * lerp(0.82, 1.2, this.rng()),
+      ang: this.rng() * TAU,
+      dang: (this.rng() * 2 - 1) * 0.12,
+      z: this.rng() * 2 - 1,
+      zone: ZONE_APICALE + a + this.rng() * 7,
+    });
+  }
+
   peuplerOrganites() {
+    if (this.sMax < ZONE_APICALE + 4) return;   // une branche naissante n'en a pas
     /* Un organite trop gros ou trop contraste devient un dessin d'ecolier
        pose dans le tube. On reste sous la taille reelle basse : noyau 2,6 um
        de long, mitochondrie 2,2 um, vacuole 1,1 um de diametre. */
@@ -168,7 +222,7 @@ export class Contenu {
     ];
     for (const [type, n, a, b] of types) {
       for (let i = 0; i < n; i++) {
-        const s = ZONE_APICALE + 1.5 + this.rng() * (S_MAX - ZONE_APICALE - 2);
+        const s = ZONE_APICALE + 1.5 + this.rng() * (this.sMax - ZONE_APICALE - 2);
         const w = this.hy.W(s);
         this.organites.push({
           type, s,
@@ -336,7 +390,7 @@ export class Contenu {
       p.s += p.vs * dt;
       p.v += p.vv * dt;
       if (p.s < 0.02) { p.s = 0.02; p.vs = Math.abs(p.vs) * 0.3; }
-      if (p.s > S_MAX + 2.5) { ves[i] = this.naitreVesicule(); continue; }
+      if (p.s > this.sMax + 2.5) { ves[i] = this.naitreVesicule(); continue; }
 
       /* --- paroi : contrainte exacte, calotte comprise ------------------- */
       /* On soustrait PEAU : la vesicule bute sur la membrane plasmique,
@@ -487,7 +541,7 @@ export class Contenu {
       d[i].t += dt;
       const g = hy.longueur - d[i].g0;
       const u = d[i].u0 + g / Lc;
-      if (u >= 1 && Lc + (g - (1 - d[i].u0) * Lc) > S_MAX) d.splice(i, 1);
+      if (u >= 1 && Lc + (g - (1 - d[i].u0) * Lc) > this.sMax) d.splice(i, 1);
     }
   }
 
@@ -554,7 +608,7 @@ export class Contenu {
       const f = Math.max(flux(p.s), 0.62);
       p.s += da - f * dt + (rng() * 2 - 1) * 0.35 * dt;
       p.v += (rng() * 2 - 1) * 0.35 * dt;
-      if (p.s > S_MAX || p.s < 0.6) { g[i] = this.naitreGrain(S_MAX - rng() * 1.2); continue; }
+      if (p.s > this.sMax || p.s < 0.6) { g[i] = this.naitreGrain(this.sMax - rng() * 1.2); continue; }
       const w = distParoi(hy, p.s, p.v, dp);
       if (w < 0.12) { p.s += dp.ds * (0.12 - w); p.v += dp.dv * (0.12 - w); }
     }
@@ -582,7 +636,7 @@ export class Contenu {
       p.s += p.vs * dt;
       p.v += p.vv * dt;
       p.ang += p.dang * dt;
-      if (p.s > S_MAX + 2) { p.s = ZONE_APICALE + 1 + rng() * 2; p.v = (rng() * 2 - 1) * 2; }
+      if (p.s > this.sMax + 2) { p.s = ZONE_APICALE + 1 + rng() * 2; p.v = (rng() * 2 - 1) * 2; }
 
       const rr = Math.max(p.b, p.a * 0.35);
       const d = distParoi(hy, p.s, p.v, dp);

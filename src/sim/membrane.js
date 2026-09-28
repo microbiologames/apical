@@ -134,10 +134,14 @@ export function zonesFusion(ves, duree) {
 
 
 export class Membrane {
-  constructor(hy, sMax) {
+  constructor(hy, sMax, capMax) {
     this.hy = hy;
     this.sMax = sMax;
-    const cap = Math.ceil(sMax / PAS) + 8;
+    /* La capacite est dimensionnee sur le MAXIMUM atteignable, pas sur la
+       longueur actuelle : une branche demarre a 0,5 um de tube et en fera
+       34, et une chaine qu'il faudrait reallouer en cours de route perdrait
+       ses offsets — donc ses creux — a chaque agrandissement. */
+    const cap = Math.ceil((capMax ?? sMax) / PAS) + 8;
     /* index 0 = cote -1, index 1 = cote +1 */
     this.ch = [new Chaine(cap), new Chaine(cap)];
     for (const c of this.ch) {
