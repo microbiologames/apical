@@ -1,0 +1,445 @@
+/* ---------------------------------------------------------------------------
+   Rendu.
+
+   Ordre de passage, et pourquoi :
+     1. fond + vignetage            ecrit direct dans le tampon principal
+     2. bande de distance au contour   (exacte, calculee depuis le polygone)
+     3. remplissage du cytoplasme   direct aussi : c'est la plus grosse
+        surface de l'image, la faire passer par un calque flouté coute cher
+        pour rien, elle est nette par construction
+     4. contenu (grains, organites, vesicules, molecules) sur les 8 calques
+        de profondeur, selon l'ecart au plan de mise au point
+     5. paroi + halo sur les calques avant
+     6. composition (flou par calque + tramage ordonne)
+     7. grain de capteur + barre d'echelle
+
+   La paroi n'est pas un objet : c'est la bande |d| < e autour du MEME
+   polygone qui a servi a remplir le cytoplasme. Il ne peut donc pas y avoir
+   de desaccord entre la silhouette et son liseré.
+--------------------------------------------------------------------------- */
+
+import { Screen, hexToRgba, mix32, fade32, shade32, rgba, bayer } from '../core/pixel.js';
+import { clamp, lerp, smoothstep, fbm2, hash2, noise1, TAU } from '../core/util.js';
+import { versMonde } from '../sim/hyphe.js';
+import { S_MAX } from '../sim/contenu.js';
+
+const BANDE = 6;          // px : portee de la bande de distance (halo compris)
+const MAX_SOMMETS = 4096;
+
+/* Fonte 4x6, juste de quoi ecrire la barre d'echelle. */
+const GLYPHES = {
+  '0': [6, 9, 9, 9, 9, 6], '1': [2, 6, 2, 2, 2, 7], '2': [6, 9, 1, 2, 4, 15],
+  '5': [15, 8, 14, 1, 9, 6], 'u': [0, 0, 9, 9, 9, 7], 'm': [0, 0, 10, 15, 9, 9],
+  ' ': [0, 0, 0, 0, 0, 0],
+};
+
+export class Scene {
+  constructor(screen) {
+    this.sc = screen;
+    this.cam = { x: 0, y: 0 };
+    this.pxUm = 10;
+    this.zFocus = 0;
+    this.xs = new Float32Array(MAX_SOMMETS);
+    this.ys = new Float32Array(MAX_SOMMETS);
+    this.n = 0;
+    this.w = 256; this.h = 352;
+    this.box = { x0: 0, y0: 0, x1: -1, y1: -1 };
+    this.pt = { x: 0, y: 0 };
+    this.tempsGrain = 0;
+    this.seedGrain = 0;
+  }
+
+  alloc(w, h) {
+    if (this.w === w && this.h === h && this.mask) return;
+    this.w = w; this.h = h;
+    this.mask = new Uint8Array(w * h);
+    this.dist = new Float32Array(w * h);
+    this.dist.fill(BANDE + 1);
+    this.box = { x0: 0, y0: 0, x1: w - 1, y1: h - 1 };
+  }
+
+  /* --- geometrie --------------------------------------------------------- */
+
+  sx(wx) { return (wx - this.cam.x) * this.pxUm + this.w * 0.5; }
+  sy(wy) { return (wy - this.cam.y) * this.pxUm + this.h * 0.5; }
+
+  /* --- passes ------------------------------------------------------------ */
+
+  dessiner(hy, co, pal, t, opts) {
+    const sc = this.sc;
+    this.alloc(sc.w, sc.h);
+    const P = pal;
+
+    const fond = hexToRgba(P.fond);
+    sc.beginFrame(fond);
+
+    this.fond(P, opts);
+    this.contourEcran(hy);
+    this.bandeDistance();
+    this.cytoplasme(hy, P, t, opts);
+    this.contenu(hy, co, P, opts);
+    this.paroi(hy, P, opts);
+
+    sc.composite(P.dither);
+
+    if (opts.grain !== false) this.grainCapteur(P, t);
+    if (opts.echelle !== false) this.barreEchelle(P);
+  }
+
+  fond(P, opts) {
+    const sc = this.sc, w = this.w, h = this.h;
+    const c0 = hexToRgba(P.fond), c1 = hexToRgba(P.fondBord);
+    const cx = w * 0.5, cy = h * 0.5;
+    const rmax = Math.hypot(cx, cy);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const d = Math.hypot(x - cx, y - cy) / rmax;
+        /* Vignetage : un objectif a immersion ne repartit pas la lumiere
+           uniformement, et c'est ce qui donne la lecture « au microscope ». */
+        const k = smoothstep(0.52, 1.02, d) * 0.85;
+        sc.px[y * w + x] = mix32(c0, c1, k) | 0xff000000;
+      }
+    }
+  }
+
+  contourEcran(hy) {
+    const n = hy.contour(this.xs, this.ys, S_MAX, 32);
+    for (let i = 0; i < n; i++) {
+      this.xs[i] = this.sx(this.xs[i]);
+      this.ys[i] = this.sy(this.ys[i]);
+    }
+    this.n = n;
+  }
+
+  /**
+   * Distance exacte au contour, dans une bande de +-BANDE px. On parcourt
+   * les aretes et on garde le minimum : pas d'accumulation, donc pas de
+   * double melange aux jointures, ce qui laissait des points sombres sur
+   * chaque sommet quand on tracait arete par arete en src-over.
+   */
+  bandeDistance() {
+    const { xs, ys, n, dist, w, h } = this;
+    const b = this.box;
+    for (let y = Math.max(0, b.y0); y <= Math.min(h - 1, b.y1); y++) {
+      dist.fill(BANDE + 1, y * w + Math.max(0, b.x0), y * w + Math.min(w - 1, b.x1) + 1);
+      this.mask.fill(0, y * w + Math.max(0, b.x0), y * w + Math.min(w - 1, b.x1) + 1);
+    }
+    let X0 = w, Y0 = h, X1 = -1, Y1 = -1;
+
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const ax = xs[i], ay = ys[i], bx = xs[j], by = ys[j];
+      const ex = bx - ax, ey = by - ay;
+      const l2 = ex * ex + ey * ey || 1e-9;
+      let x0 = Math.floor(Math.min(ax, bx) - BANDE), x1 = Math.ceil(Math.max(ax, bx) + BANDE);
+      let y0 = Math.floor(Math.min(ay, by) - BANDE), y1 = Math.ceil(Math.max(ay, by) + BANDE);
+      if (x1 < 0 || y1 < 0 || x0 >= w || y0 >= h) continue;
+      x0 = Math.max(x0, 0); y0 = Math.max(y0, 0); x1 = Math.min(x1, w - 1); y1 = Math.min(y1, h - 1);
+      if (x0 < X0) X0 = x0; if (x1 > X1) X1 = x1;
+      if (y0 < Y0) Y0 = y0; if (y1 > Y1) Y1 = y1;
+      for (let y = y0; y <= y1; y++) {
+        const row = y * w;
+        const py = y + 0.5 - ay;
+        for (let x = x0; x <= x1; x++) {
+          const px = x + 0.5 - ax;
+          let u = (px * ex + py * ey) / l2;
+          u = u < 0 ? 0 : u > 1 ? 1 : u;
+          const dx = px - ex * u, dy = py - ey * u;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          const o = row + x;
+          if (d < dist[o]) dist[o] = d;
+        }
+      }
+    }
+    this.box = { x0: X0, y0: Y0, x1: X1, y1: Y1 };
+  }
+
+  /**
+   * Remplissage du cytoplasme. Balayage pair-impair du polygone : une seule
+   * silhouette, aucune couture. C'est le remede au defaut qui a coule le
+   * prototype precedent, ou chaque troncon etait rasterise pour son compte
+   * et faisait onduler la paroi.
+   */
+  cytoplasme(hy, P, t, opts) {
+    const { xs, ys, n, w, h, mask, dist } = this;
+    const sc = this.sc;
+    const cCyto = hexToRgba(P.cyto);
+    const cBord = hexToRgba(P.cytoBord);
+    const force = opts.granulation === false ? 0 : (P.texture ?? P.bruit);
+
+    const ax = this.sx(hy.x), ay = this.sy(hy.y);
+    const cth = Math.cos(hy.th), sth = Math.sin(hy.th);
+    /* La texture derive AVEC le cytoplasme, pas avec la paroi : 0,9 um/s,
+       le flux de masse (1,2) moins la croissance (0,33). Sans ce terme le
+       tube est granuleux mais parfaitement immobile a l'interieur. */
+    const derive = -t * 0.9;
+
+    let ymin = h, ymax = -1;
+    for (let i = 0; i < n; i++) { const y = ys[i]; if (y < ymin) ymin = y; if (y > ymax) ymax = y; }
+    const y0 = Math.max(0, Math.floor(ymin)), y1 = Math.min(h - 1, Math.ceil(ymax));
+    const xsInt = this._xi || (this._xi = new Float32Array(256));
+
+    for (let y = y0; y <= y1; y++) {
+      const yc = y + 0.5;
+      let m = 0;
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        const ya = ys[i], yb = ys[j];
+        if ((ya <= yc) === (yb <= yc)) continue;
+        const t2 = (yc - ya) / (yb - ya);
+        if (m < 256) xsInt[m++] = xs[i] + (xs[j] - xs[i]) * t2;
+      }
+      if (m < 2) continue;
+      for (let a = 1; a < m; a++) { const v = xsInt[a]; let b2 = a - 1; while (b2 >= 0 && xsInt[b2] > v) { xsInt[b2 + 1] = xsInt[b2]; b2--; } xsInt[b2 + 1] = v; }
+      const row = y * w;
+      for (let k = 0; k + 1 < m; k += 2) {
+        const xa = Math.max(0, Math.ceil(xsInt[k] - 0.5));
+        const xb = Math.min(w - 1, Math.floor(xsInt[k + 1] - 0.5));
+        for (let x = xa; x <= xb; x++) {
+          const o = row + x;
+          mask[o] = 255;
+          const d = dist[o];
+          /* Assombrissement au bord : un cylindre vu de cote presente plus
+             d'epaisseur optique sur ses flancs. Tire de la MEME distance
+             que la paroi, donc rigoureusement concentrique. */
+          let c = mix32(cCyto, cBord, clamp(1 - d / 3.6, 0, 1) * 0.34);
+          if (force > 0) {
+            const lx = (x - ax) * cth + (y - ay) * sth;
+            const ly = -(x - ax) * sth + (y - ay) * cth;
+            /* Deux echelles : une grosse (0,17) qui donne des plages, une
+               fine (0,62) qui donne le grain. Sans la grosse, le cytoplasme
+               est uniforme et le tube a l'air vide. */
+            const g = (fbm2(lx * 0.17 + derive * 0.17, ly * 0.17, 17) - 0.5) * 0.62
+                    + (fbm2(lx * 0.62 + derive * 0.62, ly * 0.62, 43) - 0.5) * 0.38;
+            c = shade32(c, g * force * 3.0);
+          }
+          sc.px[o] = c | 0xff000000;
+        }
+      }
+    }
+  }
+
+  /* --- contenu ----------------------------------------------------------- */
+
+  /**
+   * Choix du calque pour une profondeur z dans le tube.
+   *
+   * Le coefficient 0,62 (et non 1) est mesure : a 0,92 un objet de 2 px
+   * partait au niveau 3, soit un flou de 4 px de rayon avec un gain de 4,2 —
+   * il devenait une tache blanche de 10 px et le champ se remplissait de
+   * nuages. Un objet defocalise doit s'assombrir et s'etaler un peu, pas
+   * exploser. `plancher` sert aux organites, toujours un peu flous,
+   * `plafond` aux evenements de membrane, toujours nets.
+   */
+  plan(z, plancher = 0, plafond = 3) {
+    const dz = Math.abs(z - this.zFocus);
+    const n = clamp(Screen.blurLevel(clamp(dz * 0.62, 0, 1)), plancher, plafond);
+    return { idx: Screen.layerFor(z - this.zFocus, n), dz };
+  }
+
+  contenu(hy, co, P, opts) {
+    const sc = this.sc, T = hy.table(S_MAX + 2, 0.3), pt = this.pt;
+    const K = this.pxUm;
+
+    if (opts.granulation !== false) {
+      const cc = hexToRgba(P.grainClair), cs = hexToRgba(P.grainSombre);
+      for (const g of co.grains) {
+        versMonde(T, g.s, g.v, pt);
+        const x = this.sx(pt.x), y = this.sy(pt.y);
+        if (x < -4 || y < -4 || x > this.w + 4 || y > this.h + 4) continue;
+        const pl = this.plan(g.z);
+        sc.layer(pl.idx);
+        const c = fade32(g.clair ? cc : cs, 0.82 - pl.dz * 0.22);
+        sc.dot(x, y, g.r * 0.9, c);
+      }
+    }
+
+    if (opts.organites !== false) {
+      const pt2 = this._pt2 || (this._pt2 = { x: 0, y: 0 });
+      for (const o of co.organites) {
+        versMonde(T, o.s, o.v, pt);
+        const x = this.sx(pt.x), y = this.sy(pt.y);
+        if (x < -30 || y < -30 || x > this.w + 30 || y > this.h + 30) continue;
+        /* Orientation : l'AXE du tube, pas le hasard. Les mitochondries et
+           le reticulum d'une hyphe sont etires dans le sens du flux ;
+           orientes au hasard ils se lisaient comme des batonnets jetes. */
+        versMonde(T, Math.max(o.s - 0.6, 0), o.v, pt2);
+        const axe = Math.atan2(this.sy(pt2.y) - y, this.sx(pt2.x) - x);
+        const pl = this.plan(o.z, 1);
+        sc.layer(pl.idx);
+        if (o.type === 'noyau') {
+          /* Pas d'anneau nucleolaire net : a ce grossissement un noyau est
+             une zone un peu plus dense, pas un schema de manuel. */
+          sc.ell(x, y, o.a * K, o.b * K, axe + o.ang * 0.08, fade32(hexToRgba(P.noyau), 0.42));
+          sc.disc(x, y, o.b * K * 0.40, fade32(hexToRgba(P.nucleole), 0.34));
+        } else if (o.type === 'mito') {
+          sc.cap(x, y, o.a * 2 * K, o.b * 2 * K, axe + o.ang * 0.22, fade32(hexToRgba(P.mito), 0.62));
+        } else if (o.type === 'vacuole') {
+          sc.disc(x, y, o.b * K, fade32(hexToRgba(P.vacuole), 0.8), fade32(hexToRgba(P.grainClair), 0.35));
+        } else {
+          sc.cap(x, y, o.a * 2 * K, Math.max(o.b * 2 * K, 1.1), axe + o.ang * 0.05,
+                 fade32(hexToRgba(P.mito), 0.26));
+        }
+      }
+    }
+
+    if (opts.vesicules !== false) {
+      const cv = hexToRgba(P.vesicule), cr = hexToRgba(P.vesiculeRim);
+      for (const v of co.ves) {
+        versMonde(T, v.s, v.v, pt);
+        const x = this.sx(pt.x), y = this.sy(pt.y);
+        if (x < -8 || y < -8 || x > this.w + 8 || y > this.h + 8) continue;
+        const pl = this.plan(v.z);
+        sc.layer(pl.idx);
+        if (v.pont > 0) {
+          /* Le pont de fusion : deux vesicules qui n'en font plus qu'une
+             passent par un halteres. Sans ca la fusion est une disparition. */
+          versMonde(T, v.pontS, v.pontV, pt);
+          const x2 = this.sx(pt.x), y2 = this.sy(pt.y);
+          sc.cap((x + x2) / 2, (y + y2) / 2, Math.hypot(x2 - x, y2 - y) + v.r * K * 1.4,
+                 v.r * K * 1.15, Math.atan2(y2 - y, x2 - x), cv, cr);
+        }
+        if (v.etat === 1) {
+          /* Une fusion se passe CONTRE la membrane : elle est dans le plan,
+             donc nette. Floutee elle donnait une trainee blanche. */
+          sc.layer(this.plan(v.z, 0, 1).idx);
+          /* Exocytose : elle s'aplatit contre la membrane et s'eclaircit. */
+          const k = clamp(v.tf / 0.42, 0, 1);
+          const r = v.r * K;
+          const ang = Math.atan2(this.sy(pt.y) - this.sy(hy.y), this.sx(pt.x) - this.sx(hy.x));
+          sc.ell(x, y, r * (1 - 0.55 * k), r * (1 + 0.75 * k), ang,
+                 mix32(cv, cr, k * 0.45));
+        } else {
+          /* Bille refringente : disque plein + coeur plus clair. Le liseré
+             clair en BORDURE (disc(..., fill, rim)) faisait l'inverse — un
+             anneau blanc avec un centre sombre, une lecture de bulle. */
+          const r = v.r * K;
+          sc.dot(x, y, r, fade32(cv, 0.94 - pl.dz * 0.14));
+          if (r > 2.2) sc.dot(x, y, r * 0.40, fade32(cr, 0.7 - pl.dz * 0.25));
+        }
+      }
+    }
+
+    if (opts.vesicules !== false) {
+      const cm = hexToRgba(P.molecule);
+      for (const m of co.mols) {
+        versMonde(T, m.s, m.v, pt);
+        const x = this.sx(pt.x), y = this.sy(pt.y);
+        /* Toujours net : un pixel isole floute par une boite de 3 devient
+           une croix, et le champ se couvre d'etoiles. */
+        sc.layer(Screen.layerFor(m.z - this.zFocus, 0));
+        const k = 1 - m.t / m.vie;
+        /* Deux pixels, pas un : le materiau de paroi deverse doit se voir
+           sortir de la vesicule, c'est la moitie de ce qu'on est venu
+           regarder. */
+        sc.dot(x, y, k > 0.55 ? 1.0 : 0.6, fade32(cm, (0.35 + 0.65 * k * k)));
+      }
+    }
+  }
+
+  /* --- paroi ------------------------------------------------------------- */
+
+  paroi(hy, P, opts) {
+    const { w, h, dist, mask } = this;
+    const sc = this.sc;
+    const b = this.box;
+    const cP = hexToRgba(P.paroi), cJ = hexToRgba(P.paroiJeune);
+    const cH = hexToRgba(P.halo);
+    const halo = opts.halo === false ? 0 : P.haloForce;
+
+    /* Epaisseur ECRAN. Une paroi hyphale fait 0,1 a 0,3 um : a ce
+       grossissement c'est 1 a 3 px, et ca ne doit jamais grossir avec le
+       zoom, sinon le tube devient une saucisse. */
+    const e = clamp(0.19 * this.pxUm, 1.0, 2.6);
+    const ax = this.sx(hy.x), ay = this.sy(hy.y);
+    const invPx = 1 / this.pxUm;
+
+    const y0 = Math.max(0, b.y0), y1 = Math.min(h - 1, b.y1);
+    const x0 = Math.max(0, b.x0), x1 = Math.min(w - 1, b.x1);
+
+    sc.layer(4);
+    for (let y = y0; y <= y1; y++) {
+      const row = y * w;
+      for (let x = x0; x <= x1; x++) {
+        const o = row + x;
+        const d = dist[o];
+        if (d > BANDE) continue;
+        const dedans = mask[o] !== 0;
+        const s = Math.hypot(x - ax, y - ay) * invPx;
+        const mat = hy.maturite(s);
+        const c = mix32(cJ, cP, mat);
+        const ep = e * (0.72 + 0.28 * mat);
+        if (d <= ep) {
+          /* bande centree sur le contour, un peu plus dedans que dehors */
+          const k = dedans ? d / (ep * 1.05) : d / (ep * 0.72);
+          if (k <= 1) { sc.plot(x, y, fade32(c, 1 - 0.45 * k * k)); continue; }
+        }
+        if (!dedans && halo > 0 && d < BANDE) {
+          const k = 1 - (d - ep * 0.72) / (BANDE - ep * 0.72);
+          if (k > 0) sc.plot(x, y, fade32(cH, k * k * halo * (0.45 + 0.55 * mat)));
+        }
+      }
+    }
+
+    if (halo > 0) {
+      /* Doublure floue du halo : c'est elle qui donne la lecture
+         « contraste de phase » plutot que « contour detoure ». */
+      sc.layer(5);
+      for (let y = y0; y <= y1; y++) {
+        const row = y * w;
+        for (let x = x0; x <= x1; x++) {
+          const o = row + x;
+          const d = dist[o];
+          if (d > BANDE || mask[o]) continue;
+          const k = 1 - d / BANDE;
+          sc.plot(x, y, fade32(cH, k * k * halo * 0.55));
+        }
+      }
+    }
+  }
+
+  /* --- finition ---------------------------------------------------------- */
+
+  grainCapteur(P, t) {
+    const sc = this.sc, w = this.w, h = this.h;
+    /* Le grain se renouvelle a 14 Hz. A 60 Hz il scintille et fatigue. */
+    const g = Math.floor(t * 14);
+    const amp = P.bruit * 230;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const o = y * w + x;
+        const n = hash2(x, y, g) - 0.5;
+        const c = sc.px[o];
+        const d = (n * amp) | 0;
+        const r = clamp((c & 255) + d, 0, 255);
+        const gg = clamp(((c >> 8) & 255) + d, 0, 255);
+        const b = clamp(((c >> 16) & 255) + d, 0, 255);
+        sc.px[o] = 0xff000000 | (b << 16) | (gg << 8) | r;
+      }
+    }
+  }
+
+  barreEchelle(P) {
+    const sc = this.sc;
+    const um = 10;
+    const L = Math.round(um * this.pxUm);
+    if (L > this.w - 30) return;
+    const x = this.w - L - 10, y = this.h - 12;
+    const c = hexToRgba(P.paroi);
+    for (let i = 0; i < L; i++) { sc.direct(x + i, y, c); sc.direct(x + i, y + 1, c); }
+    this.texte('10 um', x + L - 22, y - 8, c);
+  }
+
+  texte(str, x, y, c) {
+    const sc = this.sc;
+    for (let i = 0; i < str.length; i++) {
+      const g = GLYPHES[str[i]];
+      if (!g) continue;
+      for (let r = 0; r < 6; r++) {
+        for (let b = 0; b < 4; b++) {
+          if (g[r] & (8 >> b)) sc.direct(x + i * 5 + b, y + r, c);
+        }
+      }
+    }
+  }
+}

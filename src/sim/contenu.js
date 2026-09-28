@@ -1,0 +1,459 @@
+/* ---------------------------------------------------------------------------
+   Le contenu de l'hyphe : vesicules, granulation, organites, molecules.
+
+   Tout vit en coordonnees de TUBE (s, v) :
+     s = abscisse curviligne depuis la pointe de l'apex, um, toujours >= 0
+     v = ecart lateral signe, um
+   et n'est projete en monde qu'au moment du rendu. Deux consequences, toutes
+   les deux voulues :
+
+     - rien ne peut sortir du tube, la contrainte |v| < W(s) est exacte et
+       verifiee AVANT le rendu, pas apres ;
+     - quand l'apex avance de `da`, tout le contenu s'eloigne de la pointe
+       de `da` sans qu'on ait rien a deplacer : s += da. Le flux de masse
+       vers l'apex est le terme oppose. C'est litteralement le bilan de
+       Lew 2011 (fig. 2b) : la croissance consomme, le flux reapprovisionne.
+
+   Chiffres de la publi (Lew, Nat Rev Microbiol 9:509, 2011) :
+     croissance 20 um/min = 0,33 um/s ; flux de masse ~5 um/s mesure a 1 cm
+     du front ; diametre ~15 um ; Ca2+ apical liberant la fusion des
+     vesicules ; le Ca2+ est repompe juste derriere par le RE et les
+     mitochondries, d'ou un gradient qui ne diffuse pas.
+
+   SIMPLIFICATIONS ASSUMEES, toutes visuelles :
+     - les vesicules font 70-100 nm, soit 1 px a ce grossissement. On les
+       dessine a l'echelle x5 : un objet d'un pixel n'a ni rebond ni fusion
+       lisibles, et « l'experience visuelle est la plus importante ».
+     - le Spitzenkorper d'un Neurospora contient ~10^4 vesicules. On en
+       simule ~80. Il n'est JAMAIS dessine comme un objet : c'est la densite
+       des vesicules retenues qui le fait apparaitre, ou pas.
+     - le flux de masse est ramene a ~1,2 um/s. A 5 um/s tout traverse le
+       champ en 5 s : ce n'est plus apaisant, c'est un torrent.
+--------------------------------------------------------------------------- */
+
+import { clamp, lerp, smoothstep, mulberry32, TAU } from '../core/util.js';
+import { distParoi } from './hyphe.js';
+
+export const S_MAX = 34;          // um simules derriere l'apex
+const FLUX = 1.2;                 // um/s, vitesse du flux de masse pres du front
+const ZONE_APICALE = 7.5;         // um : zone d'exclusion des organites
+const Q_FUSION = 0.277;           // um d'extension apportes par une fusion
+const TAUX_LIBERATION = 0.10;     // /s par vesicule retenue, x le pulse Ca2+
+/* La coalescence entre vesicules est un ornement, pas un debit. A 0,85 /s
+   par paire en contact elle vidait le reservoir a 8 fusions/s, vingt fois
+   plus vite que l'exocytose : le Spitzenkorper ne se formait jamais. */
+const TAUX_COALESCENCE = 0.045;
+
+/** Tirage gaussien reduit, Box-Muller. */
+function gauss(rng) {
+  const u = Math.max(rng(), 1e-9);
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(TAU * rng());
+}
+
+/** Profil du flux : il s'annule a la pointe, ou la matiere est consommee. */
+function flux(s) { return FLUX * (0.22 + 0.78 * smoothstep(0.4, 9, s)); }
+
+export class Contenu {
+  constructor(hy, opts = {}) {
+    this.hy = hy;
+    this.rng = mulberry32(opts.graine ?? 20260928);
+    this.t = 0;
+
+    this.ves = [];
+    this.grains = [];
+    this.organites = [];
+    this.mols = [];
+    this.fusions = 0;             // compteur, sert au banc
+
+    /* Bilan de croissance. Les fusions versent dans la reserve, l'hyphe
+       tire dessus a travers un passe-bas : la paroi ne se construit pas en
+       une image. Sans ce lissage, chaque exocytose faisait sauter l'apex
+       de 2,8 px d'un coup — l'extension est pulsee, pas saccadee. */
+    this.reserveA = 0; this.reserveC = 0;
+    this.avance = 0; this.couple = 0;
+
+    this.nVes = opts.nVes ?? 120;
+    this.nGrains = opts.nGrains ?? 640;
+
+    for (let i = 0; i < this.nVes; i++) this.ves.push(this.naitreVesicule(this.rng() * S_MAX));
+    for (let i = 0; i < this.nGrains; i++) this.grains.push(this.naitreGrain(this.rng() * S_MAX));
+    this.peuplerOrganites();
+  }
+
+  /* --- naissances -------------------------------------------------------- */
+
+  naitreVesicule(s) {
+    const hy = this.hy;
+    /* Une vesicule reapparait au bord du champ, jamais au milieu : une
+       vesicule qui apparait en plein cadre se voit. Le tapis roulant
+       s'auto-regule ensuite — si le pool se vide, il libere moins, donc il
+       se remplit. */
+    if (s === undefined) s = S_MAX + this.rng() * 1.5;
+    const w = hy.W(s);
+    const r = this.rng();
+    /* Deux populations. Les chitosomes (30-40 nm) portent la chitine
+       synthase, les macrovesicules (70-100 nm) le materiau de paroi. A
+       l'ecran : petites vives, grosses molles. */
+    const grosse = r > 0.42;
+    return {
+      s,
+      v: (this.rng() * 2 - 1) * w * 0.72,
+      vs: 0, vv: 0,
+      /* Rayons apparents. Une macrovesicule fait 70-100 nm et un chitosome
+         30-40 nm : a ce grossissement, moins d'un pixel. On grossit x6, pas
+         plus — mesure a x13 (r = 0,40-0,58 um) le champ n'etait plus qu'un
+         tas de bulles et le cytoplasme avait disparu. */
+      r: grosse ? lerp(0.19, 0.27, this.rng()) : lerp(0.10, 0.155, this.rng()),
+      grosse,
+      z: this.rng() * 2 - 1,
+      vz: (this.rng() * 2 - 1) * 0.06,
+      etat: 0,        // 0 transit, 2 retenue au Spk, 3 en route, 1 fusion
+      tf: 0,
+      phi: 0,
+      cs: 0, cv: 0,   // point de membrane vise
+      pont: 0,                    // temps restant d'un pont de fusion ves-ves
+      pontS: 0, pontV: 0,
+    };
+  }
+
+  naitreGrain(s) {
+    const w = this.hy.W(s);
+    return {
+      s,
+      v: (this.rng() * 2 - 1) * w * 0.94,
+      z: this.rng() * 2 - 1,
+      r: this.rng() < 0.22 ? 1.4 : 0.8,
+      clair: this.rng() < 0.45,
+    };
+  }
+
+  peuplerOrganites() {
+    /* Un organite trop gros ou trop contraste devient un dessin d'ecolier
+       pose dans le tube. On reste sous la taille reelle basse : noyau 2,6 um
+       de long, mitochondrie 2,2 um, vacuole 1,1 um de diametre. */
+    const types = [
+      ['noyau', 1, 1.30, 0.86],
+      ['mito', 7, 1.10, 0.26],
+      ['vacuole', 3, 0.62, 0.55],
+      ['re', 5, 2.20, 0.09],
+    ];
+    for (const [type, n, a, b] of types) {
+      for (let i = 0; i < n; i++) {
+        const s = ZONE_APICALE + 1.5 + this.rng() * (S_MAX - ZONE_APICALE - 2);
+        const w = this.hy.W(s);
+        this.organites.push({
+          type, s,
+          v: (this.rng() * 2 - 1) * w * 0.6,
+          vs: 0, vv: 0,
+          a: a * lerp(0.82, 1.2, this.rng()),
+          b: b * lerp(0.82, 1.2, this.rng()),
+          ang: this.rng() * TAU,
+          dang: (this.rng() * 2 - 1) * 0.12,
+          z: this.rng() * 2 - 1,
+          zone: ZONE_APICALE + a + this.rng() * 7,
+        });
+      }
+    }
+  }
+
+  /* --- gradient de calcium ---------------------------------------------- */
+
+  /**
+   * Ca2+ local. Apical (Lew 2011 fig. 6a), pulse, et biaise angulairement
+   * par la consigne de direction : c'est CE biais qui fait tourner l'apex,
+   * jamais un « cap » applique de force a la geometrie.
+   */
+  ca(s, phi, phiCible) {
+    const apical = Math.exp(-s / 2.3);
+    const dphi = phi - phiCible;
+    const angulaire = Math.exp(-(dphi * dphi) / (2 * 0.62 * 0.62));
+    return apical * (0.30 + 0.70 * angulaire) * this.pulse;
+  }
+
+  /* --- mise a jour ------------------------------------------------------- */
+
+  maj(dt, phiCible, opts = {}) {
+    const hy = this.hy;
+    const da = hy.avanceFrame;
+    this.t += dt;
+
+    /* Pulses de Ca2+ : l'extension d'un hyphe est en marches d'escalier,
+       pas lineaire. Periode ~5,5 s, deux composantes non commensurables
+       pour que ca ne batte pas. */
+    this.pulse = 0.62 + 0.38 * (0.5 + 0.5 * Math.sin(this.t * (TAU / 5.5)))
+               + 0.16 * (0.5 + 0.5 * Math.sin(this.t * (TAU / 2.13) + 1.7));
+
+    this.majVesicules(dt, da, phiCible, opts);
+    this.majGrains(dt, da);
+    this.majOrganites(dt, da);
+    this.majMolecules(dt, da);
+
+    /* Constante 0,55 s : c'est la duree pendant laquelle une vesicule
+       fusionnee verse son materiau dans la paroi. */
+    const k = 1 - Math.exp(-dt / 0.55);
+    this.avance = this.reserveA * k; this.reserveA -= this.avance;
+    this.couple = this.reserveC * k; this.reserveC -= this.couple;
+  }
+
+  /**
+   * Point de la calotte vise pour un angle phi (0 = droit devant,
+   * +-PI/2 = l'epaule). Inversion du profil : sur l'ellipse
+   * u^2 + (v/R)^2 = 1, la normale d'angle phi touche le point
+   *   u = Lc.k.cos(phi), v = R^2.k.sin(phi),  k = 1/hypot(Lc cos, R sin).
+   */
+  cible(phi) {
+    const hy = this.hy, Lc = hy.Lc, R = hy.R;
+    const ph = clamp(phi, -1.5, 1.5);
+    const ap = Math.abs(ph);
+    if (ap > Math.PI / 2 - 0.02) {
+      /* au-dela de l'epaule : on vise le flanc du cylindre */
+      const s = Lc + (ap - Math.PI / 2 + 0.02) * R * 2.2;
+      return { s, v: Math.sign(ph) * (hy.W(s) - 0.05) };
+    }
+    const c = Math.cos(ph), sn = Math.sin(ph);
+    const k = 1 / Math.hypot(Lc * c, R * sn);
+    return { s: Lc * (1 - Lc * k * c), v: R * R * k * sn };
+  }
+
+  majVesicules(dt, da, phiCible, opts) {
+    const hy = this.hy, rng = this.rng, ves = this.ves;
+    const dp = { ds: 0, dv: 0, phi: 0 };
+    const sSpk = 2.05 + 0.3 * Math.sin(this.t * 0.62);
+
+    for (let i = 0; i < ves.length; i++) {
+      const p = ves[i];
+      p.s += da;
+      if (p.pont > 0) p.pont -= dt;
+
+      /* --- exocytose en cours : arrimee, elle ne derive plus ------------- */
+      if (p.etat === 1) {
+        p.tf += dt;
+        if (p.tf > 0.42) { this.livrer(p); ves[i] = this.naitreVesicule(); }
+        continue;
+      }
+
+      p.z = clamp(p.z + p.vz * dt, -1, 1);
+      if (p.z <= -1 || p.z >= 1) p.vz = -p.vz;
+
+      if (p.etat === 0) {
+        /* --- transit : le flux de masse l'amene vers l'apex -------------- */
+        const f = flux(p.s);
+        p.vs += (-f - p.vs) * clamp(dt * 3.4, 0, 1);
+        p.vv += (0 - p.vv) * clamp(dt * 3.0, 0, 1);
+        p.vs += (rng() * 2 - 1) * 1.4 * dt;
+        p.vv += (rng() * 2 - 1) * 1.4 * dt;
+        if (p.s < 4.6) { p.etat = 2; p.tf = 0; }
+      } else if (p.etat === 2) {
+        /* --- retenue. C'est CE puits qui fait apparaitre le
+           Spitzenkorper : il n'est jamais dessine, c'est une densite. ----- */
+        p.vs += -(p.s - sSpk) * 2.6 * dt;
+        p.vv += -p.v * 1.9 * dt;
+        p.vs += (rng() * 2 - 1) * 2.4 * dt;
+        p.vv += (rng() * 2 - 1) * 2.4 * dt;
+        p.vs *= 1 - clamp(2.6 * dt, 0, 0.9);
+        p.vv *= 1 - clamp(2.6 * dt, 0, 0.9);
+        /* Liberation, cadencee par le pulse de Ca2+ : l'extension d'un
+           hyphe se fait en marches, pas de facon continue. */
+        if (opts.exocytose !== false && rng() < TAUX_LIBERATION * this.pulse * dt) {
+          p.etat = 3; p.tf = 0;
+          /* L'angle est tire autour de la consigne : c'est le seul endroit
+             ou le pilotage entre dans la simulation. */
+          p.phi = clamp(phiCible + gauss(rng) * 0.85, -1.45, 1.45);
+          const c = this.cible(p.phi);
+          p.cs = c.s; p.cv = c.v;
+        }
+      } else {
+        /* --- en route vers la membrane ---------------------------------- */
+        p.tf += dt;
+        const ds = p.cs - p.s, dv = p.cv - p.v;
+        const d = Math.hypot(ds, dv) || 1e-6;
+        const vit = 1.7;
+        p.vs += (ds / d * vit - p.vs) * clamp(dt * 4.0, 0, 1);
+        p.vv += (dv / d * vit - p.vv) * clamp(dt * 4.0, 0, 1);
+        p.vs += (rng() * 2 - 1) * 0.8 * dt;
+        p.vv += (rng() * 2 - 1) * 0.8 * dt;
+        if (p.tf > 4) {
+          /* Elle a rate sa cible. Elle ne retourne pas au reservoir — elle
+             en vise une autre : un aller-retour se lisait comme une hesitation
+             et bloquait plus de la moitie du debit. */
+          p.tf = 0;
+          p.phi = clamp(phiCible + gauss(rng) * 0.85, -1.45, 1.45);
+          const c2 = this.cible(p.phi);
+          p.cs = c2.s; p.cv = c2.v;
+        }
+      }
+
+      p.s += p.vs * dt;
+      p.v += p.vv * dt;
+      if (p.s < 0.02) { p.s = 0.02; p.vs = Math.abs(p.vs) * 0.3; }
+      if (p.s > S_MAX + 2.5) { ves[i] = this.naitreVesicule(); continue; }
+
+      /* --- paroi : contrainte exacte, calotte comprise ------------------- */
+      const dw = distParoi(hy, p.s, p.v, dp);
+      if (dw < p.r) {
+        const pen = p.r - dw;
+        p.s += dp.ds * pen; p.v += dp.dv * pen;
+        /* Rebond tres amorti : a ce nombre de Reynolds rien ne rebondit,
+           tout se repousse lentement. */
+        const vn = p.vs * dp.ds + p.vv * dp.dv;
+        if (vn < 0) { p.vs -= 1.3 * vn * dp.ds; p.vv -= 1.3 * vn * dp.dv; }
+        if (p.etat === 3 && opts.exocytose !== false) { p.etat = 1; p.tf = 0; }
+      }
+    }
+
+    /* --- collisions ----------------------------------------------------- */
+    /* n ~ 96, donc 4600 paires par image : pas besoin de grille. */
+    for (let i = 0; i < ves.length; i++) {
+      const a = ves[i];
+      if (a.etat === 1) continue;
+      for (let j = i + 1; j < ves.length; j++) {
+        const b = ves[j];
+        if (b.etat === 1) continue;
+        const ds = b.s - a.s, dv = b.v - a.v;
+        const rr = a.r + b.r;
+        if (ds > rr || ds < -rr || dv > rr || dv < -rr) continue;
+        const d = Math.hypot(ds, dv);
+        if (d >= rr || d < 1e-5) continue;
+        const nx = ds / d, ny = dv / d;
+        const pen = rr - d;
+        /* Une vesicule en route (3) est tractee sur un cable d'actine : elle
+           ecarte le reservoir au lieu de s'y arreter. Symetrique, la moitie
+           du debit d'exocytose restait coincee dans le nuage. */
+        let wa = 0.5, wb = 0.5;
+        if (a.etat === 3 && b.etat !== 3) { wa = 0.08; wb = 0.92; }
+        else if (b.etat === 3 && a.etat !== 3) { wa = 0.92; wb = 0.08; }
+        a.s -= nx * pen * wa; a.v -= ny * pen * wa;
+        b.s += nx * pen * wb; b.v += ny * pen * wb;
+        const rel = (b.vs - a.vs) * nx + (b.vv - a.vv) * ny;
+        if (rel < 0) {
+          const k = rel * 0.62;
+          a.vs += k * nx * (wa * 2); a.vv += k * ny * (wa * 2);
+          b.vs -= k * nx * (wb * 2); b.vv -= k * ny * (wb * 2);
+        }
+        /* Fusion homotypique, seulement dans le reservoir et seulement si
+           le contact est LENT : c'est ce qui donne la lenteur de lampe a
+           lave plutot qu'un tas de billes. */
+        if (opts.fusion !== false && a.etat === 2 && b.etat === 2
+            && Math.abs(rel) < 0.30 && a.pont <= 0 && b.pont <= 0
+            && a.r < 0.34 && rng() < TAUX_COALESCENCE * dt) {
+          this.fusionner(a, b, ves, j);
+          break;
+        }
+      }
+    }
+  }
+
+  /** Deux vesicules n'en font plus qu'une, volume conserve. */
+  fusionner(a, b, ves, j) {
+    const r = Math.cbrt(a.r * a.r * a.r + b.r * b.r * b.r);
+    a.pontS = b.s; a.pontV = b.v; a.pont = 0.38;
+    const m1 = a.r ** 3, m2 = b.r ** 3, m = m1 + m2;
+    a.s = (a.s * m1 + b.s * m2) / m;
+    a.v = (a.v * m1 + b.v * m2) / m;
+    a.vs = (a.vs * m1 + b.vs * m2) / m;
+    a.vv = (a.vv * m1 + b.vv * m2) / m;
+    a.r = Math.min(r, 0.40);
+    a.grosse = true;
+    ves[j] = this.naitreVesicule();
+  }
+
+  /**
+   * Livraison : la vesicule verse son contenu dans la paroi. C'est le SEUL
+   * mecanisme qui fait avancer l'hyphe. L'apex n'a pas de « moteur » : il
+   * avance la ou les vesicules fusionnent, et il tourne quand elles
+   * fusionnent de preference d'un cote. L'inertie n'est donc pas un
+   * amortisseur ajoute apres coup, c'est le temps qu'il faut au nuage de
+   * vesicules pour se deplacer.
+   */
+  livrer(p) {
+    /* 0,168 um par fusion moyenne. Calibre pour ~2,5 fusions/s, soit
+       20 um/min : moins de fusions mais chacune lisible, conformement a
+       « chaque vesicule qui arrive porte un sens et un role ». */
+    const q = Q_FUSION * (p.grosse ? 1.30 : 0.55);
+    this.reserveA += q * Math.cos(p.phi);
+    this.reserveC += q * Math.sin(p.phi);
+    this.fusions++;
+    const n = p.grosse ? 11 : 6;
+    for (let k = 0; k < n; k++) {
+      const a = p.phi + (this.rng() * 2 - 1) * 0.9;
+      this.mols.push({
+        s: Math.max(p.s + (this.rng() * 2 - 1) * 0.2, 0.05),
+        v: p.v + (this.rng() * 2 - 1) * 0.2,
+        vs: Math.sin(a) * 1.3 * (this.rng() * 0.8 + 0.4),
+        vv: -Math.cos(a) * 1.3 * (this.rng() * 2 - 1),
+        z: p.z,
+        t: 0,
+        vie: 1.1 + this.rng() * 1.1,
+      });
+    }
+  }
+
+  majMolecules(dt, da) {
+    const hy = this.hy, mols = this.mols, dp = { ds: 0, dv: 0, phi: 0 };
+    for (let i = mols.length - 1; i >= 0; i--) {
+      const m = mols[i];
+      m.t += dt;
+      if (m.t > m.vie) { mols.splice(i, 1); continue; }
+      m.s += da + m.vs * dt;
+      m.v += m.vv * dt;
+      m.vs *= 1 - clamp(2.6 * dt, 0, 0.9);
+      m.vv *= 1 - clamp(2.6 * dt, 0, 0.9);
+      /* Elles glissent le long de la paroi et s'y incorporent. */
+      const d = distParoi(hy, m.s, m.v, dp);
+      if (d < 0.05) { m.s += dp.ds * (0.05 - d); m.v += dp.dv * (0.05 - d); }
+      if (m.s < 0.02) m.s = 0.02;
+    }
+    if (mols.length > 420) mols.splice(0, mols.length - 420);
+  }
+
+  majGrains(dt, da) {
+    const hy = this.hy, g = this.grains, rng = this.rng;
+    for (let i = 0; i < g.length; i++) {
+      const p = g[i];
+      p.s += da - flux(p.s) * dt + (rng() * 2 - 1) * 0.35 * dt;
+      p.v += (rng() * 2 - 1) * 0.35 * dt;
+      if (p.s > S_MAX) { g[i] = this.naitreGrain(S_MAX); continue; }
+      if (p.s < 0.05) p.s = 0.05;
+      const w = distParoi(hy, p.s, p.v, null);
+      if (w < 0.12) {
+        const dp = { ds: 0, dv: 0, phi: 0 };
+        distParoi(hy, p.s, p.v, dp);
+        p.s += dp.ds * (0.12 - w); p.v += dp.dv * (0.12 - w);
+      }
+    }
+  }
+
+  majOrganites(dt, da) {
+    const hy = this.hy, o = this.organites, rng = this.rng;
+    const dp = { ds: 0, dv: 0, phi: 0 };
+    for (let i = 0; i < o.length; i++) {
+      const p = o[i];
+      p.s += da;
+      const f = flux(p.s);
+      p.vs += (-f - p.vs) * clamp(dt * 2.2, 0, 1);
+      p.vv += (0 - p.vv) * clamp(dt * 2.0, 0, 1);
+      p.vs += (rng() * 2 - 1) * 0.55 * dt;
+      p.vv += (rng() * 2 - 1) * 0.55 * dt;
+
+      /* Zone apicale sans organites : c'est un fait d'observation (la
+         calotte ne contient que des vesicules, cf. la planche MET de
+         reference) et c'est aussi ce qui garde la pointe lisible. */
+      /* Repoussoir doux et PROPRE A CHAQUE organite (p.zone) : un seuil
+         commun les empilait tous sur la meme abscisse et ils se lisaient
+         comme une seule masse grise en travers du tube. */
+      if (p.s < p.zone) p.vs += (p.zone - p.s) * 0.85 * dt;
+      p.s += p.vs * dt;
+      p.v += p.vv * dt;
+      p.ang += p.dang * dt;
+      if (p.s > S_MAX + 2) { p.s = ZONE_APICALE + 1 + rng() * 2; p.v = (rng() * 2 - 1) * 2; }
+
+      const rr = Math.max(p.b, p.a * 0.35);
+      const d = distParoi(hy, p.s, p.v, dp);
+      if (d < rr) {
+        p.s += dp.ds * (rr - d); p.v += dp.dv * (rr - d);
+        const vn = p.vs * dp.ds + p.vv * dp.dv;
+        if (vn < 0) { p.vs -= 1.2 * vn * dp.ds; p.vv -= 1.2 * vn * dp.dv; }
+      }
+    }
+  }
+}
