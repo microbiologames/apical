@@ -13,7 +13,7 @@ les captures de contrôle.
 | Commande | Ce qu'elle fait |
 |---|---|
 | `npm run serve` | sert le dépôt tel quel |
-| `npm run banc` | 10 verdicts de mesure, sans rendu, en node |
+| `npm run banc` | 11 verdicts de mesure, sans rendu, en node |
 | `npm run visuel` | captures dans `/tmp/apical-shots` (Playwright) |
 
 ---
@@ -106,6 +106,30 @@ La bouche va de 0,34 à 1,89 R, la poche de 2,05 à 0,43 R. La cible imposée à
 corde suit *exactement* le même profil, pour qu'au retrait de l'arc, en fin
 d'événement, la chaîne porte déjà la même forme.
 
+**Abscisse signée.** `w = côté · âge` : négative d'un flanc, positive de
+l'autre, nulle au pôle. `Membrane.maj` et `Scene.membraneLigne` travaillent
+tous deux sur cette coordonnée, sur **une seule liste**. Deux conséquences :
+
+- une fusion qui a lieu **au pôle** déborde naturellement des deux côtés. Avec
+  deux chaînes indépendantes, la moitié de son oméga manquait, et le côté
+  retenu dépendait du signe d'un écart latéral quasi nul : l'ancrage sautait
+  d'un flanc à l'autre d'une image sur l'autre ;
+- `zonesFusion` **regroupe les livraisons voisines en une seule poche**. La
+  ligne de membrane est une *section* : elle est univoque, deux oméga au même
+  endroit ne peuvent pas y être tous les deux. Les superposer donnait un
+  dédoublement qui ne veut rien dire. Une double livraison, c'est une poche
+  plus large — `dep` ne s'additionne pas, il prend le maximum.
+
+Les zones sont calculées **une fois** par `Contenu.maj` et servent à la fois à
+la corde et au rendu ; si chacun les calculait de son côté, l'arc dessiné et le
+creux de la chaîne finiraient par ne plus coïncider.
+
+**L'ancrage est le point de CONTACT**, pas le centre de la vésicule :
+`(s, v) − d⃗·distParoi`. Ancrer sur le centre décalait l'oméga d'un rayon, et
+près du pôle, où la surface tourne vite, le décalage sautait d'une image à
+l'autre. Mesuré : écart maximal au point de contact **22 % du rayon** sur 176
+ancrages, contre 100 % quand on ancrait sur le centre.
+
 **Mesuré : le raccord de l'arc sur la ligne est exact à 1,8·10⁻¹⁶ px près**,
 vérifié sur 7 242 images, et pendant l'événement l'oméga vieillit de 48 nm pour
 46 nm d'avance de l'apex (3 % d'écart, qui est l'expansion orthogonale).
@@ -185,6 +209,8 @@ solution »).
 | extension par fusion | 194 nm | — |
 | durée d'une fusion | 0,85 s | — |
 | raccord de l'arc sur la ligne | 1,8·10⁻¹⁶ px sur 7 242 images | 0 |
+| écart de l'ancrage au point de contact | 22 % du rayon, 176 ancrages | 0 |
+| chevauchements de poches | 0 sur 8 976 fusions-images | 0 |
 | dérive de l'oméga pendant l'événement | 48 nm pour 46 nm d'avance | égalité |
 | rayon de virage, consigne pleine | 58 µm | unité de croissance hyphale ~110 µm |
 | inertie du cap (63 %) | 8,5 s | — |
@@ -261,6 +287,10 @@ partie du travail**, pas après, pendant.
   0,09 µm. Avec un pas de contour à 1,2 µm le polygone **lissait l'ondulation de
   paroi** que la membrane suivait : au fort grossissement les deux lignes
   s'écartaient jusqu'à 0,6 µm sans raison. Pas ramené à 0,45 µm.
+- Deux chaînes de membrane indépendantes (une par flanc) **ne peuvent pas
+  porter un événement qui a lieu au pôle** : il en manque la moitié, et le côté
+  retenu dépend du signe d'un écart latéral quasi nul. Une seule liste sur une
+  abscisse signée, et le cas particulier disparaît.
 - **Un `sed` qui ne trouve pas son motif ne dit rien.** Deux remplacements
   successifs de `Q_FUSION` ont échoué en silence et j'ai documenté une valeur
   que le fichier n'avait pas. Seul le banc l'a vu (22,8 µm/min au lieu de 20).

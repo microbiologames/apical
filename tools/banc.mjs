@@ -3,7 +3,7 @@
 import { Hyphe, distParoi } from '../src/sim/hyphe.js';
 import { Contenu, S_MAX } from '../src/sim/contenu.js';
 import { clamp, angleDelta, noise1 } from '../src/core/util.js';
-import { omega } from '../src/sim/membrane.js';
+import { omega, zonesFusion } from '../src/sim/membrane.js';
 import { DUREE_FUSION } from '../src/sim/contenu.js';
 import { Scene } from '../src/render/scene.js';
 
@@ -201,6 +201,48 @@ function dire(ok, titre, detail) { R.push({ ok, titre, detail }); }
     + `pendant l'evenement l'omega a vieilli de ${(vieilli * 1000).toFixed(0)} nm pour `
     + `${(pousse * 1000).toFixed(0)} nm d'avance de l'apex (ecart ${(err * 100).toFixed(2)} %), `
     + `et son abscisse a recule de ${(recul * 1000).toFixed(0)} nm — l'ecart est l'expansion orthogonale`);
+}
+
+/* 11. l'ancrage est le point de contact, et deux livraisons voisines n'en
+       font qu'une */
+{
+  const dt = 1 / 60;
+  const hy = new Hyphe({ graine: 33 });
+  const co = new Contenu(hy, { graine: 33 });
+  let t = 0, pire = 0, ancres = 0, chevauche = 0, fenetres = 0, groupes = 0;
+  const etats = new WeakMap();
+
+  while (t < 120) {
+    for (const v of co.ves) etats.set(v, v.etat);
+    co.maj(dt, 0, {});
+    hy.avancer(co.avance, dt);
+
+    /* (a) au moment de l'ancrage, le point ancre doit etre le point de
+           CONTACT : a r + PEAU du centre de la vesicule, pas au centre. */
+    for (const v of co.ves) {
+      if (v.etat !== 1 || etats.get(v) === 1) continue;
+      const sA = co.membrane.sDepuisAge(v.am);
+      const vA = v.cotem * hy.W(sA);
+      const d = Math.hypot(sA - v.s, vA - v.v);
+      pire = Math.max(pire, Math.abs(d - (v.r + 0.14)) / (v.r + 0.14));
+      ancres++;
+    }
+
+    /* (b) les zones ne doivent jamais se chevaucher : la ligne de membrane
+           est une section, elle est univoque. */
+    const z = zonesFusion(co.ves, DUREE_FUSION);
+    fenetres += co.ves.reduce((n, v) => n + (v.etat === 1 ? 1 : 0), 0);
+    groupes += z.length;
+    for (let i = 1; i < z.length; i++) {
+      if (z[i].w0 - z[i].hw < z[i - 1].w0 + z[i - 1].hw - 1e-9) chevauche++;
+    }
+    t += dt;
+  }
+
+  dire(ancres > 60 && pire < 0.30 && chevauche === 0,
+    'l ancrage est le point de contact, et deux livraisons voisines n en font qu une',
+    `${ancres} ancrages, ecart maximal au point de contact ${(pire * 100).toFixed(1)} % du rayon ; `
+    + `${fenetres} fusions-images regroupees en ${groupes} poches, ${chevauche} chevauchement`);
 }
 
 /* 7. budget */

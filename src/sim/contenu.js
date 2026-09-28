@@ -33,7 +33,7 @@
 
 import { clamp, lerp, smoothstep, mulberry32, TAU } from '../core/util.js';
 import { distParoi } from './hyphe.js';
-import { Membrane } from './membrane.js';
+import { Membrane, zonesFusion } from './membrane.js';
 
 export const S_MAX = 34;          // um simules derriere l'apex
 const FLUX = 1.2;                 // um/s, vitesse du flux de masse pres du front
@@ -87,6 +87,7 @@ export class Contenu {
     /* La membrane plasmique est une ligne continue ancree dans le materiau :
        c'est elle qui porte les figures de fusion, plus le rendu. */
     this.membrane = new Membrane(hy, S_MAX);
+    this.zones = [];
     this.fusions = 0;             // compteur, sert au banc
 
     /* Bilan de croissance. Les fusions versent dans la reserve, l'hyphe
@@ -215,14 +216,13 @@ export class Contenu {
     this.majMolecules(dt, da);
     this.majDepots(dt);
 
-    /* La membrane recoit les fusions en cours et derive avec le materiau. */
-    const evts = [];
-    for (const v of this.ves) {
-      if (v.etat !== 1) continue;
-      v.am += da;
-      evts.push({ a: v.am, cote: v.cotem, r: v.r, k: clamp(v.tf / DUREE_FUSION, 0, 1) });
-    }
-    this.membrane.maj(dt, da, evts);
+    /* La membrane recoit les fusions en cours et derive avec le materiau.
+       Les zones sont calculees UNE fois et servent a la fois a la corde et
+       au rendu : si les deux les calculaient chacun de leur cote, l'arc
+       dessine et le creux de la chaine finiraient par ne plus coincider. */
+    for (const v of this.ves) if (v.etat === 1) v.am += da;
+    this.zones = zonesFusion(this.ves, DUREE_FUSION);
+    this.membrane.maj(dt, da, this.zones);
 
     /* Constante 0,55 s : c'est la duree pendant laquelle une vesicule
        fusionnee verse son materiau dans la paroi. */
@@ -339,7 +339,8 @@ export class Contenu {
       /* --- paroi : contrainte exacte, calotte comprise ------------------- */
       /* On soustrait PEAU : la vesicule bute sur la membrane plasmique,
          qui est en retrait de la paroi. */
-      const dw = distParoi(hy, p.s, p.v, dp) - PEAU;
+      const dw0 = distParoi(hy, p.s, p.v, dp);
+      const dw = dw0 - PEAU;
       if (dw < p.r) {
         const pen = p.r - dw;
         p.s += dp.ds * pen; p.v += dp.dv * pen;
@@ -349,12 +350,18 @@ export class Contenu {
         if (vn < 0) { p.vs -= 1.3 * vn * dp.ds; p.vv -= 1.3 * vn * dp.dv; }
         if (p.etat === 3 && opts.exocytose !== false) {
           p.etat = 1; p.tf = 0;
-          /* Position MATERIELLE de l'evenement : a partir d'ici la figure
-             de fusion appartient a la membrane et derive avec elle. Avant,
-             elle etait plantee a une position ecran et restait sur place
-             pendant que l'apex avancait. */
-          p.am = this.membrane.ageDepuisS(p.s);
-          p.cotem = p.phi >= 0 ? 1 : -1;
+          /* Ancrage : le POINT DE CONTACT, pas le centre de la vesicule.
+             `dp` est la direction rentrante et `dw0` la distance a la
+             paroi : le point de contact est donc a (s,v) - dp.dw0. Ancrer
+             sur le centre decalait l'omega d'un rayon, et pres du pole,
+             ou la surface tourne vite, le decalage sautait d'une image a
+             l'autre. Le cote se lit sur le contact, pas sur le signe de
+             phi — au pole phi vaut zero a epsilon pres et son signe
+             basculait d'un flanc a l'autre. */
+          const cs = Math.max(p.s - dp.ds * dw0, 0);
+          const cv = p.v - dp.dv * dw0;
+          p.am = this.membrane.ageDepuisS(cs);
+          p.cotem = cv >= 0 ? 1 : -1;
           p.emis = 0;
         }
       }

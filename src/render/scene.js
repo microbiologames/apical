@@ -442,11 +442,15 @@ export class Scene {
    * l'interieur, et l'espace ainsi ouvert entre paroi et membrane EST son
    * lumen — il se remplit de periplasme tout seul.
    */
-  /** Point de la membrane a un age materiel donne : sur la ligne, et son
-      vis-a-vis sur la face interne de la paroi. */
-  ptMembrane(mb, hy, T, a, cote, off, out) {
+  /**
+   * Point de la membrane a l'abscisse SIGNEE w (negatif d'un flanc, positif
+   * de l'autre, nul au pole) : sur la ligne, et son vis-a-vis sur la face
+   * interne de la paroi.
+   */
+  ptMembrane(mb, hy, T, w, off, out) {
     const { ep, base } = this.peau();
-    const sA = mb.sDepuisAge(a);
+    const cote = w >= 0 ? 1 : -1;
+    const sA = mb.sDepuisAge(Math.abs(w));
     const o = this._ptM || (this._ptM = {});
     versMonde(T, sA, cote * hy.W(sA), o);
     const ix = -cote * o.nx, iy = -cote * o.ny;
@@ -454,27 +458,26 @@ export class Scene {
     const dd = base + off * this.pxUm;
     out.x = x0 + ix * dd; out.y = y0 + iy * dd;
     out.wx = x0 + ix * ep; out.wy = y0 + iy * ep;
-    out.ix = ix; out.iy = iy; out.a = a;
+    out.ix = ix; out.iy = iy; out.w = w;
     return out;
   }
 
-  /** Profondeur de la chaine a un age donne, interpolee. */
-  offAge(ch, a) {
+  /** Profondeur de la chaine a l'abscisse signee w. */
+  offW(mb, w) {
+    const ch = mb.ch[w >= 0 ? 1 : 0];
     if (ch.n === 0) return 0;
-    const i = clamp(Math.round(a / PAS_MEMB), 0, ch.n - 1);
-    return ch.off[i];
+    return ch.off[clamp(Math.round(Math.abs(w) / PAS_MEMB), 0, ch.n - 1)];
   }
 
   /**
-   * La membrane plasmique : UNE polyligne, continue du flanc gauche, par
-   * dessus l'apex, jusqu'au flanc droit.
+   * La membrane plasmique : UNE polyligne, d'un flanc a l'autre en passant
+   * par le pole, indexee sur une abscisse SIGNEE. Une seule liste, donc une
+   * fusion qui a lieu au pole deborde naturellement des deux cotes — avec
+   * deux listes separees, la moitie de son omega manquait.
    *
    * Une vesicule qui fusionne n'est PAS dessinee a cote : les noeuds de la
    * zone de contact sont retires du chemin et remplaces par l'arc de son
-   * propre contour. Le chemin reste une seule courbe — c'est la definition
-   * meme de la fusion, deux membranes qui n'en font plus qu'une, et c'est
-   * ce que la version precedente ne faisait pas : elle effacait un cercle
-   * pendant qu'elle creusait une ligne, sans jamais les raccorder.
+   * propre contour. Le chemin reste une seule courbe.
    */
   membraneLigne(hy, co, P, opts) {
     if (opts.membrane === false) return;
@@ -483,78 +486,63 @@ export class Scene {
     const cM = hexToRgba(P.membrane), cPer = hexToRgba(P.periplasme);
     const cMol = hexToRgba(P.molecule);
     const K = this.pxUm;
-    const tmp = this._tmpM || (this._tmpM = {});
+    const { base } = this.peau();
 
-    /* --- 1. un chemin par cote, dans l'ordre des ages croissants ------- */
-    const cotes = [];
-    for (let c = 0; c < 2; c++) {
+    /* --- 1. une seule liste, de w = -A a w = +A ----------------------- */
+    const item = [];
+    for (const [c, sens] of [[0, -1], [1, 1]]) {
       const ch = mb.ch[c], cote = c === 0 ? -1 : 1;
-      const evts = co.ves.filter((v) => v.etat === 1 && v.cotem === cote);
-      const item = [];
-      /* bornes des zones remplacees par un arc */
-      const zones = evts.map((v) => {
-        const g = omega(v.r, clamp(v.tf / DUREE_FUSION, 0, 1));
-        return { a0: v.am - g.hw, a1: v.am + g.hw, g, v };
-      });
-      for (let i = 0; i < ch.n; i++) {
-        const a = ch.a[i];
-        if (mb.sDepuisAge(a) > S_MAX) break;
-        let dans = false;
-        for (const z of zones) if (a > z.a0 && a < z.a1) { dans = true; break; }
-        if (dans) continue;
-        item.push(this.ptMembrane(mb, hy, T, a, cote, ch.off[i], {}));
+      const i0 = sens < 0 ? ch.n - 1 : 0, i1 = sens < 0 ? -1 : ch.n;
+      for (let i = i0; i !== i1; i += sens) {
+        if (mb.sDepuisAge(ch.a[i]) > S_MAX) continue;
+        item.push(this.ptMembrane(mb, hy, T, cote * ch.a[i], ch.off[i], {}));
       }
-      /* --- 2. insertion des arcs, a leur place dans l'ordre des ages --- */
-      for (const z of zones) {
-        const A = this.ptMembrane(mb, hy, T, Math.max(z.a0, 0), cote, this.offAge(ch, Math.max(z.a0, 0)), {});
-        const B = this.ptMembrane(mb, hy, T, z.a1, cote, this.offAge(ch, z.a1), {});
-        const arc = this.arcOmega(A, B, z.g.dep * K);
-        let k = 0;
-        while (k < item.length && item[k].a < z.a0) k++;
-        item.splice(k, 0, ...arc);
-        z.pts = arc; z.A = A; z.B = B;
-      }
-      cotes.push({ cote, item, zones });
+    }
+
+    /* --- 2. les zones de fusion, deja regroupees par la simulation ---- */
+    const zones = (co.zones || []).map((z) => ({ ...z }));
+    for (let zi = zones.length - 1; zi >= 0; zi--) {
+      const z = zones[zi];
+      const A = this.ptMembrane(mb, hy, T, z.w0 - z.hw, this.offW(mb, z.w0 - z.hw), {});
+      const B = this.ptMembrane(mb, hy, T, z.w0 + z.hw, this.offW(mb, z.w0 + z.hw), {});
+      z.pts = this.arcOmega(A, B, z.dep * K);
+      z.A = A; z.B = B;
+      let k0 = 0;
+      while (k0 < item.length && item[k0].w <= z.w0 - z.hw) k0++;
+      let k1 = k0;
+      while (k1 < item.length && item[k1].w < z.w0 + z.hw) k1++;
+      item.splice(k0, k1 - k0, ...z.pts);
     }
 
     /* --- 3. le lumen : la poche ouverte entre paroi et membrane -------- */
     sc.layer(4);
-    for (const { zones } of cotes) {
-      for (const z of zones) {
-        if (!z.pts || z.pts.length < 3) continue;
-        const xs = this._polX || (this._polX = new Float32Array(256));
-        const ys = this._polY || (this._polY = new Float32Array(256));
-        let n = 0;
-        for (const p of z.pts) { if (n < 250) { xs[n] = p.x; ys[n] = p.y; n++; } }
-        /* retour par la face interne de la paroi */
-        xs[n] = z.B.wx; ys[n] = z.B.wy; n++;
-        xs[n] = z.A.wx; ys[n] = z.A.wy; n++;
-        const t = clamp(z.g.dep / Math.max(z.g.hw, 1e-4), 0, 1);
-        this.remplir(xs, ys, n, mix32(cPer, cMol, 0.18 + 0.34 * t));
-      }
+    const xs = this._polX || (this._polX = new Float32Array(256));
+    const ys = this._polY || (this._polY = new Float32Array(256));
+    for (const z of zones) {
+      if (!z.pts || z.pts.length < 3) continue;
+      let n = 0;
+      for (const p of z.pts) if (n < 250) { xs[n] = p.x; ys[n] = p.y; n++; }
+      xs[n] = z.B.wx; ys[n] = z.B.wy; n++;
+      xs[n] = z.A.wx; ys[n] = z.A.wy; n++;
+      const t = clamp(z.dep / Math.max(z.hw, 1e-4), 0, 1);
+      this.remplir(xs, ys, n, mix32(cPer, cMol, 0.18 + 0.34 * t));
     }
     /* poches residuelles de la chaine, la ou elle s'est ecartee sans arc */
-    for (const { item } of cotes) {
-      for (let k = 0; k + 1 < item.length; k++) {
-        const a = item[k], b = item[k + 1];
-        if (Math.hypot(b.x - a.x, b.y - a.y) > 6) continue;   // saut : c'est un arc
-        const da = Math.hypot(a.x - a.wx, a.y - a.wy), db = Math.hypot(b.x - b.wx, b.y - b.wy);
-        const { base } = this.peau();
-        if (da < base + 1.2 && db < base + 1.2) continue;
-        const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y)));
-        for (let j = 0; j <= n; j++) {
-          const u = j / n;
-          sc.line(lerp(a.wx, b.wx, u), lerp(a.wy, b.wy, u), lerp(a.x, b.x, u), lerp(a.y, b.y, u), cPer);
-        }
+    for (let k = 0; k + 1 < item.length; k++) {
+      const a = item[k], b = item[k + 1];
+      if (Math.hypot(b.x - a.x, b.y - a.y) > 6) continue;
+      const da = Math.hypot(a.x - a.wx, a.y - a.wy), db = Math.hypot(b.x - b.wx, b.y - b.wy);
+      if (da < base + 1.2 && db < base + 1.2) continue;
+      const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y)));
+      for (let j = 0; j <= n; j++) {
+        const u = j / n;
+        sc.line(lerp(a.wx, b.wx, u), lerp(a.wy, b.wy, u), lerp(a.x, b.x, u), lerp(a.y, b.y, u), cPer);
       }
     }
 
     /* --- 4. la ligne, d'un bout a l'autre ----------------------------- */
-    const chemin = [];
-    for (let i = cotes[0].item.length - 1; i >= 0; i--) chemin.push(cotes[0].item[i]);
-    for (const p of cotes[1].item) chemin.push(p);
-    for (let i = 0; i + 1 < chemin.length; i++) {
-      const a = chemin[i], b = chemin[i + 1];
+    for (let i = 0; i + 1 < item.length; i++) {
+      const a = item[i], b = item[i + 1];
       if ((a.x < -2 && b.x < -2) || (a.y < -2 && b.y < -2)
           || (a.x > this.w + 2 && b.x > this.w + 2) || (a.y > this.h + 2 && b.y > this.h + 2)) continue;
       sc.line(a.x, a.y, b.x, b.y, cM);
@@ -588,7 +576,7 @@ export class Scene {
       out.push({
         x: mx + ux * X + nx * Y, y: my + uy * X + ny * Y,
         wx: lerp(A.wx, B.wx, t), wy: lerp(A.wy, B.wy, t),
-        ix: A.ix, iy: A.iy, a: lerp(A.a, B.a, t),
+        ix: A.ix, iy: A.iy, w: lerp(A.w, B.w, t),
       });
     }
     return out;

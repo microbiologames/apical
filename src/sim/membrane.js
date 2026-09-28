@@ -89,6 +89,50 @@ class Chaine {
   }
 }
 
+/**
+ * Regroupe les fusions en cours en ZONES, sur une abscisse SIGNEE
+ * `w = cote . age` : negative d'un cote de l'apex, positive de l'autre,
+ * nulle au pole. Deux consequences, toutes les deux voulues.
+ *
+ * 1. Une fusion qui a lieu AU POLE straddle naturellement les deux flancs.
+ *    Avec deux chaines independantes, la moitie de son omega manquait, et
+ *    le cote retenu dependait du signe d'un ecart lateral quasi nul :
+ *    l'ancrage sautait d'un flanc a l'autre d'une image sur l'autre.
+ *
+ * 2. Deux livraisons voisines sont FUSIONNEES en une seule poche. La ligne
+ *    de membrane est une section : elle est univoque, deux omegas au meme
+ *    endroit ne peuvent pas y etre tous les deux. Les superposer donnait un
+ *    dedoublement qui ne veut rien dire. Une double livraison, c'est une
+ *    poche plus large.
+ */
+export function zonesFusion(ves, duree) {
+  const z = [];
+  for (const v of ves) {
+    if (v.etat !== 1) continue;
+    const k = clamp(v.tf / duree, 0, 1);
+    const g = omega(v.r, k);
+    z.push({ w0: v.cotem * v.am, hw: g.hw, dep: g.dep, k });
+  }
+  if (z.length < 2) return z;
+  z.sort((a, b) => a.w0 - b.w0);
+  const out = [z[0]];
+  for (let i = 1; i < z.length; i++) {
+    const p = out[out.length - 1], c = z[i];
+    if (c.w0 - c.hw <= p.w0 + p.hw) {
+      const lo = Math.min(p.w0 - p.hw, c.w0 - c.hw);
+      const hi = Math.max(p.w0 + p.hw, c.w0 + c.hw);
+      p.w0 = (lo + hi) * 0.5;
+      p.hw = (hi - lo) * 0.5;
+      /* La profondeur ne s'additionne pas : deux vesicules cote a cote
+         creusent plus LARGE, pas plus profond. */
+      p.dep = Math.max(p.dep, c.dep);
+      p.k = Math.max(p.k, c.k);
+    } else out.push(c);
+  }
+  return out;
+}
+
+
 export class Membrane {
   constructor(hy, sMax) {
     this.hy = hy;
@@ -117,10 +161,10 @@ export class Membrane {
   }
 
   /**
-   * @param {number} da  um avances par l'apex a cette image
-   * @param {Array}  evts fusions en cours : {a, cote, r, k}
+   * @param {number} da    um avances par l'apex a cette image
+   * @param {Array}  zones fusions regroupees : {w0, hw, dep}
    */
-  maj(dt, da, evts) {
+  maj(dt, da, zones) {
     for (let c = 0; c < 2; c++) {
       const ch = this.ch[c];
       const cote = c === 0 ? -1 : 1;
@@ -142,25 +186,19 @@ export class Membrane {
 
       /* 3. Cibles imposees par les fusions en cours. */
       ch.cib.fill(0, 0, ch.n);
-      for (const e of evts) {
-        if (e.cote !== cote) continue;
-        /* Avant l'ouverture du pore la vesicule POUSSE la membrane vers
-           l'exterieur ; apres, sa propre membrane s'y est ajoutee et le
-           surplus de longueur creuse vers l'interieur. La transition est
-           continue : un saut de signe se lisait comme un clignotement. */
-        /* La cible suit EXACTEMENT le profil de l'omega dessine (voir
-           `Membrane.omega`), pour qu'au retrait de l'arc, en fin
-           d'evenement, la chaine porte deja la meme forme. Sans cette
-           egalite, la ligne sautait a l'instant ou la vesicule cessait
-           d'etre un arc pour redevenir des noeuds. */
-        const g = omega(e.r, e.k);
-        const amp = g.dep;
-        const win = g.hw * 1.25;
+      for (const e of zones) {
+        /* La cible suit EXACTEMENT le profil de l'omega dessine, pour qu'au
+           retrait de l'arc, en fin d'evenement, la chaine porte deja la
+           meme forme. Sans cette egalite, la ligne sautait a l'instant ou
+           la vesicule cessait d'etre un arc pour redevenir des noeuds.
+           Comparaison sur l'abscisse SIGNEE : une fusion au pole deborde
+           sur les deux flancs. */
+        const win = e.hw * 1.25;
         for (let i = 0; i < ch.n; i++) {
-          const d = (ch.a[i] - e.a) / win;
+          const d = (cote * ch.a[i] - e.w0) / win;
           if (d < -1 || d > 1) continue;
           const b = (1 - d * d) * (1 - d * d);
-          if (Math.abs(amp * b) > Math.abs(ch.cib[i])) ch.cib[i] = amp * b;
+          if (e.dep * b > ch.cib[i]) ch.cib[i] = e.dep * b;
         }
       }
 
