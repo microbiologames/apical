@@ -7,6 +7,8 @@ import { omega, zonesFusion } from '../src/sim/membrane.js';
 import { DUREE_FUSION } from '../src/sim/contenu.js';
 import { Scene } from '../src/render/scene.js';
 import { Thalle, V_MICRO, UCH, R_VIRAGE } from '../src/sim/thalle.js';
+import { depuisMacro } from '../src/sim/hyphe.js';
+import { pasMicro } from '../src/main.js';
 
 const KOM = 0.016, TAU_OM = 3.5;
 
@@ -410,6 +412,65 @@ function dire(ok, titre, detail) { R.push({ ok, titre, detail }); }
       + `${j.dens.toFixed(1)} mm/mm2`).join(' | ')
     + ` ; extension radiale ${ext.toFixed(1)} um/min (pointe : ${V_MICRO}), `
     + `${th.branchements} ramifications pour ${th.anastomoses} anastomoses, UCH cible ${UCH} um`);
+}
+
+/* 15. descendre sur une hyphe n'interrompt pas son axe */
+{
+  /* La contrainte n 1 du pont : zoomer n'instancie PAS une nouvelle hyphe.
+     On attache un interieur a un axe qui existe deja et qui a une histoire.
+     Trois choses a verifier, et aucune n'est visible a l'oeil. */
+  const th = new Thalle({ graine: 17, vMicro: V_MICRO });
+  while (th.t < 5400) th.maj(3);
+
+  /* la pointe vivante qui a le plus long axe */
+  let p = null;
+  for (const q of th.pointes) if (q.vive && (!p || q.axe.n > p.axe.n)) p = q;
+  const nAvant = p.axe.n, totalAvant = th.total;
+
+  const hy = depuisMacro(p.axe.xs, p.axe.ys, p.axe.n, p.th, 210,
+    { graine: 5, bout: [p.x, p.y] });
+
+  /* (a) l'apex micro est exactement la pointe macro. */
+  const dApex = Math.hypot(hy.x - p.x, hy.y - p.y);
+
+  /* (b) l'axe fin PASSE par les points macro : la spline ne doit pas
+         inventer une trajectoire, seulement l'arrondir. */
+  let pire = 0, remonte = 0;
+  for (let i = p.axe.n - 1; i > 0 && remonte < 180; i--) {
+    remonte += Math.hypot(p.axe.xs[i] - p.axe.xs[i - 1], p.axe.ys[i] - p.axe.ys[i - 1]);
+    const mx = p.axe.xs[i], my = p.axe.ys[i];
+    let d = Infinity;
+    for (let j = 0; j < hy.ax.length; j++) {
+      const e = Math.hypot(hy.ax[j] - mx, hy.ay[j] - my);
+      if (e < d) d = e;
+    }
+    if (d > pire) pire = d;
+  }
+
+  /* (c) la micro pilote, le macro enregistre : l'axe doit se prolonger sans
+         saut au point de reprise. */
+  const co = new Contenu(hy, { graine: 5 });
+  p.micro = {};
+  let t = 0, phi = 0;
+  while (t < 90) {
+    const da = pasMicro(hy, co, 1 / 60, phi, {});
+    th.inscrire(p, hy.x, hy.y, hy.th, da);
+    t += 1 / 60;
+  }
+  let saut = 0;
+  for (let i = Math.max(1, nAvant - 2); i < p.axe.n; i++) {
+    const d = Math.hypot(p.axe.xs[i] - p.axe.xs[i - 1], p.axe.ys[i] - p.axe.ys[i - 1]);
+    saut = Math.max(saut, Math.abs(d - 6));
+  }
+  const pousse = th.total - totalAvant;
+
+  dire(dApex < 1e-9 && pire < 0.25 && saut < 1.2 && p.axe.n > nAvant && pousse > 20,
+    'descendre sur une hyphe n interrompt pas son axe',
+    `axe macro ${nAvant} points ; re-echantillonne a ${hy.ax.length} points fins, `
+    + `apex a ${dApex.toExponential(1)} um de la pointe, ecart maximal a l'axe macro `
+    + `${(pire * 1000).toFixed(0)} nm ; apres 90 s pilotees par la micro, `
+    + `${(pousse).toFixed(1)} um construits et ${p.axe.n - nAvant} points ajoutes, `
+    + `ecart maximal au pas de 6 um : ${(saut * 1000).toFixed(0)} nm`);
 }
 
 /* 7. budget */

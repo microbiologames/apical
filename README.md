@@ -5,10 +5,11 @@ en pixel art vu au microscope. Sans dépendance, sans build.
 
 ```
 npm run serve           # http://localhost:8080/
-npm run banc            # 14 verdicts de mesure
+npm run banc            # 15 verdicts de mesure
 npm run visuel          # captures de contrôle
 npm run visuel:branche  # captures de la page ramification
 npm run visuel:thalle   # captures de la page colonie
+npm run visuel:monde    # captures du pont entre les deux échelles
 ```
 
 Trois optiques : contraste de phase, fond noir, microscopie électronique.
@@ -25,6 +26,12 @@ la jonction, la mère ou la fille.
 toutes les 110 µm d'hyphe construite, s'auto-évite, s'anastomose et consomme son
 substrat. La vitesse des pointes n'y est pas choisie — c'est celle que le banc
 mesure sur la simulation apicale, et un verdict refuse l'écart.
+
+`monde.html` est le **pont entre les deux échelles** : on regarde la colonie,
+on clique sur une pointe, on descend sur son apex, on remonte. L'axe n'est
+jamais interrompu — zoomer attache un intérieur à un axe qui existe déjà — et
+le fondu dure exactement le temps que met le réservoir apical à se remplir,
+pendant lequel la colonie entière vit.
 
 `ramification.html` est la proposition qui a précédé : trois concepts
 d'animation, avec les silhouettes calculées hors ligne. Le mécanisme retenu

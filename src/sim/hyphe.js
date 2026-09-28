@@ -105,6 +105,19 @@ export class Hyphe {
          maternel avant que rien ne bombe a la surface. Il reste a le
          nourrir du pool de la mere ; pour l'instant chaque tige a le sien.
          Voir `brancherSur`, qui construit cette amorce. */
+    }
+
+    /* Un axe FOURNI. Deux appelants, et la meme raison dans les deux cas :
+       l'axe existe deja et on n'a pas le droit d'en inventer un.
+
+         - une branche recoit son amorce de `brancherSur` ;
+         - une hyphe VISITEE recoit l'axe que la simulation macro a
+           construit pendant qu'on ne la regardait pas (`depuisMacro`).
+           Zoomer n'instancie pas une nouvelle hyphe : on attache un
+           interieur a un axe qui a deja une histoire. C'est ce qui rend
+           l'illusion etanche — la chose qu'on regardait n'a jamais cesse
+           d'exister. */
+    if (opts.axe) {
       const axe = opts.axe;
       let l = 0;
       for (let i = 0; i < axe.length; i++) {
@@ -351,6 +364,75 @@ export class Hyphe {
     }
     return T;
   }
+}
+
+/**
+ * Reconstruit une hyphe MICRO a partir d'un axe MACRO.
+ *
+ * Le macro memorise un point tous les 6 um ; la micro travaille au 0,22 um.
+ * On re-echantillonne donc, par une Catmull-Rom centripete : une
+ * interpolation lineaire laisserait, a fort grossissement, un coude visible
+ * tous les 64 pixels — le tube aurait l'air facette, et on lirait la
+ * structure de donnees du macro.
+ *
+ * On ne reprend que les `long` derniers micrometres : c'est tout ce que le
+ * rendu montre (Scene.S_VU), et 200 um font deja 900 points fins.
+ *
+ * `opts.bout` est la position COURANTE de la pointe. Elle n'est pas dans
+ * l'axe : le macro n'y memorise un point que tous les 6 um, et la pointe est
+ * quelque part entre les deux. Sans elle, l'apex micro naissait jusqu'a 6 um
+ * DERRIERE la vraie pointe — mesure 1,4 um — et le premier troncon rendu au
+ * macro faisait un saut de 1,4 um dans l'axe. L'axe s'interrompait, ce qui
+ * est exactement ce qu'on ne veut pas.
+ *
+ * @param {number[]} xs, ys  l'axe macro, du plus ancien au plus recent
+ * @param {number}   n       nombre de points utiles dans xs/ys
+ */
+export function depuisMacro(xs, ys, n, th, long = 210, opts = {}) {
+  /* On remonte l'axe jusqu'a `long` um, plus deux points de marge : une
+     Catmull-Rom a besoin d'un voisin de chaque cote. */
+  let i0 = n - 1, d = 0;
+  while (i0 > 0 && d < long) {
+    d += Math.hypot(xs[i0] - xs[i0 - 1], ys[i0] - ys[i0 - 1]);
+    i0--;
+  }
+  const P = [];
+  for (let i = Math.max(0, i0 - 1); i < n; i++) P.push([xs[i], ys[i]]);
+  if (opts.bout) {
+    const b = opts.bout, q = P[P.length - 1];
+    /* On ne l'ajoute que si elle est franchement au-dela du dernier point
+       memorise : a quelques nanometres, elle ferait un segment degenere. */
+    if (!q || Math.hypot(b[0] - q[0], b[1] - q[1]) > 0.05) P.push([b[0], b[1]]);
+  }
+  if (P.length < 2) {
+    /* Une pointe qui vient de germer n'a pas encore d'axe : on lui en donne
+       un droit, comme a l'amorce d'une hyphe ordinaire. */
+    const bx = opts.bout ? opts.bout[0] : xs[n - 1];
+    const by = opts.bout ? opts.bout[1] : ys[n - 1];
+    const axe = [];
+    for (let k = 40; k >= 0; k--) {
+      axe.push([bx - Math.cos(th) * k * 2, by - Math.sin(th) * k * 2]);
+    }
+    return new Hyphe({ ...opts, axe, th });
+  }
+  /* Duplique les extremites pour que la spline passe par les vrais bouts. */
+  P.unshift(P[0]); P.push(P[P.length - 1]);
+
+  const axe = [];
+  for (let i = 1; i + 2 < P.length; i++) {
+    const [x0, y0] = P[i - 1], [x1, y1] = P[i], [x2, y2] = P[i + 1], [x3, y3] = P[i + 2];
+    const seg = Math.hypot(x2 - x1, y2 - y1);
+    const m = Math.max(1, Math.round(seg / PAS));
+    for (let k = 0; k < m; k++) {
+      const t = k / m, t2 = t * t, t3 = t2 * t;
+      axe.push([
+        0.5 * ((2 * x1) + (-x0 + x2) * t + (2 * x0 - 5 * x1 + 4 * x2 - x3) * t2 + (-x0 + 3 * x1 - 3 * x2 + x3) * t3),
+        0.5 * ((2 * y1) + (-y0 + y2) * t + (2 * y0 - 5 * y1 + 4 * y2 - y3) * t2 + (-y0 + 3 * y1 - 3 * y2 + y3) * t3),
+      ]);
+    }
+  }
+  axe.push([P[P.length - 2][0], P[P.length - 2][1]]);
+  return new Hyphe({ ...opts, axe, th });
 }
 
 /**

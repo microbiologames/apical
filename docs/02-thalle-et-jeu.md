@@ -20,8 +20,13 @@ Décisions prises par l'auteur, à conserver.
 > germe, la colonie applique la règle de Trinci, s'auto-évite, s'anastomose et
 > consomme son substrat. La vitesse des pointes est celle mesurée sur la micro,
 > et le **verdict 13** refuse l'écart — c'est la contrainte n° 2 ci-dessous,
-> tenue. Ce qui reste : **le pont entre les deux échelles** (contraintes 1, 3
-> et 4), c'est-à-dire cliquer sur une hyphe pour redescendre sur son apex.
+> tenue.
+>
+> Le **pont** l'est aussi : `src/monde.js`, `monde.html`. On clique sur une
+> pointe, on descend sur son apex, on remonte. Contraintes 1, 3 et 4 tenues et
+> mesurées (**verdict 15**). Ce qui reste, de ce côté, c'est de pouvoir
+> descendre ailleurs que sur une pointe, et tout le jeu — à commencer par le
+> verdict « ne rien faire est puni ».
 
 Le reste n'est pas encore codé ; c'est l'architecture à respecter quand ça le
 sera.

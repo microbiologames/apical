@@ -26,6 +26,25 @@ import { Scene } from './render/scene.js';
 const KOM = 0.016;
 const TAU_OM = 3.5;         // s : constante d'inertie du cap
 
+/**
+ * UN pas de simulation micro : le contenu vit, et l'hyphe consomme le bilan
+ * des fusions. Rien d'autre ne fait avancer un apex.
+ *
+ * Exportee parce que la page des deux echelles en a besoin aussi : si elle
+ * reecrivait cette loi de son cote, les deux finiraient par diverger et
+ * l'hyphe visitee ne pousserait plus comme celle qu'on regarde seule.
+ *
+ * @returns {number} um avances a ce pas
+ */
+export function pasMicro(hy, co, dt, phiCible, opts) {
+  co.maj(dt, phiCible, opts);
+  const da = co.avance;
+  const omCible = (co.couple / Math.max(dt, 1e-4)) * KOM;
+  hy.om += (omCible - hy.om) * clamp(dt / TAU_OM, 0, 1);
+  hy.avancer(da, dt);
+  return da;
+}
+
 export class App {
   constructor(canvas, host) {
     this.canvas = canvas;
@@ -148,14 +167,8 @@ export class App {
       tg.phiCible += (cible - tg.phiCible) * clamp(dt * 0.9, 0, 1);
       if (i === 0) this.phiCible = tg.phiCible;
 
-      /* 2. Le contenu vit, et fusionne. */
-      co.maj(dt, tg.phiCible, this.opts);
-
-      /* 3. L'hyphe ne fait que consommer le bilan des fusions. */
-      const da = co.avance;
-      const omCible = (co.couple / Math.max(dt, 1e-4)) * KOM;
-      hy.om += (omCible - hy.om) * clamp(dt / TAU_OM, 0, 1);
-      hy.avancer(da, dt);
+      /* 2. Le contenu vit, il fusionne, et l'hyphe consomme le bilan. */
+      pasMicro(hy, co, dt, tg.phiCible, this.opts);
 
       /* 4. Une branche allonge son domaine simule a mesure qu'elle pousse :
             elle nait avec un demi-micrometre de tube et finira par en avoir

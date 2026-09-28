@@ -13,10 +13,11 @@ les captures de contrôle.
 | Commande | Ce qu'elle fait |
 |---|---|
 | `npm run serve` | sert le dépôt tel quel |
-| `npm run banc` | 14 verdicts de mesure, sans rendu, en node |
+| `npm run banc` | 15 verdicts de mesure, sans rendu, en node |
 | `npm run visuel` | captures dans `/tmp/apical-shots` (Playwright) |
 | `npm run visuel:branche` | captures de la page ramification |
 | `npm run visuel:thalle` | captures de la page colonie |
+| `npm run visuel:monde` | captures du pont entre les deux échelles |
 
 ---
 
@@ -247,7 +248,7 @@ ramification n'est pas encore autonome — c'est `App.brancher` qui la déclench
 `ramification.html` reste la proposition qui a précédé ; la bifurcation apicale
 y reste en réserve comme événement rare.
 
-### 8. Deux échelles, un seul axe — *le macro est là, le pont non*
+### 8. Deux échelles, un seul axe
 
 `src/sim/thalle.js`, `thalle.html`. Le macro simule tout le mycélium : par
 pointe un axe grossier, un cap avec inertie, une vitesse, une règle de
@@ -276,10 +277,33 @@ Trois mécanismes font une colonie plutôt qu'une éponge :
   mm² — plus de 100 % de couverture. C'est aussi, mot pour mot, le plateau de
   jeu.
 
-**Le pont entre les deux échelles reste à faire.** Zoomer, ce sera attacher un
-`Contenu` et une `Membrane` à un axe macro qui existe déjà — pas instancier une
-nouvelle hyphe. Et le fondu de transition doit durer **exactement le temps du
-préchauffage** : ce n'est pas un cache, c'est une horloge.
+**Le pont.** `src/monde.js`, `monde.html`. On clique sur une pointe, on
+descend sur son apex, on remonte.
+
+**L'axe ne s'interrompt jamais.** Descendre n'instancie pas une nouvelle
+hyphe : `depuisMacro` ré-échantillonne à 0,22 µm, par une Catmull-Rom, l'axe
+que le macro a construit pendant qu'on ne regardait pas — une interpolation
+linéaire laisserait un coude visible tous les soixante pixels et on lirait la
+structure de données. Tant qu'on est en bas, la micro pilote la pointe et
+`Thalle.inscrire` n'enregistre que son matériau ; en remontant, il n'y a rien à
+raccorder. **Mesuré (verdict 15) : apex exact, écart nul à l'axe macro, et le
+pas de 6 µm tenu à 60 nm près à la reprise.** La position COURANTE de la pointe
+doit être passée en dernier point de contrôle : elle n'est pas dans l'axe, et
+sans elle l'apex naissait jusqu'à 6 µm derrière — donc l'axe sautait.
+
+**Le fondu est une horloge, et c'est le préchauffage qui la donne.** `tr`
+n'est pas un compteur à part : c'est la fraction du réservoir apical déjà
+remplie. Les deux ne peuvent donc pas se désynchroniser, et il n'y a pas de
+dernier à-coup où l'un attendrait l'autre. Pendant ces vingt secondes
+simulées, la colonie **entière** vit — rien n'est sauté, rien n'est masqué. Le
+basculement d'image se fait au **sommet du flou**, là où il n'y a rien à lire,
+et le grossissement suit une rampe **logarithmique** : d'un bout à l'autre il y
+a un facteur 270, et une rampe linéaire passerait 90 % du fondu à l'échelle de
+la colonie.
+
+**Le temps change de régime avec l'échelle** : ×1 en bas, sinon la colonie
+traverserait la boîte avant la fin d'une exocytose. Mais elle ne s'arrête
+pas — il n'y a qu'un organisme et qu'une horloge.
 
 `cadre.html` est la version contemplative **figée** : la simulation seule, sans
 panneau. Le travail sur le jeu part d'ailleurs et n'y touche pas.
@@ -334,6 +358,16 @@ Et pour la colonie :
 | extension radiale de la colonie | 19,0 µm/min | un peu sous la vitesse de pointe |
 | colonie à 4 h | 590 mm, 386 pointes | 1 704 branches, 1 214 anastomoses |
 | densité au front | 9,1 mm/mm² | ~10 % de couverture |
+
+Et pour le pont :
+
+| | mesuré | référence |
+|---|---|---|
+| apex micro / pointe macro | 0 µm | 0 |
+| écart de l'axe fin à l'axe macro | 0 nm | 0 |
+| pas de 6 µm tenu à la reprise | 60 nm | 0 |
+| ré-échantillonnage | 307 points macro → 1 148 fins | — |
+| durée du fondu | 20 s simulées, ~1,3 s réelle | = le préchauffage |
 
 Un chiffre documenté sans avoir été mesuré est un chiffre qu'on croit seulement
 avoir. Ça s'est déjà payé.
@@ -451,6 +485,17 @@ partie du travail**, pas après, pendant.
 - Une grille de simulation lue telle quelle au rendu **se voit comme un
   damier** : on lit une structure de données, pas un substrat. Interpolation
   bilinéaire au rendu, la maille brute pour la simulation.
+- **La position d'une pointe macro n'est pas dans son axe.** Le macro n'y
+  mémorise un point que tous les 6 µm ; la pointe est quelque part entre les
+  deux. En reconstruisant l'hyphe micro sur les seuls points mémorisés, son
+  apex naissait jusqu'à 6 µm **derrière** la vraie pointe — 1,4 µm mesurés — et
+  le premier tronçon rendu au macro faisait un saut du même ordre. L'axe
+  s'interrompait, ce qui est exactement ce que le pont doit rendre impossible.
+- **Deux horloges parallèles finissent par se désynchroniser.** Le fondu avait
+  son compteur d'images et le préchauffage son compteur de pas ; à la fin l'un
+  attendait l'autre et lâchait tout le reste en une image. `tr` est maintenant
+  *dérivé* du préchauffage — `1 − pasRestants/pasTotal` — et le problème ne
+  peut plus exister.
 - **Un `sed` qui ne trouve pas son motif ne dit rien.** Deux remplacements
   successifs de `Q_FUSION` ont échoué en silence et j'ai documenté une valeur
   que le fichier n'avait pas. Seul le banc l'a vu (22,8 µm/min au lieu de 20).

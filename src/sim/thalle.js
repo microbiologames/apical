@@ -217,6 +217,11 @@ export class Thalle {
     for (const p of this.pointes) {
       if (!p.vive) continue;
       vives.push(p);
+      /* Une pointe VISITEE n'est plus integree ici : c'est la simulation
+         micro qui la pilote, et elle rend son materiau par `inscrire`. Elle
+         continue de compter pour la regle de ramification — c'est la meme
+         colonie. */
+      if (p.micro) continue;
 
       /* On lit le substrat une MAILLE DEVANT : la cellule ou la pointe va
          entrer, et ou elle n'a rien pose. Lu sous elle, elle se freinait sur
@@ -321,6 +326,27 @@ export class Thalle {
     for (const p of vives) quota += p.l - (p.lBranche ?? 0);
     if (vives.length && vives.length < this.maxPointes && quota / vives.length > UCH) {
       this.ramifier(vives);
+    }
+  }
+
+  /**
+   * Enregistre le materiau construit par une pointe que la MICRO pilote.
+   *
+   * L'axe ne s'interrompt jamais : la meme pointe, le meme axe, decrit
+   * finement tant qu'on la regarde et grossierement sinon. Le macro ne
+   * garde que son point tous les 6 um — quand on remontera, il n'y aura
+   * rien a raccorder.
+   */
+  inscrire(p, x, y, th, da) {
+    p.x = x; p.y = y; p.th = th;
+    p.l += da; this.total += da; p.depuisGeo += da;
+    if (p.depuisGeo >= PAS_GEO) {
+      p.depuisGeo = 0;
+      const ax = p.axe;
+      ax.xs.push(x); ax.ys.push(y); ax.n++;
+      if (x < ax.x0) ax.x0 = x; if (x > ax.x1) ax.x1 = x;
+      if (y < ax.y0) ax.y0 = y; if (y > ax.y1) ax.y1 = y;
+      this.poser(x, y, ax.idx, ax.n - 1, PAS_GEO);
     }
   }
 
