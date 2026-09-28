@@ -1,5 +1,11 @@
 # Le thalle, les deux échelles, et ce qui deviendra un jeu
 
+> **Point de repère.** La version contemplative, telle qu'elle a été validée,
+> est le commit `5c99d42` sur `claude/serene-thompson-2jhjhj`, et la page
+> `cadre.html` qui en est tirée. Le travail sur le jeu part de là et n'y
+> revient pas. *(Le tag `contemplation-v1` existe en local ; l'intégration
+> GitHub de cette session n'accepte que les pushs de branches, pas de tags.)*
+
 Décisions prises par l'auteur, à conserver. Rien de ce qui suit n'est encore
 codé ; c'est l'architecture à respecter quand ça le sera.
 
