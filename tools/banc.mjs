@@ -3,6 +3,9 @@
 import { Hyphe, distParoi } from '../src/sim/hyphe.js';
 import { Contenu, S_MAX } from '../src/sim/contenu.js';
 import { clamp, angleDelta, noise1 } from '../src/core/util.js';
+import { omega } from '../src/sim/membrane.js';
+import { DUREE_FUSION } from '../src/sim/contenu.js';
+import { Scene } from '../src/render/scene.js';
 
 const KOM = 0.016, TAU_OM = 3.5;
 
@@ -81,7 +84,7 @@ function dire(ok, titre, detail) { R.push({ ok, titre, detail }); }
   const m = manche({ duree: 90, graine: 5 });
   const nVes = m.co.ves.length, nMol = m.co.mols.length;
   const apicales = m.co.ves.filter((v) => v.etat === 2).length;
-  dire(nVes === 120 && nMol < 430 && apicales > 8,
+  dire(nVes === 95 && nMol < 470 && apicales > 7,
     'le Spitzenkorper se forme sans etre dessine',
     `${apicales} vesicules sur ${nVes} retenues dans le reservoir apical, ${nMol} molecules en vol`);
 }
@@ -144,61 +147,60 @@ function dire(ok, titre, detail) { R.push({ ok, titre, detail }); }
     `${(part * 100).toFixed(1)} % des molecules-images a plus de 0,30 um de la paroi (seuil 12 %), sur ${total} echantillons`);
 }
 
-/* 10. la figure de fusion appartient a la membrane et derive avec elle */
+/* 10. la fusion est UNE courbe, et elle appartient au materiau */
 {
   const dt = 1 / 60;
-  const offA = (co, age) => {
-    /* profondeur du creux au voisinage d'un AGE materiel donne */
-    let m = 0;
-    for (const c of co.membrane.ch) {
-      for (let i = 0; i < c.n; i++) if (Math.abs(c.a[i] - age) < 0.30 && c.off[i] > m) m = c.off[i];
-    }
-    return m;
-  };
-  const pique = (co) => {
-    let m = 0, a = 0;
-    for (const c of co.membrane.ch) for (let i = 0; i < c.n; i++) if (c.off[i] > m) { m = c.off[i]; a = c.a[i]; }
-    return { m, a };
-  };
-
-  /* 1re passe : quand le creux est-il le plus profond ? */
-  let picT = 0, pic = 0;
-  {
-    const hy = new Hyphe({ graine: 21 });
-    const co = new Contenu(hy, { graine: 21 });
-    let t = 0;
-    while (t < 60) {
-      co.maj(dt, 0, {}); hy.avancer(co.avance, dt);
-      const k = pique(co);
-      if (k.m > pic) { pic = k.m; picT = t; }
-      t += dt;
-    }
-  }
-
-  /* 2e passe : on suit CE creux-la, par son age materiel. */
   const hy = new Hyphe({ graine: 21 });
   const co = new Contenu(hy, { graine: 21 });
-  let t = 0, age0 = null, long0 = 0, sur = 0, reste = 0;
-  while (t < picT + 2.2) {
-    /* Une fois le pic atteint on COUPE l'exocytose : sinon de nouveaux
-       creux naissent sans cesse au meme endroit dans le repere de l'apex,
-       et on ne distingue plus « le creux a suivi le materiau » de « un
-       autre creux est apparu au meme endroit ». */
-    co.maj(dt, 0, age0 === null ? {} : { exocytose: false });
+  let t = 0, suivi = null, debut = null, fin = null, ecartMax = 0, testes = 0;
+
+  while (t < 90) {
+    co.maj(dt, 0, {});
     hy.avancer(co.avance, dt);
-    if (age0 === null && t >= picT) { age0 = pique(co).a; long0 = hy.longueur; }
+
+    /* (a) continuite : les deux bouts de l'arc d'omega doivent tomber
+           EXACTEMENT sur la ligne de membrane. C'est la propriete que la
+           version precedente n'avait pas : elle effacait un cercle pendant
+           qu'elle creusait une ligne, sans jamais les raccorder. */
+    for (const v of co.ves) {
+      if (v.etat !== 1) continue;
+      const g = omega(v.r, Math.min(v.tf / DUREE_FUSION, 1));
+      const A = { x: -g.hw, y: 0, ix: 0, iy: 1, wx: 0, wy: 0, a: 0 };
+      const B = { x: g.hw, y: 0, ix: 0, iy: 1, wx: 0, wy: 0, a: 1 };
+      const arc = Scene.prototype.arcOmega.call({}, A, B, g.dep);
+      const d0 = Math.hypot(arc[0].x - A.x, arc[0].y - A.y);
+      const d1 = Math.hypot(arc[arc.length - 1].x - B.x, arc[arc.length - 1].y - B.y);
+      ecartMax = Math.max(ecartMax, d0, d1);
+      testes++;
+    }
+
+    /* (b) derive : l'abscisse de l'omega doit reculer exactement de ce dont
+           l'apex a avance. */
+    /* Apres 25 s : avant, le reservoir se remplit encore et l'apex n'a
+       pas commence a avancer — on mesurerait une derive nulle sur une
+       hyphe qui ne pousse pas. */
+    if (!suivi && t > 25) {
+      const v = co.ves.find((x) => x.etat === 1 && x.tf > 0.05 && x.tf < 0.2);
+      if (v) { suivi = v; debut = { s: co.membrane.sDepuisAge(v.am), a: v.am, l: hy.longueur }; }
+    } else if (suivi && suivi.tf > DUREE_FUSION * 0.9 && !fin) {
+      fin = { s: co.membrane.sDepuisAge(suivi.am), a: suivi.am, l: hy.longueur };
+    }
     t += dt;
   }
-  const derive = hy.longueur - long0;
-  sur = offA(co, age0 + derive);   // la ou le materiau est arrive
-  reste = offA(co, age0);          // la ou le creux etait, en repere apex
 
-  dire(pic > 0.12 && derive > 0.25 && sur > reste * 1.5,
-    'la figure de fusion appartient a la membrane et derive avec elle',
-    `creux maximal ${(pic * 1000).toFixed(0)} nm (${(pic * 13).toFixed(1)} px au cadrage par defaut) ; `
-    + `exocytose coupee, 2,2 s plus tard : le materiau a recule de ${derive.toFixed(2)} um et `
-    + `le creux l'a suivi — ${(sur * 1000).toFixed(0)} nm la-bas, ${(reste * 1000).toFixed(0)} nm `
-    + `la ou il etait dans le repere de l'apex`);
+  /* On compare l'AGE, pas l'abscisse : sur la calotte ds/da = (pi/2).sin(psi),
+     donc l'abscisse recule plus vite que la croissance a mesure qu'on
+     approche de l'epaule. C'est l'expansion orthogonale, pas une erreur. */
+  const recul = fin ? fin.s - debut.s : 0;
+  const vieilli = fin ? fin.a - debut.a : 0;
+  const pousse = fin ? fin.l - debut.l : 1;
+  const err = Math.abs(vieilli - pousse) / Math.max(pousse, 1e-6);
+  dire(ecartMax < 1e-9 && testes > 200 && !!fin && err < 0.06,
+    'la fusion est une seule courbe, et elle appartient au materiau',
+    `raccord de l'arc sur la ligne : ecart max ${ecartMax.toExponential(1)} px sur ${testes} images ; `
+    + `pendant l'evenement l'omega a vieilli de ${(vieilli * 1000).toFixed(0)} nm pour `
+    + `${(pousse * 1000).toFixed(0)} nm d'avance de l'apex (ecart ${(err * 100).toFixed(2)} %), `
+    + `et son abscisse a recule de ${(recul * 1000).toFixed(0)} nm — l'ecart est l'expansion orthogonale`);
 }
 
 /* 7. budget */

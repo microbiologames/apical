@@ -93,11 +93,22 @@ gauche, par-dessus l'apex, jusqu'au flanc droit, dont chaque nœud porte un âge
 pôle. On ajoute l'avance à tous les âges et la ligne entière glisse vers
 l'arrière. **On ne déplace rien : c'est le repère qui dérive.**
 
-**Une vésicule qui fusionne n'est plus un objet qu'on dessine.** Sa membrane
-s'ajoute à la ligne ; le surplus de longueur fait mollir la ficelle, elle se
-détend vers l'intérieur, et le creux qui en résulte *est* la figure d'oméga.
-L'espace ainsi ouvert entre paroi et membrane *est* son lumen — il se remplit de
-périplasme tout seul, puisque c'est la même couleur (règle 5).
+**Une vésicule qui fusionne n'est plus un objet qu'on dessine.** Les nœuds de
+la zone de contact sont **retirés du chemin** et remplacés par l'arc de son
+propre contour (`Scene.arcOmega`, profil dans `Membrane.omega`). Le chemin reste
+**une seule courbe** — c'est la définition même de la fusion. L'espace ouvert
+entre paroi et membrane *est* son lumen : il se remplit de périplasme tout seul,
+puisque c'est la même couleur (règle 5).
+
+L'arc passe par trois points : les deux coins de la bouche et le fond de la
+poche. Tant que `dep > hw` il est **ré-entrant**, et c'est ce qui donne le col.
+La bouche va de 0,34 à 1,89 R, la poche de 2,05 à 0,43 R. La cible imposée à la
+corde suit *exactement* le même profil, pour qu'au retrait de l'arc, en fin
+d'événement, la chaîne porte déjà la même forme.
+
+**Mesuré : le raccord de l'arc sur la ligne est exact à 1,8·10⁻¹⁶ px près**,
+vérifié sur 7 242 images, et pendant l'événement l'oméga vieillit de 48 nm pour
+46 nm d'avance de l'apex (3 % d'écart, qui est l'expansion orthogonale).
 
 Le modèle est une corde 1D, `acc = c²·∂²off/∂x² − k·(off − cible) − b·vitesse`,
 avec `c = 1,07 µm/s` : la perturbation **court** le long de la ligne au lieu
@@ -113,9 +124,10 @@ Deux régimes, et c'est le cœur du modèle :
   seule la tension l'étale, et l'expansion de la calotte le consomme
   (`ABSORB = 0,15 /s`). Un rappel vers zéro le ferait disparaître sur place.
 
-**Mesuré :** creux maximal 493 nm, soit 6,4 px au cadrage par défaut ;
-exocytose coupée, 2,2 s plus tard le matériau a reculé de 1,25 µm et le creux
-l'a suivi — 160 nm là-bas contre 87 nm là où il était dans le repère de l'apex.
+`ABSORB = 0,75 /s`. À 0,15 le surplus s'accumulait : chaque fusion en injecte et
+rien ne le retirait assez vite, si bien qu'au bout d'une minute **la ligne
+entière flottait à 0,6 µm de la paroi** au lieu de 0,02. L'équilibre est
+maintenant proche de zéro et le creux reste visible ~1,5 s après l'événement.
 
 ### 5. Une vésicule n'a pas de couleur à elle
 
@@ -125,9 +137,15 @@ Il n'y a volontairement **pas d'entrée `vesicule`** dans la palette : deux
 entrées séparées finiraient par diverger, et c'est précisément cette identité
 qui rend la fusion lisible sans qu'on ait rien à expliquer.
 
-`Scene.fusions` ne dessine donc plus que deux choses : la vésicule **avant**
-l'ouverture du pore, et le matériau déversé. La figure d'oméga, elle, n'est plus
-dessinée du tout.
+`Scene.fusions` ne dessine donc plus **rien** de la vésicule : dès le contact,
+elle est un arc de la polyligne. Il n'y reste que le matériau déversé, qui sort
+**pendant** que la poche s'ouvre et non à la fin — émis d'un coup au terme de
+l'événement, les grains surgissaient de nulle part une fois la poche refermée.
+
+`livraison.html` est une page dédiée à cette animation : même simulation, mais
+la caméra reste collée à une fusion et un curseur permet de la rembobiner. Une
+page de mise au point qui aurait sa propre version de l'animation ne servirait
+à rien.
 
 ### 6. La paroi neuve migre, et ça doit se voir
 
@@ -162,18 +180,18 @@ solution »).
 
 | | mesuré | référence |
 |---|---|---|
-| croissance | 19,1 µm/min | 20 µm/min (*Neurospora*, Lew 2011) |
-| exocytoses | 1,89 /s, une toutes les 0,53 s | — |
-| extension par fusion | 157 nm | — |
+| croissance | 19,2 µm/min | 20 µm/min (*Neurospora*, Lew 2011) |
+| exocytoses | 1,64 /s, une toutes les 0,61 s | — |
+| extension par fusion | 194 nm | — |
 | durée d'une fusion | 0,85 s | — |
-| creux de membrane, maximum | 493 nm (6,4 px) | — |
-| dérive du creux en 2,2 s | 1,25 µm, il suit le matériau | — |
-| rayon de virage, consigne pleine | 82 µm | unité de croissance hyphale ~110 µm |
-| inertie du cap (63 %) | 7,2 s | — |
-| migration de la paroi neuve | pleine largeur en 17 s, 70 µm en 200 s | — |
-| matériau déversé hors périplasme | 7,1 % | — |
+| raccord de l'arc sur la ligne | 1,8·10⁻¹⁶ px sur 7 242 images | 0 |
+| dérive de l'oméga pendant l'événement | 48 nm pour 46 nm d'avance | égalité |
+| rayon de virage, consigne pleine | 58 µm | unité de croissance hyphale ~110 µm |
+| inertie du cap (63 %) | 8,5 s | — |
+| migration de la paroi neuve | pleine largeur en 20 s, 70 µm en 200 s | — |
+| matériau déversé hors périplasme | 0,0 % | — |
 | étanchéité | 0 vésicule hors du tube sur 4 × 30 s | — |
-| budget logique | 0,18 ms/image | 16,7 ms disponibles |
+| budget logique | 0,19 ms/image | 16,7 ms disponibles |
 
 Un chiffre documenté sans avoir été mesuré est un chiffre qu'on croit seulement
 avoir. Ça s'est déjà payé.
@@ -199,8 +217,11 @@ partie du travail**, pas après, pendant.
 - **Une vésicule remplie de la couleur du cytoplasme est invisible.** Le liseré
   clair en bordure donne l'effet inverse recherché : un anneau blanc à centre
   sombre, lecture « bulle ». Disque plein + cœur plus clair.
-- La **paroi ne grossit jamais avec le zoom** : 0,1 à 0,3 µm dans la réalité,
-  donc une épaisseur écran bornée à [1,0 ; 2,6] px.
+- La **paroi est à l'échelle** (0,19 µm), bornée à [1,0 ; 9] px. Le plafond
+  n'empêche que la saucisse floue du prototype précédent ; il n'est atteint
+  qu'au-delà de ×3,5, là où on est de toute façon à l'échelle de la MET. Bornée
+  à 2,6 px comme avant, elle devenait *relativement* plus fine à chaque cran de
+  zoom, ce qui est le défaut symétrique.
 - `Lc = 0,85 R` donne un rayon de courbure au sommet de `R²/Lc` = 6,5 µm pour
   un tube de 5,5 µm : le dôme est **plus plat qu'une demi-sphère** et le tube a
   l'air coupé net. `Lc = 1,55 R` est franchement phallique. On retient 1,00 R.
@@ -236,6 +257,10 @@ partie du travail**, pas après, pendant.
   l'apex**, et on ne distingue plus « le creux a suivi le matériau » de « un
   autre creux est apparu au même endroit ». Le verdict coupe donc l'exocytose
   avant de suivre.
+- Le contour est un polygone échantillonné ; la membrane, elle, l'est tous les
+  0,09 µm. Avec un pas de contour à 1,2 µm le polygone **lissait l'ondulation de
+  paroi** que la membrane suivait : au fort grossissement les deux lignes
+  s'écartaient jusqu'à 0,6 µm sans raison. Pas ramené à 0,45 µm.
 - **Un `sed` qui ne trouve pas son motif ne dit rien.** Deux remplacements
   successifs de `Q_FUSION` ont échoué en silence et j'ai documenté une valeur
   que le fichier n'avait pas. Seul le banc l'a vu (22,8 µm/min au lieu de 20).

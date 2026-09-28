@@ -185,7 +185,11 @@ export class Hyphe {
     while (s < sMax) {
       /* 1,2 um au maximum : a 2,4 um les facettes de l'ondulation se
          voyaient sur le flanc du tube. */
-      s += lerp(0.5, 1.2, smoothstep(Lc, Lc + 22, s));
+      /* 0,45 um au maximum. A 1,2 le polygone lissait l'ondulation de
+         paroi que la membrane, elle, echantillonne tous les 0,09 um : au
+         fort grossissement les deux lignes s'ecartaient jusqu'a 0,6 um
+         l'une de l'autre sans raison. */
+      s += lerp(0.35, 0.45, smoothstep(Lc, Lc + 22, s));
       ss.push(Math.min(s, sMax));
     }
 

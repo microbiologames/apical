@@ -84,6 +84,7 @@ export function brancher(app, PALETTES) {
      qu'une fusion soit en cours avant de declencher la capture. */
   globalThis.apical = app;
 
+  app.prechauffer(20);
   maj();
   app.demarrer();
 }

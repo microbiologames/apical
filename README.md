@@ -11,6 +11,9 @@ npm run visuel    # captures de contrôle
 
 Trois optiques : contraste de phase, fond noir, microscopie électronique.
 
+`livraison.html` est une page de mise au point dédiée à la fusion des vésicules :
+même simulation, caméra collée à l'événement, curseur de rembobinage.
+
 `artefact.html` est la version publiée sur claude.ai : même simulation, sans
 squelette HTML (la plateforme le fournit), avec le texte de présentation.
 

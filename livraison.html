@@ -1,0 +1,180 @@
+<title>Livraison à l'apex</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;450;600&display=swap">
+<style>
+:root{
+  color-scheme: light;
+  --ground:#efece4; --surface:#e3ded2; --surface-2:#d8d2c4;
+  --ink:#1d1f22; --ink-2:#5d5f64; --ink-3:#8a8b8f; --rule:#c8c1b0;
+  --brass:#8a6520; --brass-soft:#b08b3d; --stage:#0a0b0d;
+  /* schema : memes roles que dans la simulation */
+  --paroi:#b9b2a2; --peri:#e7e3d8; --memb:#4a463f; --cyto:#a9a495;
+  --serif:"Fraunces",Georgia,serif;
+  --sans:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  color-scheme: dark;
+  --ground:#0c0d10; --surface:#15171b; --surface-2:#1d2026;
+  --ink:#e9e6df; --ink-2:#a2a49f; --ink-3:#74767b; --rule:#2a2e35;
+  --brass:#cfae6c; --brass-soft:#9d854f; --stage:#08090b;
+  --paroi:#8d939c; --peri:#4e545e; --memb:#c3c9d2; --cyto:#282b31;
+}}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --ground:#0c0d10; --surface:#15171b; --surface-2:#1d2026;
+  --ink:#e9e6df; --ink-2:#a2a49f; --ink-3:#74767b; --rule:#2a2e35;
+  --brass:#cfae6c; --brass-soft:#9d854f; --stage:#08090b;
+  --paroi:#8d939c; --peri:#4e545e; --memb:#c3c9d2; --cyto:#282b31;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.page{max-width:1120px;margin:0 auto;padding-inline:16px;padding-block:28px 64px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--brass);margin:0 0 10px}
+h1{font-family:var(--serif);font-optical-sizing:auto;font-weight:600;font-size:clamp(2rem,6vw,3rem);line-height:1.05;letter-spacing:-.015em;margin:0 0 12px;text-wrap:balance}
+.lead{margin:0 0 26px;max-width:62ch;color:var(--ink-2);font-size:clamp(15px,1.9vw,17px)}
+.lead b{color:var(--ink);font-weight:600}
+.instrument{border:1px solid var(--rule);border-radius:3px;overflow:hidden;background:var(--surface)}
+#vue{position:relative;background:var(--stage);overflow:hidden;display:grid;place-items:center;height:min(60vh,620px);min-height:340px}
+canvas{image-rendering:pixelated;display:block;touch-action:none}
+#bandeau{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;gap:12px;align-items:baseline;pointer-events:none;padding:9px 13px;font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:#8f9299;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+#phase{color:#d6bc86;font-weight:500}
+#etat{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+#pupitre{background:var(--surface-2);border-top:1px solid var(--rule);padding:11px 13px;display:flex;flex-direction:column;gap:9px}
+.rangee{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+.rangee>span{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+button{font-family:var(--sans);font-size:12.5px;font-weight:450;color:var(--ink);background:transparent;border:1px solid var(--rule);border-radius:2px;padding:4px 10px;cursor:pointer}
+button:hover{background:var(--surface);border-color:var(--brass-soft)}
+button:focus-visible{outline:2px solid var(--brass);outline-offset:1px}
+button[aria-pressed="true"]{background:var(--brass);border-color:var(--brass);color:var(--ground);font-weight:600}
+.curseur{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);flex:1 1 220px}
+.curseur input[type=range]{flex:1;min-width:120px;accent-color:var(--brass)}
+.curseur output{font-size:11px;text-transform:none;letter-spacing:0;color:var(--ink);min-width:3.2em;font-variant-numeric:tabular-nums}
+#chiffres{font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+#chiffres b{color:var(--ink);font-weight:500}
+#explique{margin:10px 2px 0;font-size:13px;color:var(--ink-2);max-width:78ch;min-height:2.8em}
+.triptyque{display:grid;gap:22px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));margin:44px 0 0;padding:0}
+.panneau{position:relative;margin:0}
+.panneau svg{width:100%;height:auto;display:block;border:1px solid var(--rule);border-radius:2px;background:var(--cyto)}
+.panneau .num{position:absolute;top:8px;left:10px;font-family:var(--mono);font-size:11px;color:var(--brass);z-index:1}
+.panneau figcaption{margin-top:9px;font-size:13px;color:var(--ink-2)}
+.panneau figcaption b{color:var(--ink);font-weight:600}
+.colonnes{margin-top:44px;display:grid;gap:34px 46px;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));align-items:start}
+h2{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--brass);margin:0 0 10px;padding-bottom:7px;border-bottom:1px solid var(--rule)}
+.colonnes p{margin:0 0 12px;max-width:62ch}
+.colonnes p:last-child{margin-bottom:0}
+em{font-style:italic;color:var(--ink-2)}
+.source{margin-top:40px;padding-top:16px;border-top:1px solid var(--rule);font-size:12.5px;color:var(--ink-3);max-width:76ch}
+.source a{color:var(--brass);text-underline-offset:2px}
+@media (max-width:620px){#vue{height:56vh;min-height:320px}#bandeau>span:first-child{font-size:9.5px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="page">
+  <p class="eyebrow">Croissance apicale — mise au point</p>
+  <h1>Livraison à l'apex</h1>
+  <p class="lead">Une vésicule atteint la membrane plasmique et y déverse son contenu. C'est le seul
+  mécanisme qui fait avancer une hyphe, et il se joue en <b>0,85 seconde</b> sur cinq micromètres.
+  Cette page ne montre que ça : la caméra reste collée à la fusion pendant qu'elle se joue, et le
+  curseur permet de la rembobiner image par image.</p>
+
+  <div class="instrument">
+    <div id="vue">
+      <canvas id="toile"></canvas>
+      <div id="bandeau"><span>phase — <i id="phase" style="font-style:normal"></i></span><span id="etat"></span></div>
+    </div>
+    <div id="pupitre">
+      <div class="rangee">
+        <button id="bPause" aria-pressed="false">Pause</button>
+        <span>ralenti</span>
+        <button data-vit="1" aria-pressed="false">×1</button>
+        <button data-vit="0.35" aria-pressed="true">×0,35</button>
+        <button data-vit="0.12" aria-pressed="false">×0,12</button>
+        <button id="bAuto" aria-pressed="true">suivre</button>
+        <span>optique</span>
+        <button data-pal="phase" aria-pressed="true">Phase</button>
+        <button data-pal="noir" aria-pressed="false">Fond noir</button>
+        <button data-pal="met" aria-pressed="false">MET</button>
+      </div>
+      <div class="rangee">
+        <label class="curseur" for="cScrub">avancement<input id="cScrub" type="range" min="0" max="100" step="1" value="0"></label>
+        <label class="curseur" for="cZoom">zoom<input id="cZoom" type="range" min="1.4" max="14" step="0.2" value="6"><output id="oZoom"></output></label>
+      </div>
+      <div id="chiffres"></div>
+      <p id="explique"></p>
+    </div>
+  </div>
+
+<figure class="triptyque">
+<div class="panneau"><span class="num">1</span><svg viewBox="0 0 150 110" role="img" aria-label="Vesicule libre dans le cytoplasme, contre la membrane">
+  <rect x="0" y="42" width="150" height="68" fill="var(--cyto)"/>
+  <rect x="0" y="16" width="150" height="12" fill="var(--paroi)"/>
+  <rect x="0" y="28" width="150" height="14" fill="var(--peri)"/>
+  <circle cx="75" cy="62" r="18" fill="var(--peri)"/><circle cx="75" cy="62" r="18" fill="none" stroke="var(--memb)" stroke-width="2.2"/>
+  <path d="M 4 42 L 146 42" fill="none" stroke="var(--memb)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+</svg><figcaption><b>Contact</b> — la vésicule est un compartiment à part, tangente à la membrane. Deux courbes fermées.</figcaption></div>
+<div class="panneau"><span class="num">2</span><svg viewBox="0 0 150 110" role="img" aria-label="Le pore vient de s ouvrir : la poche pend a un col etroit">
+  <rect x="0" y="42" width="150" height="68" fill="var(--cyto)"/>
+  <rect x="0" y="16" width="150" height="12" fill="var(--paroi)"/>
+  <rect x="0" y="28" width="150" height="14" fill="var(--peri)"/>
+  <path d="M 67.4 42.0 L 64.1 43.9 L 61.2 46.5 L 58.9 49.7 L 57.4 53.2 L 56.6 57.0 L 56.6 60.8 L 57.4 64.6 L 59.0 68.1 L 61.3 71.2 L 64.1 73.8 L 67.5 75.8 L 71.2 76.9 L 75.0 77.3 L 78.8 76.9 L 82.5 75.8 L 85.9 73.8 L 88.7 71.2 L 91.0 68.1 L 92.6 64.6 L 93.4 60.8 L 93.4 57.0 L 92.6 53.2 L 91.1 49.7 L 88.8 46.5 L 85.9 43.9 L 82.6 42.0 L 82.6 28 L 67.4 28 Z" fill="var(--peri)"/>
+  <path d="M 4 42 L 67.4 42 L 64.1 43.9 L 61.2 46.5 L 58.9 49.7 L 57.4 53.2 L 56.6 57.0 L 56.6 60.8 L 57.4 64.6 L 59.0 68.1 L 61.3 71.2 L 64.1 73.8 L 67.5 75.8 L 71.2 76.9 L 75.0 77.3 L 78.8 76.9 L 82.5 75.8 L 85.9 73.8 L 88.7 71.2 L 91.0 68.1 L 92.6 64.6 L 93.4 60.8 L 93.4 57.0 L 92.6 53.2 L 91.1 49.7 L 88.8 46.5 L 85.9 43.9 L 82.6 42.0 L 146 42" fill="none" stroke="var(--memb)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+</svg><figcaption><b>Pore</b> — les deux membranes n’en font plus qu’une. La poche pend à un col étroit ; son contenu est déjà celui du périplasme.</figcaption></div>
+<div class="panneau"><span class="num">3</span><svg viewBox="0 0 150 110" role="img" aria-label="La poche s est etalee dans la membrane plasmique">
+  <rect x="0" y="42" width="150" height="68" fill="var(--cyto)"/>
+  <rect x="0" y="16" width="150" height="12" fill="var(--paroi)"/>
+  <rect x="0" y="28" width="150" height="14" fill="var(--peri)"/>
+  <path d="M 42.7 42.0 L 44.9 43.4 L 47.2 44.6 L 49.6 45.8 L 52.0 46.9 L 54.4 47.8 L 56.9 48.7 L 59.4 49.4 L 62.0 50.1 L 64.5 50.6 L 67.1 51.0 L 69.8 51.3 L 72.4 51.5 L 75.0 51.5 L 77.6 51.5 L 80.2 51.3 L 82.9 51.0 L 85.5 50.6 L 88.0 50.1 L 90.6 49.4 L 93.1 48.7 L 95.6 47.8 L 98.0 46.9 L 100.4 45.8 L 102.8 44.6 L 105.1 43.4 L 107.3 42.0 L 107.3 28 L 42.7 28 Z" fill="var(--peri)"/>
+  <path d="M 4 42 L 42.7 42 L 44.9 43.4 L 47.2 44.6 L 49.6 45.8 L 52.0 46.9 L 54.4 47.8 L 56.9 48.7 L 59.4 49.4 L 62.0 50.1 L 64.5 50.6 L 67.1 51.0 L 69.8 51.3 L 72.4 51.5 L 75.0 51.5 L 77.6 51.5 L 80.2 51.3 L 82.9 51.0 L 85.5 50.6 L 88.0 50.1 L 90.6 49.4 L 93.1 48.7 L 95.6 47.8 L 98.0 46.9 L 100.4 45.8 L 102.8 44.6 L 105.1 43.4 L 107.3 42.0 L 146 42" fill="none" stroke="var(--memb)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+</svg><figcaption><b>Oméga</b> — la membrane de la vésicule achève de s’étaler. La poche s’aplatit, puis dérive vers l’épaule avec le matériau.</figcaption></div>
+</figure>
+
+  <div class="colonnes">
+    <section>
+      <h2>Ce qui est modélisé</h2>
+      <p>La membrane plasmique est <strong>une polyligne continue</strong>, pas une bande tirée du
+      contour. Quand une vésicule touche, les nœuds de la zone de contact sont retirés du chemin et
+      remplacés par l'arc de son propre contour. <strong>Le chemin reste une seule courbe</strong> —
+      c'est la définition même de la fusion.</p>
+      <p>L'arc passe par trois points : les deux coins de la bouche et le fond de la poche. Tant que
+      la poche est plus profonde que la bouche est large, l'arc est <em>ré-entrant</em>, et c'est ce
+      qui donne le col. La bouche passe de 0,34 à 1,89 fois le rayon de la vésicule, la poche de
+      2,05 à 0,43 — le col s'ouvre, la poche s'étale.</p>
+      <p><strong>Mesuré :</strong> le raccord de l'arc sur la ligne est exact à 1,8·10⁻¹⁶ px près,
+      vérifié sur 7 242 images. Pendant l'événement l'oméga vieillit exactement de ce dont l'apex
+      avance — 48 nm pour 46 nm, soit 3 % d'écart —, donc il dérive avec le matériau au lieu de
+      rester planté à une position écran.</p>
+    </section>
+
+    <section>
+      <h2>Ce qui était faux avant</h2>
+      <p>La vésicule était dessinée comme un cercle fermé qui s'effaçait pendant que la ligne se
+      creusait. Les deux courbes ne se raccordaient jamais : on voyait un objet disparaître et un
+      autre apparaître, pas une fusion. Les grains de matériau étaient émis <em>à la fin</em> de
+      l'événement, donc ils surgissaient de nulle part une fois la poche refermée.</p>
+      <p>Maintenant le contenu sort <strong>pendant</strong> que la poche s'ouvre, par la bouche,
+      et il est plaqué contre la face interne de la paroi où il s'incorpore.</p>
+    </section>
+
+    <section>
+      <h2>Les couleurs disent le mécanisme</h2>
+      <p>Une vésicule n'a pas de couleur à elle. Sa membrane <em>est</em> de la membrane, son lumen
+      <em>est</em> du périplasme — il le devient à la seconde où le pore s'ouvre. Il n'y a donc pas
+      d'entrée « vésicule » dans la palette : deux entrées séparées finiraient par diverger.</p>
+      <p>C'est cette identité qui rend la fusion lisible sans qu'on ait rien à expliquer. Le contenu
+      déversé est déjà de la couleur de l'espace où il arrive.</p>
+    </section>
+  </div>
+
+  <p class="source">Cohérent avec Lew RR, <em>How does a hypha grow? The biophysics of pressurized
+  growth in fungi</em>, Nature Reviews Microbiology 9:509–518 (2011). Schéma de référence fourni par
+  l'auteur du projet. Simulation complète :
+  <a href="https://claude.ai/artifact/Hu6FRqGwhPVc3ycuerkhfs">Croissance apicale</a>.
+  Code : <a href="https://github.com/microbiologames/apical/tree/claude/serene-thompson-2jhjhj" target="_blank" rel="noopener">microbiologames/apical</a>.</p>
+</div>
+
+<script type="module">
+import { App } from './src/main.js';
+import { PALETTES } from './src/data/palette.js';
+import { brancherLivraison } from './src/livraison.js';
+brancherLivraison(new App(document.getElementById('toile'), document.getElementById('vue')), PALETTES);
+</script>

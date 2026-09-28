@@ -29,6 +29,25 @@
 
 import { clamp, smoothstep } from '../core/util.js';
 
+/**
+ * Geometrie de la figure d'omega, en um, pour une vesicule de rayon r a
+ * l'avancement k de la fusion.
+ *
+ *   hw  demi-largeur de la bouche, le long de la membrane
+ *   dep profondeur, vers le cytoplasme
+ *
+ * A k = 0 la bouche est etroite (0,34 r) et la poche profonde (2,05 r) :
+ * c'est la vesicule tout juste ouverte, encore ronde, pendue a un col. A
+ * k = 1 la bouche fait 1,89 r et la poche 0,43 r : la membrane de la
+ * vesicule s'est etalee dans la membrane plasmique. L'arc qui passe par
+ * ces trois points — les deux coins de la bouche et le fond — est
+ * RE-ENTRANT tant que dep > hw, et c'est ce qui donne le col.
+ */
+export function omega(r, k) {
+  const e = smoothstep(0, 1, clamp(k, 0, 1));
+  return { hw: r * (0.34 + 1.55 * e), dep: r * (2.05 - 1.62 * e) };
+}
+
 /* 0,09 um entre deux noeuds, soit ~1,2 px au cadrage par defaut : assez
    serre pour que la ligne n'ait pas de facettes, assez lache pour que les
    deux chaines tiennent en 760 noeuds. */
@@ -50,10 +69,15 @@ const TENSION = 1.15;     // (um/s)^2 -> c = 1,07 um/s le long de la ligne
    visiblement vers l'epaule. A TENSION = 4,4 le creux perdait 75 % de sa
    profondeur en une seconde : il etait etale avant d'avoir derive. */
 const RAPPEL_EVT = 110;   // /s^2 pendant l'evenement
-const ABSORB = 0.15;      // /s : l'expansion de la calotte consomme le surplus
+/* 0,75 /s. A 0,15 le surplus s'accumulait : chaque fusion en injecte et
+   rien ne le retirait assez vite, si bien qu'au bout d'une minute la ligne
+   entiere flottait a 0,6 um de la paroi au lieu de 0,2. L'equilibre est
+   maintenant atteint pres de zero, et le creux reste visible ~1,5 s apres
+   l'evenement — le temps qu'il faut pour le voir deriver. */
+const ABSORB = 0.75;      // /s : l'expansion de la calotte consomme le surplus
 const AMORT = 4.6;        // /s : elle flue, elle ne vibre pas
 const OFF_MIN = -0.05;    // um : elle ne rentre jamais dans la paroi
-const OFF_MAX = 1.10;
+const OFF_MAX = 0.60;
 
 class Chaine {
   constructor(capacite) {
@@ -124,9 +148,14 @@ export class Membrane {
            l'exterieur ; apres, sa propre membrane s'y est ajoutee et le
            surplus de longueur creuse vers l'interieur. La transition est
            continue : un saut de signe se lisait comme un clignotement. */
-        const t = smoothstep(0.17, 0.90, e.k);
-        const amp = -0.26 * e.r * (1 - t) + 1.25 * e.r * t;
-        const win = e.r * (0.95 + 1.15 * t);
+        /* La cible suit EXACTEMENT le profil de l'omega dessine (voir
+           `Membrane.omega`), pour qu'au retrait de l'arc, en fin
+           d'evenement, la chaine porte deja la meme forme. Sans cette
+           egalite, la ligne sautait a l'instant ou la vesicule cessait
+           d'etre un arc pour redevenir des noeuds. */
+        const g = omega(e.r, e.k);
+        const amp = g.dep;
+        const win = g.hw * 1.25;
         for (let i = 0; i < ch.n; i++) {
           const d = (ch.a[i] - e.a) / win;
           if (d < -1 || d > 1) continue;

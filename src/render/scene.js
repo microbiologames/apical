@@ -22,6 +22,7 @@ import { Screen, hexToRgba, mix32, fade32, shade32, rgba, bayer } from '../core/
 import { clamp, lerp, smoothstep, fbm2, noise2, hash2, noise1, TAU } from '../core/util.js';
 import { versMonde } from '../sim/hyphe.js';
 import { S_MAX, DUREE_FUSION } from '../sim/contenu.js';
+import { omega, PAS as PAS_MEMB } from '../sim/membrane.js';
 
 const BANDE = 6;          // px : portee de la bande de distance (halo compris)
 const MAX_SOMMETS = 4096;
@@ -419,8 +420,14 @@ export class Scene {
       distance et par la polyligne de membrane : si elles divergeaient, la
       membrane flotterait a cote du periplasme. */
   peau() {
-    const ep = clamp(0.19 * this.pxUm, 1.0, 2.6);
-    const gp = clamp(0.075 * this.pxUm, 1.1, 2.4);
+    /* La paroi fait 0,19 um : a l'echelle, donc, et non « bornee a 2,6 px ».
+       Le plafond a 9 px ne sert qu'a empecher la saucisse floue du
+       prototype precedent ; il n'est atteint qu'au-dela de x3,5, la ou on
+       est de toute facon a l'echelle de la microscopie electronique et ou
+       une paroi epaisse est ce qu'on veut voir. Le plancher a 1 px garantit
+       qu'elle ne disparait jamais en vue large. */
+    const ep = clamp(0.19 * this.pxUm, 1.0, 9);
+    const gp = clamp(0.075 * this.pxUm, 1.1, 5);
     return { ep, gp, base: ep + gp };
   }
 
@@ -435,62 +442,179 @@ export class Scene {
    * l'interieur, et l'espace ainsi ouvert entre paroi et membrane EST son
    * lumen — il se remplit de periplasme tout seul.
    */
+  /** Point de la membrane a un age materiel donne : sur la ligne, et son
+      vis-a-vis sur la face interne de la paroi. */
+  ptMembrane(mb, hy, T, a, cote, off, out) {
+    const { ep, base } = this.peau();
+    const sA = mb.sDepuisAge(a);
+    const o = this._ptM || (this._ptM = {});
+    versMonde(T, sA, cote * hy.W(sA), o);
+    const ix = -cote * o.nx, iy = -cote * o.ny;
+    const x0 = this.sx(o.x), y0 = this.sy(o.y);
+    const dd = base + off * this.pxUm;
+    out.x = x0 + ix * dd; out.y = y0 + iy * dd;
+    out.wx = x0 + ix * ep; out.wy = y0 + iy * ep;
+    out.ix = ix; out.iy = iy; out.a = a;
+    return out;
+  }
+
+  /** Profondeur de la chaine a un age donne, interpolee. */
+  offAge(ch, a) {
+    if (ch.n === 0) return 0;
+    const i = clamp(Math.round(a / PAS_MEMB), 0, ch.n - 1);
+    return ch.off[i];
+  }
+
+  /**
+   * La membrane plasmique : UNE polyligne, continue du flanc gauche, par
+   * dessus l'apex, jusqu'au flanc droit.
+   *
+   * Une vesicule qui fusionne n'est PAS dessinee a cote : les noeuds de la
+   * zone de contact sont retires du chemin et remplaces par l'arc de son
+   * propre contour. Le chemin reste une seule courbe — c'est la definition
+   * meme de la fusion, deux membranes qui n'en font plus qu'une, et c'est
+   * ce que la version precedente ne faisait pas : elle effacait un cercle
+   * pendant qu'elle creusait une ligne, sans jamais les raccorder.
+   */
   membraneLigne(hy, co, P, opts) {
     if (opts.membrane === false) return;
     const sc = this.sc, mb = co.membrane;
     const T = hy.table(S_MAX + 2, 0.3);
-    const { ep, base } = this.peau();
     const cM = hexToRgba(P.membrane), cPer = hexToRgba(P.periplasme);
     const cMol = hexToRgba(P.molecule);
     const K = this.pxUm;
-    const pts = this._ptsM || (this._ptsM = []);
-    pts.length = 0;
-    const o = this.pt;
+    const tmp = this._tmpM || (this._tmpM = {});
 
-    /* Ordre : cote -1 du plus vieux vers le pole, puis cote +1 du pole vers
-       le plus vieux. Une seule liste, donc une seule ligne. */
-    for (const [c, sens] of [[0, -1], [1, 1]]) {
-      const ch = mb.ch[c];
-      const cote = c === 0 ? -1 : 1;
-      const i0 = sens < 0 ? ch.n - 1 : 0;
-      const i1 = sens < 0 ? -1 : ch.n;
-      for (let i = i0; i !== i1; i += sens) {
+    /* --- 1. un chemin par cote, dans l'ordre des ages croissants ------- */
+    const cotes = [];
+    for (let c = 0; c < 2; c++) {
+      const ch = mb.ch[c], cote = c === 0 ? -1 : 1;
+      const evts = co.ves.filter((v) => v.etat === 1 && v.cotem === cote);
+      const item = [];
+      /* bornes des zones remplacees par un arc */
+      const zones = evts.map((v) => {
+        const g = omega(v.r, clamp(v.tf / DUREE_FUSION, 0, 1));
+        return { a0: v.am - g.hw, a1: v.am + g.hw, g, v };
+      });
+      for (let i = 0; i < ch.n; i++) {
         const a = ch.a[i];
-        const sA = mb.sDepuisAge(a);
-        if (sA > S_MAX) continue;
-        versMonde(T, sA, cote * hy.W(sA), o);
-        const ix = -cote * o.nx, iy = -cote * o.ny;
-        const sx = this.sx(o.x), sy = this.sy(o.y);
-        const dd = base + ch.off[i] * K;
-        pts.push(sx + ix * dd, sy + iy * dd, sx + ix * ep, sy + iy * ep, ch.off[i]);
+        if (mb.sDepuisAge(a) > S_MAX) break;
+        let dans = false;
+        for (const z of zones) if (a > z.a0 && a < z.a1) { dans = true; break; }
+        if (dans) continue;
+        item.push(this.ptMembrane(mb, hy, T, a, cote, ch.off[i], {}));
       }
+      /* --- 2. insertion des arcs, a leur place dans l'ordre des ages --- */
+      for (const z of zones) {
+        const A = this.ptMembrane(mb, hy, T, Math.max(z.a0, 0), cote, this.offAge(ch, Math.max(z.a0, 0)), {});
+        const B = this.ptMembrane(mb, hy, T, z.a1, cote, this.offAge(ch, z.a1), {});
+        const arc = this.arcOmega(A, B, z.g.dep * K);
+        let k = 0;
+        while (k < item.length && item[k].a < z.a0) k++;
+        item.splice(k, 0, ...arc);
+        z.pts = arc; z.A = A; z.B = B;
+      }
+      cotes.push({ cote, item, zones });
     }
 
-    /* Le lumen : on remplit l'espace ouvert entre la paroi et la membrane
-       la ou elle s'est ecartee. Ailleurs la bande de distance s'en charge
-       deja et il n'y a rien a faire. */
+    /* --- 3. le lumen : la poche ouverte entre paroi et membrane -------- */
     sc.layer(4);
-    for (let k = 0; k + 9 < pts.length; k += 5) {
-      if (pts[k + 4] < 0.012 && pts[k + 9] < 0.012) continue;
-      const n = Math.max(1, Math.ceil(Math.hypot(pts[k + 5] - pts[k], pts[k + 6] - pts[k + 1])));
-      for (let j = 0; j <= n; j++) {
-        const t = j / n;
-        /* Une poche profonde vient d'etre livree : elle tire vers la couleur
-           du materiau. Une poche peu profonde est du periplasme ordinaire.
-           Sans ce degrade on voyait la membrane s'ecarter mais rien passer. */
-        const prof = lerp(pts[k + 4], pts[k + 9], t);
-        const c = mix32(cPer, cMol, clamp(prof * 1.8, 0, 0.55));
-        sc.line(lerp(pts[k + 2], pts[k + 7], t), lerp(pts[k + 3], pts[k + 8], t),
-                lerp(pts[k], pts[k + 5], t), lerp(pts[k + 1], pts[k + 6], t), c);
+    for (const { zones } of cotes) {
+      for (const z of zones) {
+        if (!z.pts || z.pts.length < 3) continue;
+        const xs = this._polX || (this._polX = new Float32Array(256));
+        const ys = this._polY || (this._polY = new Float32Array(256));
+        let n = 0;
+        for (const p of z.pts) { if (n < 250) { xs[n] = p.x; ys[n] = p.y; n++; } }
+        /* retour par la face interne de la paroi */
+        xs[n] = z.B.wx; ys[n] = z.B.wy; n++;
+        xs[n] = z.A.wx; ys[n] = z.A.wy; n++;
+        const t = clamp(z.g.dep / Math.max(z.g.hw, 1e-4), 0, 1);
+        this.remplir(xs, ys, n, mix32(cPer, cMol, 0.18 + 0.34 * t));
+      }
+    }
+    /* poches residuelles de la chaine, la ou elle s'est ecartee sans arc */
+    for (const { item } of cotes) {
+      for (let k = 0; k + 1 < item.length; k++) {
+        const a = item[k], b = item[k + 1];
+        if (Math.hypot(b.x - a.x, b.y - a.y) > 6) continue;   // saut : c'est un arc
+        const da = Math.hypot(a.x - a.wx, a.y - a.wy), db = Math.hypot(b.x - b.wx, b.y - b.wy);
+        const { base } = this.peau();
+        if (da < base + 1.2 && db < base + 1.2) continue;
+        const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y)));
+        for (let j = 0; j <= n; j++) {
+          const u = j / n;
+          sc.line(lerp(a.wx, b.wx, u), lerp(a.wy, b.wy, u), lerp(a.x, b.x, u), lerp(a.y, b.y, u), cPer);
+        }
       }
     }
 
-    /* La ligne elle-meme. */
-    for (let k = 0; k + 5 < pts.length; k += 5) {
-      const x0 = pts[k], y0 = pts[k + 1], x1 = pts[k + 5], y1 = pts[k + 6];
-      if ((x0 < -2 && x1 < -2) || (y0 < -2 && y1 < -2)
-          || (x0 > this.w + 2 && x1 > this.w + 2) || (y0 > this.h + 2 && y1 > this.h + 2)) continue;
-      sc.line(x0, y0, x1, y1, cM);
+    /* --- 4. la ligne, d'un bout a l'autre ----------------------------- */
+    const chemin = [];
+    for (let i = cotes[0].item.length - 1; i >= 0; i--) chemin.push(cotes[0].item[i]);
+    for (const p of cotes[1].item) chemin.push(p);
+    for (let i = 0; i + 1 < chemin.length; i++) {
+      const a = chemin[i], b = chemin[i + 1];
+      if ((a.x < -2 && b.x < -2) || (a.y < -2 && b.y < -2)
+          || (a.x > this.w + 2 && b.x > this.w + 2) || (a.y > this.h + 2 && b.y > this.h + 2)) continue;
+      sc.line(a.x, a.y, b.x, b.y, cM);
+    }
+  }
+
+  /**
+   * L'arc de l'omega : le cercle qui passe par les deux coins de la bouche
+   * (A, B) et par un fond situe a `dep` px vers l'interieur. Tant que
+   * dep > |AB|/2 il est re-entrant, et c'est le col.
+   */
+  arcOmega(A, B, dep) {
+    const mx = (A.x + B.x) * 0.5, my = (A.y + B.y) * 0.5;
+    let ux = B.x - A.x, uy = B.y - A.y;
+    const L = Math.hypot(ux, uy) || 1e-3;
+    ux /= L; uy /= L;
+    let nx = -uy, ny = ux;
+    /* la normale doit regarder vers l'interieur du tube */
+    if (nx * A.ix + ny * A.iy < 0) { nx = -nx; ny = -ny; }
+    const hw = L * 0.5;
+    const d = Math.max(dep, 0.35);
+    const R = (hw * hw + d * d) / (2 * d);
+    const D = Math.atan2(hw, R - d);
+    const cy = d - R;
+    const n = clamp(Math.ceil(2 * D * R / 0.7), 10, 90);
+    const out = [];
+    for (let j = 0; j <= n; j++) {
+      const th = D - 2 * D * (j / n);
+      const X = -R * Math.sin(th), Y = cy + R * Math.cos(th);
+      const t = j / n;
+      out.push({
+        x: mx + ux * X + nx * Y, y: my + uy * X + ny * Y,
+        wx: lerp(A.wx, B.wx, t), wy: lerp(A.wy, B.wy, t),
+        ix: A.ix, iy: A.iy, a: lerp(A.a, B.a, t),
+      });
+    }
+    return out;
+  }
+
+  /** Remplissage pair-impair d'un petit polygone, sur le calque courant. */
+  remplir(xs, ys, n, c) {
+    const sc = this.sc;
+    let y0 = 1e9, y1 = -1e9;
+    for (let i = 0; i < n; i++) { if (ys[i] < y0) y0 = ys[i]; if (ys[i] > y1) y1 = ys[i]; }
+    y0 = Math.max(0, Math.floor(y0)); y1 = Math.min(this.h - 1, Math.ceil(y1));
+    const xi = this._xiP || (this._xiP = new Float32Array(64));
+    for (let y = y0; y <= y1; y++) {
+      const yc = y + 0.5;
+      let m = 0;
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n;
+        if ((ys[i] <= yc) === (ys[j] <= yc)) continue;
+        if (m < 64) xi[m++] = xs[i] + (xs[j] - xs[i]) * ((yc - ys[i]) / (ys[j] - ys[i]));
+      }
+      if (m < 2) continue;
+      for (let a = 1; a < m; a++) { const v = xi[a]; let b = a - 1; while (b >= 0 && xi[b] > v) { xi[b + 1] = xi[b]; b--; } xi[b + 1] = v; }
+      for (let k = 0; k + 1 < m; k += 2) {
+        const xa = Math.max(0, Math.round(xi[k])), xb = Math.min(this.w - 1, Math.round(xi[k + 1]));
+        for (let x = xa; x <= xb; x++) sc.plot(x, y, c);
+      }
     }
   }
 
@@ -501,36 +625,25 @@ export class Scene {
    * et le trait de membrane leur passaient dessus et on ne voyait ni le pore
    * ni le materiau deverse.
    *
-   * Il n'y reste que deux choses : la vesicule AVANT l'ouverture du pore,
-   * et le materiau deverse. La figure d'omega, elle, n'est plus dessinee du
-   * tout — c'est la polyligne de membrane qui la porte, parce qu'elle
-   * appartient a la membrane et doit deriver avec elle.
+   * Il n'y reste que le materiau deverse. La vesicule, elle, n'est plus
+   * dessinee du tout a partir du contact : elle est devenue un arc de la
+   * polyligne de membrane. Avant, un cercle s'effacait pendant qu'une
+   * ligne se creusait, sans que les deux se raccordent jamais — « on voit
+   * les vesicules disparaitre, mais pas de continuite de ligne pure ».
    */
   fusions(hy, co, P, opts) {
     if (opts.vesicules === false) return;
     const sc = this.sc, T = hy.table(S_MAX + 2, 0.3), pt = this.pt, K = this.pxUm;
-    const cLum = hexToRgba(P.periplasme), cMb = hexToRgba(P.membrane);
     const cMol = hexToRgba(P.molecule);
 
     for (const v of co.ves) {
       if (v.etat !== 1) continue;
-      const k = clamp(v.tf / DUREE_FUSION, 0, 1);
-      /* Position materielle de l'evenement, pour le cadrage du banc visuel. */
+      /* Rien a dessiner : depuis qu'elle a touche, la vesicule EST un arc
+         de la polyligne de membrane (membraneLigne). On ne garde que le
+         repere de cadrage pour le banc visuel. */
       const sA = co.membrane.sDepuisAge(v.am);
       versMonde(T, sA, v.cotem * hy.W(sA), pt);
-      this.derniereFusion = { x: this.sx(pt.x), y: this.sy(pt.y), k };
-      /* La vesicule ne se dessine plus apres l'ouverture du pore : a partir
-         de la, sa membrane EST la ligne et son lumen EST le periplasme. Il
-         n'y a plus d'objet « vesicule » a montrer, et c'est tout l'interet. */
-      const vis = 1 - smoothstep(0.10, 0.46, k);
-      if (vis <= 0.02) continue;
-      versMonde(T, v.s, v.v, pt);
-      const x = this.sx(pt.x), y = this.sy(pt.y);
-      if (x < -12 || y < -12 || x > this.w + 12 || y > this.h + 12) continue;
-      const r = v.r * K;
-      sc.layer(4);
-      sc.dot(x, y, r, fade32(mix32(cLum, cMol, 0.35), 0.95 * vis));
-      if (r > 2.6) sc.arcE(x, y, r - 0.4, r - 0.4, 0, fade32(cMb, 0.9 * vis), 0, TAU);
+      this.derniereFusion = { x: this.sx(pt.x), y: this.sy(pt.y), k: clamp(v.tf / DUREE_FUSION, 0, 1) };
     }
 
     /* Le materiau deverse, dans le periplasme. */
@@ -573,8 +686,9 @@ export class Scene {
     const halo = opts.halo === false ? 0 : P.haloForce;
     const peau = opts.membrane !== false;
 
-    const e = clamp(0.19 * this.pxUm, 1.0, 2.6);
-    const gp = peau ? clamp(0.075 * this.pxUm, 1.1, 2.4) : 0;
+    const pk = this.peau();
+    const e = pk.ep;
+    const gp = peau ? pk.gp : 0;
     const ax = this.sx(hy.x), ay = this.sy(hy.y);
     const invPx = 1 / this.pxUm;
 
@@ -653,7 +767,7 @@ export class Scene {
     const p1 = this.pt, p2 = this._pt2 || (this._pt2 = { x: 0, y: 0 });
     const p3 = this._pt3 || (this._pt3 = { x: 0, y: 0 });
     const cF = hexToRgba(P.paroiFraiche), cP = hexToRgba(P.paroi);
-    const ep = clamp(0.19 * this.pxUm, 1.0, 2.6);
+    const ep = this.peau().ep;
     sc.layer(4);
     for (const d of co.depots) {
       co.posDepot(d, a);

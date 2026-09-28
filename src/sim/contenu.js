@@ -38,12 +38,11 @@ import { Membrane } from './membrane.js';
 export const S_MAX = 34;          // um simules derriere l'apex
 const FLUX = 1.2;                 // um/s, vitesse du flux de masse pres du front
 const ZONE_APICALE = 7.5;         // um : zone d'exclusion des organites
-/* 0,243 um verses par fusion moyenne. Mesure : a 0,277 la croissance
-   sortait a 22,8 um/min contre les 20 de Neurospora. Deux `sed` precedents
-   avaient echoue en silence sur cette ligne et je l'ai crue changee — c'est
-   exactement le defaut que CLAUDE.md decrit : un chiffre documente sans
-   avoir ete mesure est un chiffre qu'on croit seulement avoir. */
-const Q_FUSION = 0.243;
+/* um verses par fusion moyenne. Se recalibre a chaque fois qu'on change le
+   nombre de vesicules : a 95 vesicules la cadence tombe a ~1,4 fusion/s, il
+   faut donc verser plus a chaque fois pour tenir les 20 um/min de
+   Neurospora. Mesure au banc, jamais estimee. */
+const Q_FUSION = 0.300;
 const TAUX_LIBERATION = 0.10;     // /s par vesicule retenue, x le pulse Ca2+
 /* La coalescence entre vesicules est un ornement, pas un debit. A 0,85 /s
    par paire en contact elle vidait le reservoir a 8 fusions/s, vingt fois
@@ -97,7 +96,7 @@ export class Contenu {
     this.reserveA = 0; this.reserveC = 0;
     this.avance = 0; this.couple = 0;
 
-    this.nVes = opts.nVes ?? 120;
+    this.nVes = opts.nVes ?? 95;
     this.nGrains = opts.nGrains ?? 640;
 
     for (let i = 0; i < this.nVes; i++) this.ves.push(this.naitreVesicule(this.rng() * S_MAX));
@@ -128,7 +127,7 @@ export class Contenu {
          30-40 nm : a ce grossissement, moins d'un pixel. On grossit x6, pas
          plus — mesure a x13 (r = 0,40-0,58 um) le champ n'etait plus qu'un
          tas de bulles et le cytoplasme avait disparu. */
-      r: grosse ? lerp(0.19, 0.27, this.rng()) : lerp(0.10, 0.155, this.rng()),
+      r: grosse ? lerp(0.22, 0.31, this.rng()) : lerp(0.12, 0.18, this.rng()),
       grosse,
       z: this.rng() * 2 - 1,
       vz: (this.rng() * 2 - 1) * 0.06,
@@ -136,6 +135,7 @@ export class Contenu {
       tf: 0,
       phi: 0,
       am: 0, cotem: 1, // position materielle de la fusion, et de quel cote
+      emis: 0,        // grains de materiau deja sortis de la poche
       cs: 0, cv: 0,   // point de membrane vise
       pont: 0,                    // temps restant d'un pont de fusion ves-ves
       pontS: 0, pontV: 0,
@@ -264,6 +264,15 @@ export class Contenu {
       /* --- exocytose en cours : arrimee, elle ne derive plus ------------- */
       if (p.etat === 1) {
         p.tf += dt;
+        /* Le contenu sort PENDANT que la poche s'ouvre, pas a la fin.
+           Emis d'un coup au terme de l'evenement, les grains apparaissaient
+           quand l'omega s'etait deja referme : on voyait des points blancs
+           surgir de nulle part au lieu d'un deversement. */
+        const k = p.tf / DUREE_FUSION;
+        if (k > 0.22) {
+          const vise = Math.round((p.grosse ? 11 : 6) * clamp((k - 0.22) / 0.62, 0, 1));
+          while (p.emis < vise) { this.grainDeverse(p); p.emis++; }
+        }
         if (p.tf > DUREE_FUSION) { this.livrer(p); ves[i] = this.naitreVesicule(); }
         continue;
       }
@@ -346,12 +355,13 @@ export class Contenu {
              pendant que l'apex avancait. */
           p.am = this.membrane.ageDepuisS(p.s);
           p.cotem = p.phi >= 0 ? 1 : -1;
+          p.emis = 0;
         }
       }
     }
 
     /* --- collisions ----------------------------------------------------- */
-    /* n ~ 96, donc 4600 paires par image : pas besoin de grille. */
+    /* n ~ 78, donc 3000 paires par image : pas besoin de grille. */
     for (let i = 0; i < ves.length; i++) {
       const a = ves[i];
       if (a.etat === 1) continue;
@@ -438,23 +448,27 @@ export class Contenu {
       t: 0,
     });
     if (this.depots.length > 260) this.depots.shift();
+  }
 
-    /* Les molecules de precurseur : elles sortent de la membrane et
-       glissent dans le periplasme jusqu'a s'incorporer a la paroi. Elles ne
-       partent plus « un peu nulle part » — chacune a une paroi a rejoindre. */
-    const n = p.grosse ? 11 : 6;
-    for (let k = 0; k < n; k++) {
-      const a = (this.rng() * 2 - 1) * 1.15;      // dispersion tangentielle
-      this.mols.push({
-        s: Math.max(p.s + (this.rng() * 2 - 1) * 0.16, 0.04),
-        v: p.v + (this.rng() * 2 - 1) * 0.16,
-        vs: Math.sin(a) * (0.45 + this.rng() * 0.5) * (this.rng() < 0.5 ? 1 : -1),
-        vv: Math.cos(a) * (0.45 + this.rng() * 0.5) * (p.v >= 0 ? 1 : -1),
-        z: p.z,
-        t: 0,
-        vie: 0.9 + this.rng() * 0.9,
-      });
-    }
+  /**
+   * Un grain de materiau qui sort de la poche. Il nait a la BOUCHE de
+   * l'omega — au contact de la membrane, pas au centre de la vesicule — et
+   * part vers la paroi, ou il sera incorpore.
+   */
+  grainDeverse(p) {
+    const hy = this.hy, rng = this.rng;
+    const sA = this.membrane.sDepuisAge(p.am);
+    const w = hy.W(sA);
+    const a = (rng() * 2 - 1) * 1.2;
+    this.mols.push({
+      s: Math.max(sA + Math.sin(a) * p.r * 0.7, 0.04),
+      v: p.cotem * Math.max(w - PEAU * 0.8, 0.02),
+      vs: Math.sin(a) * (0.30 + rng() * 0.45),
+      vv: p.cotem * (0.10 + rng() * 0.20),
+      z: p.z,
+      t: 0,
+      vie: 1.0 + rng() * 1.0,
+    });
   }
 
   /** Vieillissement des traces ; on jette celles sorties du champ simule. */

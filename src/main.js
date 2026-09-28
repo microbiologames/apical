@@ -47,6 +47,10 @@ export class App {
     this.pilotage = 'auto';
     this.miseAuPoint = null;    // null = derive automatique
     this.pointeur = null;
+    /* Verrou de camera : une fonction qui renvoie un point monde a suivre,
+       ou null pour suivre l'apex. Sert a la page « livraison », qui doit
+       rester collee a une fusion pendant qu'elle se joue. */
+    this.verrou = null;
 
     this.t = 0;
     this.last = 0;
@@ -128,8 +132,13 @@ export class App {
        pas en um sur une constante. */
     const ext = Math.abs(Math.cos(hy.th)) * sc.w + Math.abs(Math.sin(hy.th)) * sc.h;
     const recul = (0.22 * ext) / sc.pxUm;
-    const tx = hy.x - Math.cos(hy.th) * recul, ty = hy.y - Math.sin(hy.th) * recul;
-    const k = 1 - Math.exp(-dt / 1.8);
+    /* `verrou` permet a la page « livraison » de rester collee a une fusion
+       plutot qu'a l'apex. Le suivi y est trois fois plus rapide : on y
+       regarde un evenement d'une seconde, pas une derive de trois minutes. */
+    const vu = this.verrou && this.verrou();
+    const tx = vu ? vu.x : hy.x - Math.cos(hy.th) * recul;
+    const ty = vu ? vu.y : hy.y - Math.sin(hy.th) * recul;
+    const k = 1 - Math.exp(-dt / (vu ? 0.5 : 1.8));
     sc.cam.x += (tx - sc.cam.x) * k;
     sc.cam.y += (ty - sc.cam.y) * k;
 
@@ -158,6 +167,23 @@ export class App {
     const sc = this.scene;
     sc.dessiner(this.hy, this.co, PALETTES[this.palette], this.t, this.opts);
     this.screen.present();
+  }
+
+  /**
+   * Fait tourner la simulation sans la dessiner. Le reservoir apical met
+   * une vingtaine de secondes a se remplir et l'apex ne bouge pas avant :
+   * sans prechauffage la page s'ouvre sur un tube inerte, et sur la page
+   * « livraison », au ralenti, il faut plus d'une minute avant de voir une
+   * seule fusion. 20 s coutent 0,2 ms x 1200 images, soit un quart de
+   * seconde au chargement.
+   */
+  prechauffer(secondes = 20) {
+    const dt = 1 / 60;
+    const n = Math.round(secondes / dt);
+    for (let i = 0; i < n; i++) this.maj(dt);
+    this.t += secondes;
+    this.scene.cam.x = this.hy.x + Math.cos(this.hy.th) * 0.01;
+    this.scene.cam.y = this.hy.y;
   }
 
   demarrer() {
