@@ -22,10 +22,10 @@
                    de 5,5 um de rayon, soit un dome PLUS PLAT qu'une demi-
                    sphere — a l'ecran le tube a l'air coupe net.
 
-   On retient Lc = 1.00 R : calotte hemispherique, rayon de courbure au
-   sommet egal au rayon du tube. C'est la fermeture d'un tube, ni un
-   bourgeon ni une section. n = 2 donne l'ogive ronde, n < 2 un nez plus
-   pointu, n > 2 un nez plus plat ; le curseur laisse juger.
+   Retenu par l'auteur apres essai au curseur : Lc = 1.40 R, n = 2.1. Le
+   dome est plus long qu'une demi-sphere, et l'exposant 2.1 l'aplatit juste
+   assez. C'est un choix d'oeil, pas de calcul : les deux curseurs existent
+   precisement pour que ce soit tranche en regardant.
 
    La paroi n'est JAMAIS epaissie avec le zoom : une paroi hyphale fait
    0,1 a 0,3 um, soit moins d'un pixel. On la trace en epaisseur ecran.
@@ -39,8 +39,8 @@ const MAX_PTS = 1600;      // ~350 um de memoire, largement hors champ
 export class Hyphe {
   constructor(opts = {}) {
     this.R = opts.R ?? 5.5;              // rayon du tube, um (diam. 11 um)
-    this.calotte = opts.calotte ?? 1.00; // longueur de calotte, en rayons
-    this.profil = opts.profil ?? 2.0;    // 2 = ogive ronde, 3 = nez plat
+    this.calotte = opts.calotte ?? 1.40; // longueur de calotte, en rayons
+    this.profil = opts.profil ?? 2.1;    // 2 = ogive ronde, 3 = nez plat
     this.graine = opts.graine ?? 1234;
 
     this.x = 0; this.y = 0;              // apex

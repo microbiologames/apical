@@ -149,7 +149,9 @@ export class Contenu {
       s,
       v: (this.rng() * 2 - 1) * w * 0.94,
       z: this.rng() * 2 - 1,
-      r: this.rng() < 0.22 ? 1.4 : 0.8,
+      /* um, pas px : 0,11 um fait 1,4 px au cadrage par defaut, et grossit
+         avec le zoom comme tout ce qui est dans le tube. */
+      r: this.rng() < 0.22 ? 0.108 : 0.062,
       clair: this.rng() < 0.45,
     };
   }

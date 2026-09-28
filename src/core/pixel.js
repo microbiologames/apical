@@ -228,6 +228,34 @@ export class Screen {
     this.disc(ix, iy, r, c);
   }
 
+  /**
+   * Comme `dot`, mais ecrit direct dans le tampon principal : sert au
+   * milieu exterieur, qui passe sous le tube et n'a pas de calque.
+   */
+  dotDirect(x, y, r, c) {
+    const ix = Math.round(x), iy = Math.round(y);
+    if (r < 0.80) { this.direct(ix, iy, c); return; }
+    if (r < 1.25) {
+      this.direct(ix, iy, c); this.direct(ix + 1, iy, c);
+      this.direct(ix, iy + 1, c); this.direct(ix + 1, iy + 1, c);
+      return;
+    }
+    /* Meme quantification que `dot` : sans le palier 3x3, un rayon de
+       1,6 px donne une croix a quatre branches, et le milieu se couvrait
+       de petits « + » des qu'on dezoomait. */
+    if (r < 1.85) {
+      for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) this.direct(ix + i, iy + j, c);
+      return;
+    }
+    const R = Math.ceil(r);
+    for (let j = -R; j <= R; j++) {
+      for (let i = -R; i <= R; i++) {
+        if (i * i + j * j > r * r) continue;
+        this.direct(ix + i, iy + j, c);
+      }
+    }
+  }
+
   /** Ellipse pleine orientee. Une vesicule qui fusionne s'aplatit : elle ne
       reste pas ronde jusqu'a disparaitre. */
   ell(cx, cy, a, b, ang, fill, rim = 0) {

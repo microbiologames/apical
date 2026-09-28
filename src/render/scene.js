@@ -153,6 +153,7 @@ export class Scene {
     const y0 = this.cam.y - this.h * 0.5 * inv, y1 = this.cam.y + this.h * 0.5 * inv;
     const cg = hexToRgba(P.milieuGrain), cd = hexToRgba(P.milieuDebris);
     const cc = hexToRgba(P.milieuClair);
+    const K = this.pxUm;
     const av = [];
     for (let cy = Math.floor(y0 / CELL) - 1; cy <= Math.ceil(y1 / CELL) + 1; cy++) {
       for (let cx = Math.floor(x0 / CELL) - 1; cx <= Math.ceil(x1 / CELL) + 1; cx++) {
@@ -167,22 +168,22 @@ export class Scene {
            flou de 4 px et un gain de 4,2 : a 10 % des cellules et 11 px de
            rayon, ils couvraient le champ de grosses taches molles, le tube
            compris. 2 % des cellules, 4 px maximum, alpha 0,08. */
-        if (z > 0.978) { av.push([px, py, 1.6 + z * 2.6, cd]); continue; }
+        if (z > 0.978) { av.push([px, py, (0.12 + z * 0.20) * K, cd]); continue; }
         const k = hash2(cx, cy, 53);
+        /* Les tailles sont en MICROMETRES et suivent le zoom. En pixels,
+           les grains gardaient leur calibre pendant que leur espacement
+           grandissait : le milieu avait l'air de glisser sur un autre
+           plan. Un grain de gelose fait ~0,06 um, un debris ~0,18, un
+           corps refringent ~0,14. */
+        const e = 1 + z * 0.7;
         if (k < 0.70) {
-          sc.direct(px, py, fade32(cg, 0.55 + z * 0.4));
+          sc.dotDirect(px, py, 0.055 * e * K, fade32(cg, 0.55 + z * 0.4));
         } else if (k < 0.93) {
-          /* debris : trois pixels colles, jamais un disque parfait */
-          const a = fade32(cd, 0.5 + z * 0.4);
-          sc.direct(px, py, a);
-          sc.direct(px + (h0 < 0.4 ? 1 : -1), py, a);
-          sc.direct(px, py + (z < 0.5 ? 1 : -1), a);
+          sc.dotDirect(px, py, 0.17 * e * K, fade32(cd, 0.5 + z * 0.4));
         } else {
-          /* corps refringent : un point clair cercle d'un liseré sombre */
-          sc.direct(px, py, fade32(cc, 0.8));
-          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-            sc.direct(px + dx, py + dy, fade32(cd, 0.5));
-          }
+          const r = 0.13 * e * K;
+          sc.dotDirect(px, py, r * 1.55, fade32(cd, 0.45));
+          sc.dotDirect(px, py, r, fade32(cc, 0.8));
         }
       }
     }
@@ -269,6 +270,12 @@ export class Scene {
        le flux de masse (1,2) moins la croissance (0,33). Sans ce terme le
        tube est granuleux mais parfaitement immobile a l'interieur. */
     const derive = -t * 0.9;
+    /* Frequences en um^-1 : 2,2 cycles/um pour les plages, 8,1 pour le
+       grain. En dessous de 1,5 px de periode la fine octave n'est plus que
+       du bruit qui scintille, on l'attenue. */
+    const invK = 1 / this.pxUm;
+    const F1 = 2.2, F2 = 8.1;
+    const attF2 = clamp(this.pxUm / (F2 * 1.5), 0, 1);
 
     let ymin = h, ymax = -1;
     for (let i = 0; i < n; i++) { const y = ys[i]; if (y < ymin) ymin = y; if (y > ymax) ymax = y; }
@@ -300,13 +307,17 @@ export class Scene {
              que la paroi, donc rigoureusement concentrique. */
           let c = mix32(cCyto, cBord, clamp(1 - d / 3.6, 0, 1) * 0.34);
           if (force > 0) {
-            const lx = (x - ax) * cth + (y - ay) * sth;
-            const ly = -(x - ax) * sth + (y - ay) * cth;
-            /* Deux echelles : une grosse (0,17) qui donne des plages, une
-               fine (0,62) qui donne le grain. Sans la grosse, le cytoplasme
-               est uniforme et le tube a l'air vide. */
-            const g = (fbm2(lx * 0.17 + derive * 0.17, ly * 0.17, 17) - 0.5) * 0.62
-                    + (fbm2(lx * 0.62 + derive * 0.62, ly * 0.62, 43) - 0.5) * 0.38;
+            /* Coordonnees en MICROMETRES, pas en pixels. Indexee sur le
+               pixel, la granulation gardait la meme taille apparente quand
+               on zoomait : le tube grossissait, le grain non, et le fond
+               avait l'air pose sur un autre plan. En um, il grossit avec
+               tout le reste. Le terme de derive etait en um pendant que la
+               coordonnee etait en px : la texture ne coulait donc pas a la
+               bonne vitesse non plus. */
+            const lx = ((x - ax) * cth + (y - ay) * sth) * invK;
+            const ly = (-(x - ax) * sth + (y - ay) * cth) * invK;
+            const g = (fbm2((lx + derive) * F1, ly * F1, 17) - 0.5) * 0.62
+                    + (fbm2((lx + derive) * F2, ly * F2, 43) - 0.5) * 0.38 * attF2;
             c = shade32(c, g * force * 3.0);
           }
           sc.px[o] = c | 0xff000000;
@@ -350,7 +361,8 @@ export class Scene {
            observation de MET (planche de reference, panneau C). */
         const ap = 0.22 + 0.78 * smoothstep(0.9, 5.0, g.s);
         const c = fade32(g.clair ? cc : cs, (0.82 - pl.dz * 0.22) * ap);
-        sc.dot(x, y, g.r * 0.9, c);
+        /* Rayon en um : un granule a une taille, pas un nombre de pixels. */
+        sc.dot(x, y, g.r * K, c);
       }
     }
 
