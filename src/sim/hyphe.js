@@ -238,6 +238,7 @@ export function versMonde(T, s, v, out) {
   let ny = lerp(T.ny[i], T.ny[i + 1], t);
   const l = Math.hypot(nx, ny) || 1; nx /= l; ny /= l;
   out.x = x + nx * v; out.y = y + ny * v;
+  out.nx = nx; out.ny = ny;
   return out;
 }
 

@@ -89,6 +89,7 @@ export class Scene {
     this.cytoplasme(hy, P, t, opts);
     this.contenu(hy, co, P, opts);
     this.paroi(hy, P, opts);
+    this.membraneLigne(hy, co, P, opts);
     this.fusions(hy, co, P, opts);
     if (opts.depots !== false) this.tracesParoi(hy, co, P);
     if (opts.milieu !== false) this.milieuAvant(P);
@@ -414,6 +415,85 @@ export class Scene {
     }
   }
 
+  /** Epaisseurs de l'enveloppe, en pixels ECRAN. Partagees par la bande de
+      distance et par la polyligne de membrane : si elles divergeaient, la
+      membrane flotterait a cote du periplasme. */
+  peau() {
+    const ep = clamp(0.19 * this.pxUm, 1.0, 2.6);
+    const gp = clamp(0.075 * this.pxUm, 1.1, 2.4);
+    return { ep, gp, base: ep + gp };
+  }
+
+  /**
+   * La membrane plasmique : UNE polyligne, continue du flanc gauche, par
+   * dessus l'apex, jusqu'au flanc droit. Chaque noeud est indexe sur le
+   * MATERIAU, donc la ligne et ses creux derivent vers l'arriere avec la
+   * paroi qu'ils doublent.
+   *
+   * Une vesicule qui fusionne n'est plus dessinee : sa membrane s'est
+   * ajoutee a celle-ci, le surplus de longueur creuse la ligne vers
+   * l'interieur, et l'espace ainsi ouvert entre paroi et membrane EST son
+   * lumen — il se remplit de periplasme tout seul.
+   */
+  membraneLigne(hy, co, P, opts) {
+    if (opts.membrane === false) return;
+    const sc = this.sc, mb = co.membrane;
+    const T = hy.table(S_MAX + 2, 0.3);
+    const { ep, base } = this.peau();
+    const cM = hexToRgba(P.membrane), cPer = hexToRgba(P.periplasme);
+    const cMol = hexToRgba(P.molecule);
+    const K = this.pxUm;
+    const pts = this._ptsM || (this._ptsM = []);
+    pts.length = 0;
+    const o = this.pt;
+
+    /* Ordre : cote -1 du plus vieux vers le pole, puis cote +1 du pole vers
+       le plus vieux. Une seule liste, donc une seule ligne. */
+    for (const [c, sens] of [[0, -1], [1, 1]]) {
+      const ch = mb.ch[c];
+      const cote = c === 0 ? -1 : 1;
+      const i0 = sens < 0 ? ch.n - 1 : 0;
+      const i1 = sens < 0 ? -1 : ch.n;
+      for (let i = i0; i !== i1; i += sens) {
+        const a = ch.a[i];
+        const sA = mb.sDepuisAge(a);
+        if (sA > S_MAX) continue;
+        versMonde(T, sA, cote * hy.W(sA), o);
+        const ix = -cote * o.nx, iy = -cote * o.ny;
+        const sx = this.sx(o.x), sy = this.sy(o.y);
+        const dd = base + ch.off[i] * K;
+        pts.push(sx + ix * dd, sy + iy * dd, sx + ix * ep, sy + iy * ep, ch.off[i]);
+      }
+    }
+
+    /* Le lumen : on remplit l'espace ouvert entre la paroi et la membrane
+       la ou elle s'est ecartee. Ailleurs la bande de distance s'en charge
+       deja et il n'y a rien a faire. */
+    sc.layer(4);
+    for (let k = 0; k + 9 < pts.length; k += 5) {
+      if (pts[k + 4] < 0.012 && pts[k + 9] < 0.012) continue;
+      const n = Math.max(1, Math.ceil(Math.hypot(pts[k + 5] - pts[k], pts[k + 6] - pts[k + 1])));
+      for (let j = 0; j <= n; j++) {
+        const t = j / n;
+        /* Une poche profonde vient d'etre livree : elle tire vers la couleur
+           du materiau. Une poche peu profonde est du periplasme ordinaire.
+           Sans ce degrade on voyait la membrane s'ecarter mais rien passer. */
+        const prof = lerp(pts[k + 4], pts[k + 9], t);
+        const c = mix32(cPer, cMol, clamp(prof * 1.8, 0, 0.55));
+        sc.line(lerp(pts[k + 2], pts[k + 7], t), lerp(pts[k + 3], pts[k + 8], t),
+                lerp(pts[k], pts[k + 5], t), lerp(pts[k + 1], pts[k + 6], t), c);
+      }
+    }
+
+    /* La ligne elle-meme. */
+    for (let k = 0; k + 5 < pts.length; k += 5) {
+      const x0 = pts[k], y0 = pts[k + 1], x1 = pts[k + 5], y1 = pts[k + 6];
+      if ((x0 < -2 && x1 < -2) || (y0 < -2 && y1 < -2)
+          || (x0 > this.w + 2 && x1 > this.w + 2) || (y0 > this.h + 2 && y1 > this.h + 2)) continue;
+      sc.line(x0, y0, x1, y1, cM);
+    }
+  }
+
   /**
    * Les evenements de membrane, dessines APRES la paroi.
    *
@@ -421,60 +501,36 @@ export class Scene {
    * et le trait de membrane leur passaient dessus et on ne voyait ni le pore
    * ni le materiau deverse.
    *
-   * La fusion suit le schema de reference en trois temps : les deux
-   * membranes se touchent ; un pore s'ouvre au centre du contact et
-   * s'elargit ; la vesicule se rabat dans la membrane plasmique en figure
-   * d'omega, ouverte vers l'exterieur, et son lumen — deja de la couleur du
-   * periplasme — se confond avec lui.
+   * Il n'y reste que deux choses : la vesicule AVANT l'ouverture du pore,
+   * et le materiau deverse. La figure d'omega, elle, n'est plus dessinee du
+   * tout — c'est la polyligne de membrane qui la porte, parce qu'elle
+   * appartient a la membrane et doit deriver avec elle.
    */
   fusions(hy, co, P, opts) {
     if (opts.vesicules === false) return;
     const sc = this.sc, T = hy.table(S_MAX + 2, 0.3), pt = this.pt, K = this.pxUm;
     const cLum = hexToRgba(P.periplasme), cMb = hexToRgba(P.membrane);
     const cMol = hexToRgba(P.molecule);
-    const cth = Math.cos(hy.th), sth = Math.sin(hy.th);
-    const nx = -sth, ny = cth;
 
     for (const v of co.ves) {
       if (v.etat !== 1) continue;
+      const k = clamp(v.tf / DUREE_FUSION, 0, 1);
+      /* Position materielle de l'evenement, pour le cadrage du banc visuel. */
+      const sA = co.membrane.sDepuisAge(v.am);
+      versMonde(T, sA, v.cotem * hy.W(sA), pt);
+      this.derniereFusion = { x: this.sx(pt.x), y: this.sy(pt.y), k };
+      /* La vesicule ne se dessine plus apres l'ouverture du pore : a partir
+         de la, sa membrane EST la ligne et son lumen EST le periplasme. Il
+         n'y a plus d'objet « vesicule » a montrer, et c'est tout l'interet. */
+      const vis = 1 - smoothstep(0.10, 0.46, k);
+      if (vis <= 0.02) continue;
       versMonde(T, v.s, v.v, pt);
       const x = this.sx(pt.x), y = this.sy(pt.y);
       if (x < -12 || y < -12 || x > this.w + 12 || y > this.h + 12) continue;
-      /* Normale sortante au point de contact : le cap de l'apex tourne de
-         phi. C'est l'angle meme qui a servi a choisir la cible. */
-      const ox = cth * Math.cos(v.phi) + nx * Math.sin(v.phi);
-      const oy = sth * Math.cos(v.phi) + ny * Math.sin(v.phi);
-      const ang = Math.atan2(oy, ox);
-
-      const k = clamp(v.tf / DUREE_FUSION, 0, 1);
-      const e = smoothstep(0, 1, k);
-      /* Une macrovesicule fait 3 px de rayon a l'echelle du cadre : l'omega
-         en ferait 7 de large et l'evenement passerait inapercu. On l'etale
-         donc jusqu'a 2,2 fois son rayon — c'est le moment central de la
-         simulation, il a le droit d'occuper de la place. */
-      const r = v.r * K * 1.22;
-      /* Le centre ne glisse PAS vers l'exterieur. Sur le schema de
-         reference, l'omega bombe VERS LE CYTOPLASME : c'est son ouverture
-         qui donne sur le periplasme, pas son corps. Pousse dehors, elle se
-         dessinait par-dessus la paroi — un lumen pale sur une paroi pale,
-         donc rien. */
-      const cx = x + ox * r * 0.08;
-      const cy = y + oy * r * 0.08;
-      const rr = r * (1 - 0.55 * e);          // demi-axe radial
-      const rt = r * (1 + 1.60 * e);          // demi-axe tangentiel
-      /* Demi-angle du pore, mesure depuis la normale sortante. Il s'ouvre
-         APRES le contact, pas pendant : les deux membranes se touchent
-         d'abord, le pore nait au centre du contact, puis il s'elargit. */
-      const pore = smoothstep(0.18, 0.88, k) * 1.48;
-      /* Le lumen vire vers la couleur du materiau a mesure qu'il se deverse :
-         on voit sortir quelque chose, pas seulement une forme s'aplatir. */
-      const lum = mix32(cLum, cMol, 0.45 + 0.50 * e);
-
+      const r = v.r * K;
       sc.layer(4);
-      sc.ell(cx, cy, rr, rt, ang, fade32(lum, 1 - 0.28 * e));
-      sc.arcE(cx, cy, rr, rt, ang, cMb, pore, TAU - pore, 2.0);
-      /* Repere pour le banc visuel : il cadre sur l'evenement en cours. */
-      this.derniereFusion = { x: cx, y: cy, k };
+      sc.dot(x, y, r, fade32(mix32(cLum, cMol, 0.35), 0.95 * vis));
+      if (r > 2.6) sc.arcE(x, y, r - 0.4, r - 0.4, 0, fade32(cMb, 0.9 * vis), 0, TAU);
     }
 
     /* Le materiau deverse, dans le periplasme. */
@@ -513,13 +569,12 @@ export class Scene {
     const b = this.box;
     const cP = hexToRgba(P.paroi), cJ = hexToRgba(P.paroiJeune);
     const cH = hexToRgba(P.halo);
-    const cM = hexToRgba(P.membrane), cPer = hexToRgba(P.periplasme);
+    const cPer = hexToRgba(P.periplasme);
     const halo = opts.halo === false ? 0 : P.haloForce;
     const peau = opts.membrane !== false;
 
     const e = clamp(0.19 * this.pxUm, 1.0, 2.6);
-    const gp = peau ? clamp(0.055 * this.pxUm, 0.7, 1.5) : 0;
-    const em = peau ? clamp(0.050 * this.pxUm, 0.8, 1.3) : 0;
+    const gp = peau ? clamp(0.075 * this.pxUm, 1.1, 2.4) : 0;
     const ax = this.sx(hy.x), ay = this.sy(hy.y);
     const invPx = 1 / this.pxUm;
 
@@ -551,14 +606,13 @@ export class Scene {
           const k = dedans ? d / (ep * 1.05) : d / (ep * 0.72);
           if (k <= 1) { sc.plot(x, y, fade32(c, (1 - 0.45 * k * k) * (1 + gr * 0.2))); continue; }
         }
-        if (dedans && peau) {
-          if (d <= ep + gp) { sc.plot(x, y, fade32(cPer, 0.62)); continue; }
-          if (d <= ep + gp + em) {
-            /* La membrane est nette meme ou la paroi est encore jeune :
-               elle ne murit pas, elle est posee d'un coup par les fusions. */
-            sc.plot(x, y, fade32(cM, 0.88));
-            continue;
-          }
+        if (dedans && peau && d <= ep + gp) {
+          /* Le periplasme va jusqu'a la membrane, qui n'est PLUS dessinee
+             ici : c'est une polyligne ancree dans le materiau (membrane.js),
+             elle peut s'ecarter de la paroi et il n'y a aucun moyen de faire
+             ca avec une bande de distance. */
+          sc.plot(x, y, fade32(cPer, 0.62));
+          continue;
         }
         if (!dedans && halo > 0 && d < BANDE) {
           const k = 1 - (d - ep * 0.72) / (BANDE - ep * 0.72);

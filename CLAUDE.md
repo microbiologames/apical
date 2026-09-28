@@ -13,7 +13,7 @@ les captures de contrôle.
 | Commande | Ce qu'elle fait |
 |---|---|
 | `npm run serve` | sert le dépôt tel quel |
-| `npm run banc` | 9 verdicts de mesure, sans rendu, en node |
+| `npm run banc` | 10 verdicts de mesure, sans rendu, en node |
 | `npm run visuel` | captures dans `/tmp/apical-shots` (Playwright) |
 
 ---
@@ -34,7 +34,7 @@ que l'exocytose » évite de refaire l'erreur.
 
 ---
 
-## Les six règles de fond
+## Les sept règles de fond
 
 ### 1. L'hyphe est UN objet
 
@@ -84,36 +84,52 @@ l'écran.
 Périplasme et membrane sont exagérés d'un facteur ~20 — ensemble ils font un
 quinzième de pixel. La paroi, elle, est à peu près à l'échelle.
 
-### 4. Une vésicule n'a pas de couleur à elle
+### 4. La membrane plasmique est UNE ligne, et elle appartient au matériau
+
+`src/sim/membrane.js`. Ce n'est pas une bande tirée du champ de distance : une
+bande ne peut que coller à la paroi. C'est une **polyligne** continue, du flanc
+gauche, par-dessus l'apex, jusqu'au flanc droit, dont chaque nœud porte un âge
+`a` — le nombre de micromètres dont l'apex a avancé depuis que ce nœud était au
+pôle. On ajoute l'avance à tous les âges et la ligne entière glisse vers
+l'arrière. **On ne déplace rien : c'est le repère qui dérive.**
+
+**Une vésicule qui fusionne n'est plus un objet qu'on dessine.** Sa membrane
+s'ajoute à la ligne ; le surplus de longueur fait mollir la ficelle, elle se
+détend vers l'intérieur, et le creux qui en résulte *est* la figure d'oméga.
+L'espace ainsi ouvert entre paroi et membrane *est* son lumen — il se remplit de
+périplasme tout seul, puisque c'est la même couleur (règle 5).
+
+Le modèle est une corde 1D, `acc = c²·∂²off/∂x² − k·(off − cible) − b·vitesse`,
+avec `c = 1,07 µm/s` : la perturbation **court** le long de la ligne au lieu
+d'apparaître partout à la fois, et c'est ça qui donne la lecture « molle ».
+
+Deux régimes, et c'est le cœur du modèle :
+
+- **pendant** la fusion, la vésicule est physiquement là : on contraint fort
+  (`RAPPEL_EVT = 110`). À 7 la tension gagnait — longueur de cicatrisation
+  `sqrt(4,4/7) = 0,79 µm` contre 0,45 µm de largeur d'oméga — et le creux était
+  effacé avant d'avoir été vu : 0,03 µm au lieu des 0,12 demandés ;
+- **après**, le surplus de membrane est **réel**. Rien ne le ramène à plat :
+  seule la tension l'étale, et l'expansion de la calotte le consomme
+  (`ABSORB = 0,15 /s`). Un rappel vers zéro le ferait disparaître sur place.
+
+**Mesuré :** creux maximal 493 nm, soit 6,4 px au cadrage par défaut ;
+exocytose coupée, 2,2 s plus tard le matériau a reculé de 1,25 µm et le creux
+l'a suivi — 160 nm là-bas contre 87 nm là où il était dans le repère de l'apex.
+
+### 5. Une vésicule n'a pas de couleur à elle
 
 Sa membrane **est** de la membrane (`P.membrane`), son lumen **est** du
 périplasme (`P.periplasme`) — il le devient à la seconde où le pore s'ouvre.
 Il n'y a volontairement **pas d'entrée `vesicule`** dans la palette : deux
 entrées séparées finiraient par diverger, et c'est précisément cette identité
-qui rend la fusion lisible sans qu'on ait rien à expliquer. Le contenu déversé
-est déjà de la couleur de l'espace où il se déverse.
+qui rend la fusion lisible sans qu'on ait rien à expliquer.
 
-La fusion (`Scene.fusions`, 0,85 s) suit le schéma de référence
-`Apex_references/Mecanisms/Vesicule mecanisme.png`, en trois temps :
+`Scene.fusions` ne dessine donc plus que deux choses : la vésicule **avant**
+l'ouverture du pore, et le matériau déversé. La figure d'oméga, elle, n'est plus
+dessinée du tout.
 
-1. **contact** — les deux membranes se touchent. La vésicule décélère en
-   approchant (`0,32 + 1,45·smoothstep` sur la distance restante) : à vitesse
-   constante on voyait un choc, pas un contact.
-2. **pore** — une ouverture naît au centre du contact et s'élargit. C'est
-   `Screen.arcE` qui la dessine, en omettant un secteur angulaire du contour :
-   un contour fermé ne peut pas montrer une membrane qui s'ouvre.
-3. **oméga** — la vésicule se rabat dans la membrane plasmique, ouverte vers
-   l'extérieur, et son lumen se confond avec le périplasme.
-
-L'oméga bombe **vers le cytoplasme**, jamais vers l'extérieur : c'est son
-ouverture qui donne sur le périplasme, pas son corps. Poussée dehors, elle se
-dessinait par-dessus la paroi — un lumen pâle sur une paroi pâle, donc rien.
-
-Ces événements sont dessinés **après** `paroi()`, dans `fusions()`. Dessinés
-avant, la bande de périplasme et le trait de membrane leur passaient dessus :
-ni le pore ni le matériau déversé n'étaient visibles.
-
-### 5. La paroi neuve migre, et ça doit se voir
+### 6. La paroi neuve migre, et ça doit se voir
 
 Une hyphe s'allonge par son apex : la paroi formée à la pointe se retrouve
 progressivement sur les flancs, puis hors champ. Une paroi uniforme a l'air
@@ -133,7 +149,7 @@ Même raisonnement pour le milieu extérieur : le grain de gélose et les débri
 sont tirés d'un hachage de cellules en **coordonnées monde**. Sans repère fixe
 hors du tube, il n'y a aucune impression de progression.
 
-### 6. Le Spitzenkörper n'est jamais dessiné
+### 7. Le Spitzenkörper n'est jamais dessiné
 
 C'est une densité, pas un objet : un puits de rétention à ~2 µm de la pointe,
 et le nuage apparaît tout seul. Le dessiner net était la mauvaise réponse
@@ -150,6 +166,8 @@ solution »).
 | exocytoses | 1,89 /s, une toutes les 0,53 s | — |
 | extension par fusion | 157 nm | — |
 | durée d'une fusion | 0,85 s | — |
+| creux de membrane, maximum | 493 nm (6,4 px) | — |
+| dérive du creux en 2,2 s | 1,25 µm, il suit le matériau | — |
 | rayon de virage, consigne pleine | 82 µm | unité de croissance hyphale ~110 µm |
 | inertie du cap (63 %) | 7,2 s | — |
 | migration de la paroi neuve | pleine largeur en 17 s, 70 µm en 200 s | — |
@@ -208,6 +226,16 @@ partie du travail**, pas après, pendant.
 - Une trace de paroi neuve mélangée à moitié vers le blanc et à 0,72 d'alpha
   devient, en fond noir, un **rectangle lumineux posé sur la paroi** : on lit
   un artefact, pas du matériau neuf. 0,22 de mélange, 0,43 d'alpha au pic.
+- **Une animation dessinée à une position ÉCRAN reste sur place** pendant que
+  l'apex avance, et l'événement se met à flotter à côté du tube au lieu d'être
+  dedans. Tout ce qui appartient à la paroi ou à la membrane doit être indexé
+  sur le **matériau** : les traces (`depots`), la texture de paroi, et la
+  membrane elle-même.
+- Un banc qui cherche « le creux le plus profond » ne mesure pas une dérive :
+  de nouveaux creux naissent sans cesse au même endroit **dans le repère de
+  l'apex**, et on ne distingue plus « le creux a suivi le matériau » de « un
+  autre creux est apparu au même endroit ». Le verdict coupe donc l'exocytose
+  avant de suivre.
 - **Un `sed` qui ne trouve pas son motif ne dit rien.** Deux remplacements
   successifs de `Q_FUSION` ont échoué en silence et j'ai documenté une valeur
   que le fichier n'avait pas. Seul le banc l'a vu (22,8 µm/min au lieu de 20).

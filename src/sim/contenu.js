@@ -33,6 +33,7 @@
 
 import { clamp, lerp, smoothstep, mulberry32, TAU } from '../core/util.js';
 import { distParoi } from './hyphe.js';
+import { Membrane } from './membrane.js';
 
 export const S_MAX = 34;          // um simules derriere l'apex
 const FLUX = 1.2;                 // um/s, vitesse du flux de masse pres du front
@@ -84,6 +85,9 @@ export class Contenu {
        C'est le seul repere qui rend la croissance apicale VISIBLE : sans
        lui, une paroi uniforme a l'air immobile meme quand l'apex avance. */
     this.depots = [];
+    /* La membrane plasmique est une ligne continue ancree dans le materiau :
+       c'est elle qui porte les figures de fusion, plus le rendu. */
+    this.membrane = new Membrane(hy, S_MAX);
     this.fusions = 0;             // compteur, sert au banc
 
     /* Bilan de croissance. Les fusions versent dans la reserve, l'hyphe
@@ -131,6 +135,7 @@ export class Contenu {
       etat: 0,        // 0 transit, 2 retenue au Spk, 3 en route, 1 fusion
       tf: 0,
       phi: 0,
+      am: 0, cotem: 1, // position materielle de la fusion, et de quel cote
       cs: 0, cv: 0,   // point de membrane vise
       pont: 0,                    // temps restant d'un pont de fusion ves-ves
       pontS: 0, pontV: 0,
@@ -209,6 +214,15 @@ export class Contenu {
     this.majOrganites(dt, da);
     this.majMolecules(dt, da);
     this.majDepots(dt);
+
+    /* La membrane recoit les fusions en cours et derive avec le materiau. */
+    const evts = [];
+    for (const v of this.ves) {
+      if (v.etat !== 1) continue;
+      v.am += da;
+      evts.push({ a: v.am, cote: v.cotem, r: v.r, k: clamp(v.tf / DUREE_FUSION, 0, 1) });
+    }
+    this.membrane.maj(dt, da, evts);
 
     /* Constante 0,55 s : c'est la duree pendant laquelle une vesicule
        fusionnee verse son materiau dans la paroi. */
@@ -324,7 +338,15 @@ export class Contenu {
            tout se repousse lentement. */
         const vn = p.vs * dp.ds + p.vv * dp.dv;
         if (vn < 0) { p.vs -= 1.3 * vn * dp.ds; p.vv -= 1.3 * vn * dp.dv; }
-        if (p.etat === 3 && opts.exocytose !== false) { p.etat = 1; p.tf = 0; }
+        if (p.etat === 3 && opts.exocytose !== false) {
+          p.etat = 1; p.tf = 0;
+          /* Position MATERIELLE de l'evenement : a partir d'ici la figure
+             de fusion appartient a la membrane et derive avec elle. Avant,
+             elle etait plantee a une position ecran et restait sur place
+             pendant que l'apex avancait. */
+          p.am = this.membrane.ageDepuisS(p.s);
+          p.cotem = p.phi >= 0 ? 1 : -1;
+        }
       }
     }
 

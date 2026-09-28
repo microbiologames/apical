@@ -46,23 +46,38 @@ for (const e of (plan.length ? plan : defaut)) {
   for (const o of (e.on || [])) await page.$eval(`[data-opt="${o}"]`, (el) => { if (!el.checked) { el.checked = true; el.dispatchEvent(new Event('change')); } });
   await page.waitForTimeout(e.attente ?? 1200);
   if (e.fusion) {
-    /* On attend qu'une exocytose soit a mi-parcours : c'est l'instant qu'on
-       veut voir, et il dure moins d'une seconde sur quinze. */
-    await page.waitForFunction((cible) => {
+    /* On attend un creux de membrane d'au moins `fusion` um : c'est le
+       critere VISUEL, pas l'avancement d'un evenement. Une petite vesicule
+       ne creuse que 2 px et on ne voit rien. */
+    await page.waitForFunction((seuil) => {
       const a = globalThis.apical;
-      if (!a) return false;
-      return a.co.ves.some((v) => v.etat === 1 && Math.abs(v.tf / 0.85 - cible) < 0.09);
-    }, e.fusion, { timeout: 60000, polling: 16 }).catch(() => console.log('  (pas de fusion vue)'));
+      if (!a || !a.co.membrane) return false;
+      for (const c of a.co.membrane.ch) for (let i = 0; i < c.n; i++) if (c.off[i] > seuil) return true;
+      return false;
+    }, e.fusion, { timeout: 60000, polling: 16 }).catch(() => console.log('  (pas de creux vu)'));
     await page.evaluate(() => { globalThis.apical.pause = true; });
     if (e.crop === 'fusion') {
       const c = await page.evaluate(() => {
-        const a = globalThis.apical, f = a.scene.derniereFusion;
-        const ech = a.canvas.getBoundingClientRect().width / a.canvas.width;
+        const a = globalThis.apical, mb = a.co.membrane, hy = a.hy, sc = a.scene;
+        let best = -1, bi = 0, bc = 0;
+        for (let k = 0; k < 2; k++) for (let i = 0; i < mb.ch[k].n; i++) {
+          if (mb.ch[k].off[i] > best) { best = mb.ch[k].off[i]; bi = i; bc = k; }
+        }
+        const cote = bc === 0 ? -1 : 1;
+        const sA = mb.sDepuisAge(mb.ch[bc].a[bi]);
+        const T = hy.table(36, 0.3);
+        const f = (s2) => { const q = Math.min(Math.max(s2 / T.pas, 0), T.n - 1.001), j = q | 0, t = q - j;
+          return { x: T.x[j] + (T.x[j+1]-T.x[j])*t, y: T.y[j] + (T.y[j+1]-T.y[j])*t,
+                   nx: T.nx[j] + (T.nx[j+1]-T.nx[j])*t, ny: T.ny[j] + (T.ny[j+1]-T.ny[j])*t }; };
+        const p = f(sA), w = hy.W(sA);
+        const wx = p.x + p.nx * cote * w, wy = p.y + p.ny * cote * w;
+        const px = sc.sx(wx), py = sc.sy(wy);
         const cr = a.canvas.getBoundingClientRect(), vr = document.getElementById('vue').getBoundingClientRect();
-        return f ? { x: cr.left - vr.left + f.x * ech, y: cr.top - vr.top + f.y * ech, ech } : null;
+        const ech = cr.width / a.canvas.width;
+        return { x: cr.left - vr.left + px * ech, y: cr.top - vr.top + py * ech, off: best };
       });
-      if (c) e.crop = [Math.max(0, c.x - 110), Math.max(0, c.y - 80), 220, 160];
-      else e.crop = null;
+      console.log('  creux', c.off.toFixed(3), 'um');
+      e.crop = [Math.max(0, c.x - 150), Math.max(0, c.y - 110), 300, 220];
     }
   }
   if (e.vit) await page.click('[data-vit="1"]');

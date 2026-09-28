@@ -245,6 +245,14 @@ export class Screen {
     }
   }
 
+  /** Segment fin, trace point par point. La membrane plasmique fait un
+      pixel : une capsule serait 20 fois plus chere pour le meme resultat. */
+  line(x0, y0, x1, y1, c) {
+    const dx = x1 - x0, dy = y1 - y0;
+    const n = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy))));
+    for (let i = 0; i <= n; i++) this.plot(x0 + dx * (i / n), y0 + dy * (i / n), c);
+  }
+
   /**
    * Arc d'ellipse parametrique, de t0 a t1 (radians, dans le repere de
    * l'ellipse : t = 0 est l'extremite du demi-axe `a`).

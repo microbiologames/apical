@@ -24,6 +24,15 @@ Il n'y a pas de but, pas de score, pas de fin. C'est le point.
 
 ## Les partis pris
 
+**La membrane plasmique est une ligne unique, ancrée dans le matériau.** Pas une
+bande tirée du contour — une bande ne peut que coller à la paroi. Une polyligne,
+dont chaque nœud porte l'âge du matériau qu'il représente : on ajoute l'avance de
+l'apex à tous les âges et la ligne entière glisse vers l'arrière. Une vésicule
+qui fusionne n'est plus un objet qu'on dessine : **sa membrane s'ajoute à la
+ligne**, le surplus de longueur fait mollir la ficelle, elle se détend vers
+l'intérieur, et le creux qui en résulte *est* la figure d'oméga. Il dérive
+ensuite avec le reste.
+
 **Une vésicule n'a pas de couleur à elle.** Sa membrane est de la membrane,
 son lumen est du périplasme — il le devient à la seconde où le pore s'ouvre.
 C'est cette identité de couleur qui rend la fusion lisible sans qu'on ait rien

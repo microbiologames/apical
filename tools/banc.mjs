@@ -144,6 +144,63 @@ function dire(ok, titre, detail) { R.push({ ok, titre, detail }); }
     `${(part * 100).toFixed(1)} % des molecules-images a plus de 0,30 um de la paroi (seuil 12 %), sur ${total} echantillons`);
 }
 
+/* 10. la figure de fusion appartient a la membrane et derive avec elle */
+{
+  const dt = 1 / 60;
+  const offA = (co, age) => {
+    /* profondeur du creux au voisinage d'un AGE materiel donne */
+    let m = 0;
+    for (const c of co.membrane.ch) {
+      for (let i = 0; i < c.n; i++) if (Math.abs(c.a[i] - age) < 0.30 && c.off[i] > m) m = c.off[i];
+    }
+    return m;
+  };
+  const pique = (co) => {
+    let m = 0, a = 0;
+    for (const c of co.membrane.ch) for (let i = 0; i < c.n; i++) if (c.off[i] > m) { m = c.off[i]; a = c.a[i]; }
+    return { m, a };
+  };
+
+  /* 1re passe : quand le creux est-il le plus profond ? */
+  let picT = 0, pic = 0;
+  {
+    const hy = new Hyphe({ graine: 21 });
+    const co = new Contenu(hy, { graine: 21 });
+    let t = 0;
+    while (t < 60) {
+      co.maj(dt, 0, {}); hy.avancer(co.avance, dt);
+      const k = pique(co);
+      if (k.m > pic) { pic = k.m; picT = t; }
+      t += dt;
+    }
+  }
+
+  /* 2e passe : on suit CE creux-la, par son age materiel. */
+  const hy = new Hyphe({ graine: 21 });
+  const co = new Contenu(hy, { graine: 21 });
+  let t = 0, age0 = null, long0 = 0, sur = 0, reste = 0;
+  while (t < picT + 2.2) {
+    /* Une fois le pic atteint on COUPE l'exocytose : sinon de nouveaux
+       creux naissent sans cesse au meme endroit dans le repere de l'apex,
+       et on ne distingue plus « le creux a suivi le materiau » de « un
+       autre creux est apparu au meme endroit ». */
+    co.maj(dt, 0, age0 === null ? {} : { exocytose: false });
+    hy.avancer(co.avance, dt);
+    if (age0 === null && t >= picT) { age0 = pique(co).a; long0 = hy.longueur; }
+    t += dt;
+  }
+  const derive = hy.longueur - long0;
+  sur = offA(co, age0 + derive);   // la ou le materiau est arrive
+  reste = offA(co, age0);          // la ou le creux etait, en repere apex
+
+  dire(pic > 0.12 && derive > 0.25 && sur > reste * 1.5,
+    'la figure de fusion appartient a la membrane et derive avec elle',
+    `creux maximal ${(pic * 1000).toFixed(0)} nm (${(pic * 13).toFixed(1)} px au cadrage par defaut) ; `
+    + `exocytose coupee, 2,2 s plus tard : le materiau a recule de ${derive.toFixed(2)} um et `
+    + `le creux l'a suivi — ${(sur * 1000).toFixed(0)} nm la-bas, ${(reste * 1000).toFixed(0)} nm `
+    + `la ou il etait dans le repere de l'apex`);
+}
+
 /* 7. budget */
 {
   const t0 = performance.now();

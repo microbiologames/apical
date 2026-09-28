@@ -227,9 +227,10 @@ td.n{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:now
     </div>
   </div>
 
-  <p class="legende"><strong>Zoomez à fond et regardez une vésicule atteindre la membrane :</strong>
-  elle ralentit, les deux traits se touchent, un pore s'ouvre au centre et s'élargit, et le contenu
-  passe dans l'espace entre membrane et paroi. <strong>Pointeur</strong> déplace la consigne du gradient de calcium, pas le
+  <p class="legende"><strong>Zoomez à fond et suivez la ligne de membrane :</strong> une vésicule
+  la rejoint en ralentissant, les deux traits se touchent, la ligne se détend vers l'intérieur et la
+  poche qui s'ouvre entre elle et la paroi est le contenu déversé. La poche dérive ensuite vers
+  l'épaule avec le matériau, elle ne reste pas en place. <strong>Pointeur</strong> déplace la consigne du gradient de calcium, pas le
   cap : comptez une dizaine de secondes avant que la géométrie bouge. <strong>Calotte</strong> et
   <strong>profil</strong> règlent la fermeture de l'apex. <strong>Paroi neuve</strong> montre les
   traces déposées par chaque exocytose — regardez-les remonter du pôle vers le flanc, c'est
@@ -262,20 +263,39 @@ td.n{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:now
     </section>
 
     <section>
+      <h2>La membrane est une ligne unique</h2>
+      <p>Pas une bande tirée du contour — une bande ne peut que coller à la paroi. Une
+      <strong>polyligne continue</strong>, du flanc gauche, par-dessus l'apex, jusqu'au flanc droit,
+      dont chaque nœud porte l'âge du matériau qu'il représente. On ajoute l'avance de l'apex à tous
+      les âges et la ligne entière glisse vers l'arrière : on ne déplace rien, c'est le repère qui
+      dérive.</p>
+      <p>Une vésicule qui fusionne n'est donc plus un objet qu'on dessine. <strong>Sa membrane
+      s'ajoute à la ligne.</strong> Le surplus de longueur fait mollir la ficelle, elle se détend
+      vers l'intérieur, et le creux qui en résulte <em>est</em> la figure d'oméga. L'espace ainsi
+      ouvert entre paroi et membrane <em>est</em> son lumen : il se remplit de périplasme tout seul,
+      puisque c'est la même couleur.</p>
+      <p>Le modèle est une corde. La perturbation court le long de la ligne à 1,07 µm/s au lieu
+      d'apparaître partout à la fois — c'est ce qui donne la lecture molle. Pendant la fusion la
+      vésicule est physiquement là et on contraint fort ; après, le surplus de membrane est
+      <em>réel</em> : rien ne le ramène à plat, seule la tension l'étale et l'expansion de la
+      calotte le consomme.</p>
+      <p><strong>Mesuré :</strong> creux maximal 493 nm. Exocytose coupée, 2,2 s plus tard le
+      matériau a reculé de 1,25 µm et le creux l'a suivi — 160 nm là-bas contre 87 nm là où il
+      était dans le repère de l'apex.</p>
+    </section>
+
+    <section>
       <h2>Une vésicule n'a pas de couleur à elle</h2>
       <p>Sa membrane <em>est</em> de la membrane. Son lumen <em>est</em> du périplasme — il le
       devient à la seconde où le pore s'ouvre. Il n'y a donc volontairement pas d'entrée
       « vésicule » dans la palette : deux entrées séparées finiraient par diverger, et c'est
       précisément cette identité qui rend la fusion lisible sans qu'on ait rien à expliquer.</p>
-      <p>La fusion dure 0,85 s et se joue en trois temps. <strong>Contact</strong> : la vésicule
-      décélère en approchant et les deux membranes se touchent — à vitesse constante on voyait un
-      choc, pas un contact. <strong>Pore</strong> : une ouverture naît au centre du contact et
-      s'élargit ; c'est un secteur du contour qu'on cesse de dessiner, car un contour fermé ne peut
-      pas montrer une membrane qui s'ouvre. <strong>Oméga</strong> : la vésicule se rabat dans la
-      membrane plasmique, bombée vers le cytoplasme et ouverte vers l'extérieur, et son contenu —
-      déjà de la couleur du périplasme — s'y confond.</p>
-      <p>Les précurseurs libérés restent ensuite plaqués contre la face interne de la paroi et s'y
-      incorporent : <strong>7,1 %</strong> seulement s'en écartent de plus de 0,3 µm.</p>
+      <p>La fusion dure 0,85 s. <strong>Contact</strong> : la vésicule décélère en approchant et les
+      deux membranes se touchent — à vitesse constante on voyait un choc. <strong>Pore</strong> :
+      l'ouverture naît au centre du contact et s'élargit. <strong>Oméga</strong> : la vésicule cesse
+      d'être dessinée, parce qu'elle est devenue un creux de la ligne.</p>
+      <p>Les précurseurs libérés restent plaqués contre la face interne de la paroi et s'y
+      incorporent : environ 10 % seulement s'en écartent de plus de 0,3 µm.</p>
     </section>
 
     <section>
@@ -324,6 +344,7 @@ td.n{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:now
         <tr><td>Exocytoses</td><td class="n">1,89 /s</td><td class="n">—</td></tr>
         <tr><td>Extension par fusion</td><td class="n">157 nm</td><td class="n">—</td></tr>
         <tr><td>Durée d'une fusion</td><td class="n">0,85 s</td><td class="n">—</td></tr>
+        <tr><td>Creux de membrane</td><td class="n">493 nm</td><td class="n">—</td></tr>
         <tr><td>Rayon de virage</td><td class="n">82 µm</td><td class="n">~110 µm*</td></tr>
         <tr><td>Inertie du cap (63 %)</td><td class="n">7,2 s</td><td class="n">—</td></tr>
         <tr><td>Paroi neuve : pleine largeur</td><td class="n">17 s</td><td class="n">—</td></tr>
@@ -332,7 +353,7 @@ td.n{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:now
         <tr><td>Budget logique</td><td class="n">0,18 ms/image</td><td class="n">16,7 ms</td></tr>
       </table></div>
       <p style="margin-top:12px"><em>* unité de croissance hyphale, Trinci. Les valeurs de
-      référence de croissance sont celles de</em> Neurospora crassa. <em>Neuf verdicts, mesurés
+      référence de croissance sont celles de</em> Neurospora crassa. <em>Dix verdicts, mesurés
       sans rendu à chaque modification.</em></p>
     </section>
 
