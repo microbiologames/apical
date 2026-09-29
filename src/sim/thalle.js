@@ -118,10 +118,35 @@ export class Thalle {
     this.dens = new Map();     // cellule 60 um -> um de mycelium
     this.fin = new Map();      // cellule 8 um  -> [idxAxe, i, ...]
 
+    /* UNE COLONIE GREFFEE SUR UN GERME DEJA CONSTRUIT. C'est ce dont le
+       cycle a besoin : le thalle qu'on regarde de loin doit etre le germe
+       qu'on regardait de pres, pas une autre colonie de la meme espece.
+       Chaque tube germinatif devient une pointe macro, avec son axe. */
+    if (opts.germes && opts.germes.length) {
+      for (const g of opts.germes) this.greffer(g.pts, g.th);
+      return;
+    }
     /* Une spore germe par trois tubes germinatifs, repartis. Un seul donnerait
        une colonie qui pousse d'un cote pendant dix minutes. */
     const th0 = this.rng() * TAU;
     for (let i = 0; i < 3; i++) this.semer(0, 0, th0 + (i / 3) * TAU, 0);
+  }
+
+  /**
+   * Greffe un axe deja construit — par la micro — et rend sa pointe.
+   *
+   * On repasse par `inscrire`, qui ne memorise un point que tous les 6 um et
+   * qui pose la densite au passage : l'axe greffe est donc indiscernable
+   * d'un axe que le macro aurait construit lui-meme, et la pointe reprend
+   * exactement ou la micro s'etait arretee.
+   */
+  greffer(pts, th) {
+    const p = this.semer(pts[0][0], pts[0][1], th, 0);
+    for (let i = 1; i < pts.length; i++) {
+      const d = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      this.inscrire(p, pts[i][0], pts[i][1], th, d);
+    }
+    return p;
   }
 
   semer(x, y, th, gen) {

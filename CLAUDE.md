@@ -13,7 +13,7 @@ les captures de contrôle.
 | Commande | Ce qu'elle fait |
 |---|---|
 | `npm run serve` | sert le dépôt tel quel |
-| `npm run banc` | 17 verdicts de mesure, sans rendu, en node |
+| `npm run banc` | 18 verdicts de mesure, sans rendu, en node |
 | `npm run visuel` | captures dans `/tmp/apical-shots` (Playwright) |
 | `npm run visuel:branche` | captures de la page ramification |
 | `npm run visuel:thalle` | captures de la page colonie |
@@ -469,9 +469,10 @@ plasmique, où l'on n'écarte pas les nœuds — on fait dériver le repère.
 ### 12. Le cycle n'est qu'un enchaînement
 
 `src/cycle.js`, `cycle.html`. Germination, croissance apicale, ramification,
-sporocyste, éclatement, vol, retombée — puis germination. **Rien de nouveau
-n'y est simulé.** L'apex avance avec `pasMicro`, le sporocyste est cadré par
-`cadrerSporange`, le flou de fondu est `flouEcran` : si cette page réécrivait
+**recul sur la colonie**, redescente, sporangiophore, sporocyste, éclatement,
+vol, retombée — puis germination. **Rien de nouveau n'y est simulé.** L'apex
+avance avec `pasMicro`, le sporocyste est cadré par `cadrerSporange`, le flou
+de fondu est `flouEcran`, le macro est `Thalle` : si cette page réécrivait
 l'une de ces lois de son côté, la même étape ne se regarderait pas de la même
 façon selon la page qui la montre.
 
@@ -480,12 +481,52 @@ spore que la caméra suit après l'éclatement est instanciée comme une
 `Germination` dormante, tenue telle quelle pendant tout le vol, puis relâchée.
 Il n'y a rien à raccorder à l'atterrissage : c'est le même objet.
 
-**Deux fondus par tour, pas quatre.** Germination et croissance sont la même
-scène — seul le cadrage change, et il change en glissant. Vol et germination
-aussi. Il ne reste à fondre que les deux endroits où l'on change vraiment
-d'objectif, et le fondu y est celui du pont entre les échelles : on
-défocalise, on change d'objectif, on refocalise, **et pendant ce temps les deux
-simulations vivent**.
+**Le thalle est le germe qui a grandi, pas une autre colonie.** Chaque tube
+germinatif est **greffé** sur le macro avec son axe (`Thalle.greffer`), qui le
+ré-échantillonne au pas de 6 µm et pose sa densité au passage : la pointe
+macro reprend exactement où la micro s'était arrêtée. C'est la règle 8 dans
+l'autre sens — en descendant, `depuisMacro` rend l'axe fin ; en montant,
+`greffer` rend l'axe grossier. **Mesuré (verdict 18) : apex exact, 0,0 µm
+d'écart entre ce que la micro avait construit et ce que le macro inscrit.**
+
+On reste en haut **1 h 48**, et pas quatre heures : à quatre heures la colonie
+fait 590 mm pour neuf millimètres de diamètre, chaque hyphe tombe sous le
+dixième de pixel et on ne lit plus qu'un disque floconneux. Vers deux heures
+elle fait 90 mm pour quatre — **on voit les hyphes, les ramifications et le
+front**, et c'est pour ça qu'on monte.
+
+**LE SPORANGIOPHORE COMMENCE PAR ÊTRE UNE BRANCHE.** On ne fond pas vers un
+sporangiophore qui aurait poussé tout seul ailleurs : on branche vraiment, sur
+la mère qu'on regarde, avec le mécanisme de la règle 7 — bourgeon qui émerge
+du cytoplasme maternel, col concave donné par le congé de l'union, tube qui
+s'élargit avec son matériau. Ce qui change, c'est qu'elle **ne rampera pas**.
+
+Et le raccord de direction est le point dur, parce qu'**un fondu ne rattrape
+pas une direction** : si la branche part à droite et que la tige monte tout
+droit, on lit deux objets. Trois choses le rendent exact :
+
+- le cap du sporangiophore est **demandé à l'écran**, pas déduit d'une dérive
+  latérale. `Sporange` reçoit `capImage` et en déduit son pas monde, `KZ`
+  compris — sans compenser le cisaillement de la projection oblique, la tige
+  partait 18° plus haut que demandé ;
+- **on choisit la pointe en haut.** Le cap d'une branche vaut `thMère ± 46–88°`
+  et celui d'une tige ne s'écarte pas de la verticale de plus de 40° : les deux
+  ne se rencontrent pas pour toutes les orientations de mère. Avec trois cents
+  pointes au choix dans la vue macro, il y en a toujours une dont le flanc
+  regarde vers le haut — `viserSporangiophore` la trouve, résidu nul ;
+- **l'origine du stolon est posée pour que la pointe tombe juste.** Un bourgeon
+  naît 3,6 µm sous la paroi, donc décalé sur le côté : la corde qui va de l'axe
+  maternel à sa pointe n'est pas son cap, elle s'en écarte de 4,6° à dix-sept
+  micromètres. On recule donc l'origine le long du cap, de 1,35 µm — très sous
+  le rayon du tube, le stolon recouvre toujours la mère.
+
+**Mesuré : la pointe saute de 0 nm et la direction est tenue à 0,7°.**
+
+**Le fondu est celui du pont entre les échelles**, et la rampe de
+grossissement y est **logarithmique** : entre 13 px/µm sur un apex et 0,04 sur
+une colonie il y a un facteur trois cents, et une rampe linéaire passerait
+90 % du fondu à l'échelle de la colonie. On défocalise, on change d'objectif,
+on refocalise, **et pendant ce temps les trois simulations vivent**.
 
 **Le vol est la seule chose inventée, et elle est assumée.** Une spore emportée
 ne voit plus un substrat : elle voit passer des masses. Trois plans de disques
@@ -578,6 +619,20 @@ Et pour la germination :
 | croissance du tube germinatif | 20,8 µm/min | hyphe mûre : 19,4 |
 | tubes par spore, sur 12 spores | 1 à 3 | 1 à 3 |
 | écart minimal entre deux sites | 83° | > 75° |
+
+Et pour le cycle :
+
+| | mesuré | référence |
+|---|---|---|
+| greffe : apex micro / pointe macro | 0 µm | 0 |
+| ce que la micro a construit / ce que le macro inscrit | 0,0 µm d'écart | pas de 6 µm |
+| colonie à la redescente | 1 h 48, 90 mm, 160 pointes | on voit encore les hyphes |
+| redescente : apex micro / pointe macro | 0 µm | 0 |
+| résidu de visée sur la pointe choisie | 0° | 0 |
+| résidu maximal, toutes orientations de mère | 52° | d'où le choix en haut |
+| la pointe saute au raccord | 0 nm | 0 |
+| direction tenue au raccord | 0,7° | 0 |
+| recul de l'origine du stolon | 1,35 µm | < rayon du tube (5,5) |
 
 Un chiffre documenté sans avoir été mesuré est un chiffre qu'on croit seulement
 avoir. Ça s'est déjà payé.
@@ -812,6 +867,37 @@ partie du travail**, pas après, pendant.
   gonflement** : la spore garde la même taille à l'écran pendant qu'elle
   double. Le grossissement est plafonné à ce qu'il vaut à l'état gonflé, et il
   ne fait ensuite que descendre.
+- **Un fondu ne rattrape pas une direction.** Il couvre un changement
+  d'objectif, pas un changement d'objet. Le sporocyste du cycle repartait tout
+  droit pendant que la branche dont il sortait montait de biais : au sortir du
+  flou on lisait deux tiges différentes. Le cap est donc **demandé à l'écran**
+  et non déduit d'une dérive latérale — et il faut alors compenser le
+  cisaillement de la projection oblique, `+ KZ` par micromètre de z, sans quoi
+  la tige part 18° plus haut que demandé. `KZ` vit pour cette raison dans la
+  **simulation**, pas dans le rendu.
+- **Une contrainte impossible en bas se résout en haut.** Le cap d'une branche
+  vaut `thMère ± 46–88°`, celui d'un sporangiophore ne s'écarte pas de la
+  verticale de plus de 40° : pour une mère qui descend, aucun couple
+  (côté, angle) ne convient, et on attendait indéfiniment qu'elle tourne.
+  Vue de la colonie, il y a trois cents pointes et il s'en trouve toujours une
+  dont le flanc regarde vers le haut. **Le choix de la pointe et le raccord de
+  direction sont le même problème.**
+- **La corde d'un bourgeon n'est pas son cap.** Il naît 3,6 µm sous la paroi,
+  donc décalé sur le côté : le vecteur qui va de l'axe maternel à sa pointe
+  s'écarte de son cap de 4,6° à dix-sept micromètres. En faisant partir la tige
+  de l'axe, elle repartait dans la bonne direction mais sa pointe sautait d'un
+  micromètre et demi — **et c'est la pointe qu'on regarde**. On recule
+  l'origine le long du cap.
+- **Un corps repris en cours de route doit aussi reprendre son horloge.** Le
+  sporangiophore du cycle démarre à la hauteur de la branche (`z0`), mais
+  `monter` est monotone : rangé au début de la phase, il restait immobile
+  jusqu'à six secondes, le temps que la rampe le rattrape — pile après le
+  fondu, c'est-à-dire à l'endroit du cycle où l'on regarde le plus
+  attentivement. On inverse la loi de la phase pour entrer au bon instant.
+- **Un état de scène lu sur l'objet pendant un fondu est déjà celui d'après.**
+  `this.etape` bascule au sommet du flou alors qu'on dessine encore la scène
+  précédente : la caméra cadrait la scène d'arrivée sur l'image de départ.
+  L'étape se **passe en argument**.
 - **Une capture prise N millisecondes après un changement de phase ne montre
   pas ce qu'on croit.** L'éclatement dure 1,6 s simulée, soit 0,4 s réelle à
   ×4 : la capture arrivait régulièrement quatre images après le basculement en

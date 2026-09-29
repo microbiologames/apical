@@ -25,9 +25,12 @@
 import { Scene } from './scene.js';
 import { hexToRgba, mix32, fade32, shade32, Screen } from '../core/pixel.js';
 import { clamp, lerp, smoothstep, noise1, TAU } from '../core/util.js';
-import { R_SAC, R_COL, R_TIGE } from '../sim/sporange.js';
+import { R_SAC, R_COL, R_TIGE, KZ } from '../sim/sporange.js';
 
-const KZ = 0.26;          // part de z rendue dans l'image
+/* KZ — la part de z rendue dans l'image — vit dans la SIMULATION et non
+   ici : c'est elle qui en depend, pour viser un cap a l'ecran. Deux copies
+   finiraient par diverger, et la tige ne partirait plus dans la direction
+   de la branche dont elle sort. */
 /* Profondeur de champ, en um : ecart au plan de mise au point pour le flou
    maximal. Elle se REFERME quand on monte en grossissement — c'est ce que
    fait un objectif reel, et c'est la seule chose qui isole une spore dans un

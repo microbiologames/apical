@@ -99,6 +99,9 @@ export class VueGermination extends Scene {
    */
   interieur(germ, P, opts) {
     const sc = this.sc, sp = germ.spore;
+    /* Pas de spore : on redescend du macro sur une hyphe etablie, il n'y a
+       qu'un tube et son contenu, et `Scene` s'en charge deja. */
+    if (!sp) return;
     const K = this.pxUm;
     const pt = this._gpt || (this._gpt = { x: 0, y: 0 });
     /* Rayon de reference pour les tailles : le rayon COURANT du corps. Un

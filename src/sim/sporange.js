@@ -32,6 +32,29 @@
 
 import { clamp, lerp, smoothstep, mulberry32, TAU } from '../core/util.js';
 
+/* PART DE Z RENDUE DANS L'IMAGE. Elle vit ici et non dans le rendu, parce
+   que la simulation en depend : pour qu'un sporangiophore parte dans une
+   direction donnee A L'ECRAN — celle de la branche dont il sort —, il faut
+   connaitre le cisaillement de la projection oblique. `vueSporange.js` la
+   lit ici ; deux copies finiraient par diverger et la tige ne partirait
+   plus dans la direction demandee. */
+export const KZ = 0.26;
+
+/* Longueur d'image parcourue par micrometre de z. C'est ce que valait
+   l'ancienne formule `(sin i . 0,16 ; -cos i . 0,55)` une fois le
+   cisaillement KZ ajoute : hypot(0 ; 0,55 + 0,26) = 0,81. La garder
+   identique, c'est garder le raccourci — 380 um de tige pour 308 dans
+   l'image — et donc le flou qui raconte la montee. */
+export const PENTE = 0.81;
+
+/* Ecart maximal a la verticale, en radians. Un sporangiophore est
+   negativement gravitrope : il monte. Au-dela de 40 degres de penche il ne
+   monte plus, il rampe — et le raccourci, qui est tout le sujet de la
+   scene, ne se lit plus. C'est cette borne qui decide si le cycle peut
+   brancher son sporangiophore tout de suite ou s'il doit attendre que la
+   mere presente un flanc utilisable. */
+export const CAP_MAX = 0.70;
+
 /* Geometrie, en um. */
 export const Z_TOTAL = 380;       // hauteur finale du sporangiophore
 export const R_SAC = 40;          // rayon du sporocyste
@@ -84,6 +107,46 @@ export const PHASES = ['rhizoides', 'montee', 'renflement', 'cavite', 'columelle
    voir le mecanisme, pas d'attendre. */
 const DUREES = { rhizoides: 7, montee: 26, renflement: 13, cavite: 7, columelle: 8, clivage: 24, pression: 999, eclatement: 1.6, envol: 999 };
 
+/**
+ * OU BRANCHER UN SPORANGIOPHORE SUR UNE HYPHE, pour que le raccord tienne.
+ *
+ * Un sporangiophore du cycle n'apparait pas : c'est une BRANCHE qu'on a vue
+ * naitre sur le thalle, avec son bourgeon qui emerge du cytoplasme maternel
+ * et son col concave, et qui se met a monter au lieu de ramper. Le passage
+ * d'une vue a l'autre se fait dans un fondu, mais un fondu ne rattrape pas
+ * une direction : si la branche part a droite et que la tige monte tout
+ * droit, on lit deux objets differents.
+ *
+ * La contrainte est asymetrique. Une branche sort a 46-88 degres de sa mere
+ * (Trinci) : son cap est donc `thMere +- angle`, deux arcs de 42 degres. Un
+ * sporangiophore, lui, monte, et on ne peut l'incliner que de CAP_MAX. On
+ * cherche donc le couple (cote, angle) dont le cap tombe dans le cone du
+ * haut — et s'il n'y en a pas, on renvoie le meilleur avec son residu, a
+ * charge de l'appelant d'attendre que la mere ait tourne.
+ *
+ * @param {number} thMere  cap de la mere au point de branchement, rad
+ * @returns {{cote:number, angle:number, cap:number, residu:number}}
+ */
+export function viserSporangiophore(thMere) {
+  const HAUT = -Math.PI / 2;
+  let best = null;
+  for (const cote of [-1, 1]) {
+    /* 46 a 88 degres, par pas d'un degre : la fourchette de Trinci, bornes
+       exclues pour ne pas tangenter la mere ni lui rentrer dedans. */
+    for (let d = 46; d <= 88; d++) {
+      const angle = d * Math.PI / 180;
+      const cap = thMere + cote * angle;
+      const ecart = ((cap - HAUT + Math.PI * 3) % TAU) - Math.PI;
+      const residu = Math.max(0, Math.abs(ecart) - CAP_MAX);
+      if (!best || residu < best.residu - 1e-9
+          || (residu <= best.residu + 1e-9 && Math.abs(ecart) < Math.abs(best.ecart))) {
+        best = { cote, angle, cap: HAUT + clamp(ecart, -CAP_MAX, CAP_MAX), ecart, residu };
+      }
+    }
+  }
+  return best;
+}
+
 export class Sporange {
   /** `base` : le point du stolon d'ou tout part, en um monde. */
   constructor(opts = {}) {
@@ -94,7 +157,8 @@ export class Sporange {
 
     this.t = 0;
     this.tPhase = 0;
-    this.phase = 'rhizoides';
+    this.tRhizo = 0;
+    this.phase = opts.phase0 ?? 'rhizoides';
     this.z = 0;                 // hauteur de la pointe
     this.rCol = 0;              // rayon de la columelle
     this.rSac = 0;              // rayon au repos du sac
@@ -106,9 +170,23 @@ export class Sporange {
 
     /* Le sporangiophore : une polyligne 3D. Il monte surtout en z — vers
        l'observateur — et un peu dans l'image. C'est ce qui le fait sortir
-       du plan de mise au point en quelques micrometres. */
+       du plan de mise au point en quelques micrometres.
+
+       SON CAP EST CELUI QU'IL AURA A L'ECRAN, pas une derive laterale.
+       L'ancienne ecriture — un angle `incl` qui melangeait 0,16 en x et
+       0,55 en y — ne permettait de viser qu'a trois degres pres autour de
+       la verticale, et ne disait rien du cisaillement de la projection.
+       Or, dans le cycle, la tige DOIT partir dans la direction de la
+       branche dont elle sort : le raccord se voit. On demande donc
+       directement un cap image, et on en deduit le pas monde. */
     this.tige = [{ x: this.x0, y: this.y0, z: 0 }];
-    this.incl = (this.rng() * 0.5 - 0.25);   // derive laterale, rad
+    this.cap = clamp(opts.capImage ?? (-Math.PI / 2 + (this.rng() * 0.5 - 0.25) * 0.24),
+                     -Math.PI / 2 - CAP_MAX, -Math.PI / 2 + CAP_MAX);
+    /* Pas monde par micrometre de z. Le `+ KZ` compense le cisaillement :
+       sans lui, la tige partait 18 degres plus haut que demande, parce que
+       la projection remonte deja l'image de KZ par micrometre de z. */
+    this.ux = PENTE * Math.cos(this.cap);
+    this.uy = PENTE * Math.sin(this.cap) + KZ;
 
     /* Les rhizoides : trois a cinq racines qui plongent. On ne les verra
        presque pas — ils sont sous le plan de mise au point des la deuxieme
@@ -138,6 +216,27 @@ export class Sporange {
       dechire: new Uint8Array(N_SAC),
     };
     this.spores = [];
+
+    /* DEPART EN COURS DE ROUTE. Dans le cycle, la tige existe deja quand le
+       sporocyste prend la main : c'est une branche qu'on a vue naitre et
+       pousser. On la rejoint a la hauteur equivalente pour que le raccord
+       tombe juste — `z0` est la longueur d'image de la branche divisee par
+       PENTE. */
+    if (opts.z0 > 0) {
+      this.monter(opts.z0);
+      /* Et on entre dans la montee A L'INSTANT ou sa loi passe par z0.
+         Sans ca, `monter` etant monotone, la tige restait immobile le temps
+         que la rampe la rattrape — jusqu'a six secondes d'arret pile apres
+         le fondu, c'est-a-dire a l'endroit du cycle ou l'on regarde le
+         plus attentivement. */
+      this.phase = 'montee';
+      let lo = 0, hi = 1;
+      for (let k = 0; k < 28; k++) {
+        const m = (lo + hi) / 2;
+        if (Z_TOTAL * (0.06 + 0.94 * smoothstep(0, 1, m)) < this.z) lo = m; else hi = m;
+      }
+      this.tPhase = lo * DUREES.montee;
+    }
   }
 
   /** Position 3D de la pointe du sporangiophore. */
@@ -156,8 +255,17 @@ export class Sporange {
     const P = this.phase;
     const u = clamp(this.tPhase / DUREES[P], 0, 1);
 
+    /* LES RHIZOIDES ONT LEUR PROPRE HORLOGE, et non celle de la premiere
+       phase. C'est le meme evenement que la tige — ils poussent ensemble —
+       mais dans le cycle la tige existe DEJA quand le sporocyste prend la
+       main : elle sort d'une branche qu'on a vue naitre. Le sporange y
+       demarre donc en phase « montee », et des rhizoides accroches a la
+       phase « rhizoides » ne seraient jamais sortis. */
+    this.tRhizo += dt;
+    const ur = clamp(this.tRhizo / DUREES.rhizoides, 0, 1);
+    for (const r of this.rhizoides) r.long = r.max * smoothstep(0, 1, ur);
+
     if (P === 'rhizoides') {
-      for (const r of this.rhizoides) r.long = r.max * smoothstep(0, 1, u);
       /* La tige demarre en meme temps : c'est un seul evenement. */
       this.monter(Z_TOTAL * 0.06 * smoothstep(0, 1, u));
       if (u >= 1) this.passer('montee');
@@ -266,16 +374,16 @@ export class Sporange {
       const dz = Math.min(PAS, z - this.z);
       this.z += dz;
       const p = this.pointe;
-      /* L'INCLINAISON. A 0,16 dans l'image pour 1 en z, la tige pointait
-         quasiment sur l'observateur : on la voyait EN BOUT, et la columelle
-         — un corps de revolution autour de cet axe — sortait en lentille
-         plate de 80 px de large pour 15 de haut au lieu d'un dome. A 0,55,
-         l'axe fait environ 55 degres avec la ligne de visee : le dome est
-         un dome, et la montee en z reste entiere, donc le flou raconte la
+      /* LA PENTE. A 0,16 d'image pour 1 de z, la tige pointait quasiment
+         sur l'observateur : on la voyait EN BOUT, et la columelle — un
+         corps de revolution autour de cet axe — sortait en lentille plate
+         de 80 px de large pour 15 de haut au lieu d'un dome. A 0,81, l'axe
+         fait environ 51 degres avec la ligne de visee : le dome est un
+         dome, et la montee en z reste entiere, donc le flou raconte la
          meme chose. C'est lui qui dit qu'on s'eleve, pas la pente. */
       this.tige.push({
-        x: p.x + Math.sin(this.incl) * dz * 0.16,
-        y: p.y - Math.cos(this.incl) * dz * 0.55,
+        x: p.x + this.ux * dz,
+        y: p.y + this.uy * dz,
         z: p.z + dz,
       });
     }

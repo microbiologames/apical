@@ -10,6 +10,7 @@ import { Thalle, V_MICRO, UCH, R_VIRAGE } from '../src/sim/thalle.js';
 import { depuisMacro } from '../src/sim/hyphe.js';
 import { Sporange, PHASES, R_SAC, R_COL, Z_TOTAL } from '../src/sim/sporange.js';
 import { Germination, Spore, PHASES as PHASES_G, R_DORM, R_GONFLE } from '../src/sim/germination.js';
+import { viserSporangiophore, PENTE, KZ, CAP_MAX } from '../src/sim/sporange.js';
 import { pasMicro } from '../src/main.js';
 
 const KOM = 0.016, TAU_OM = 3.5;
@@ -663,6 +664,105 @@ function dire(ok, titre, detail) { R.push({ ok, titre, detail }); }
     + `silhouette, qui est en ${morceaux + 1} morceau ; le tube pousse a ${vitesse.toFixed(1)} um/min ; `
     + `sur 12 spores, ${tubesMin} a ${tubesMax} tubes, sites separes d'au moins `
     + `${ecartMin.toFixed(0)} degres`);
+}
+
+/* 18. le cycle ne coupe pas l'organisme : on greffe, on monte, on redescend,
+      et le sporocyste reprend la branche au degre pres */
+{
+  /* Trois soudures, et chacune peut casser sans qu'on la voie : le germe
+     qui devient colonie, la pointe macro sur laquelle on redescend, et la
+     branche que le sporangiophore reprend. La troisieme est la seule qu'on
+     regarde vraiment — c'est un raccord de direction, et un fondu ne
+     rattrape pas une direction. */
+  const dt = 1 / 60;
+
+  /* (a) LA GREFFE. Le thalle doit repartir des axes du germe, pas de zero. */
+  const g = new Germination({ graine: 11 });
+  while (g.tubes.length === 0 || g.principal.hy.longueur < 30) g.maj(dt, {});
+  const germes = [], apex = [];
+  let longMicro = 0;
+  for (const tg of g.tubes) {
+    const hy = tg.hy, pts = [];
+    for (let i = 0; i < hy.ax.length; i++) pts.push([hy.ax[i], hy.ay[i]]);
+    pts.push([hy.x, hy.y]);
+    germes.push({ pts, th: hy.th });
+    apex.push([hy.x, hy.y]);
+    for (let i = 1; i < pts.length; i++) longMicro += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  }
+  const th = new Thalle({ graine: 5, vMicro: V_MICRO, germes });
+  let dApex = 0;
+  for (let i = 0; i < th.pointes.length; i++) {
+    dApex = Math.max(dApex, Math.hypot(th.pointes[i].x - apex[i][0], th.pointes[i].y - apex[i][1]));
+  }
+  const ecartLong = Math.abs(th.total - longMicro);
+
+  /* (b) ON MONTE. La colonie pousse deux heures, puis on redescend sur la
+         pointe qui offre un flanc vers le haut. */
+  while (th.t < 1.8 * 3600) th.maj(1);
+  let best = null, bd = 1e9, visee = null;
+  for (const p of th.pointes) {
+    if (!p.vive || p.axe.n < 6) continue;
+    const v = viserSporangiophore(p.th);
+    const score = v.residu * 1000 - Math.hypot(p.x, p.y) * 0.001;
+    if (score < bd) { bd = score; best = p; visee = v; }
+  }
+  const hy = depuisMacro(best.axe.xs, best.axe.ys, best.axe.n, best.th, 210, { bout: [best.x, best.y] });
+  const dDescente = Math.hypot(hy.x - best.x, hy.y - best.y);
+
+  /* (c) LE RACCORD. On branche au cap vise, on laisse la branche sortir, et
+         on demande au sporocyste de la reprendre : meme origine, meme cap
+         image, meme longueur d'image. */
+  const co = new Contenu(hy, { graine: 3 });
+  let phi = 0;
+  for (let i = 0; i < 60 * 20; i++) pasMicro(hy, co, dt, phi, {});
+  const s = 12;
+  const p = hy.atS(s, {});
+  const br = brancherSur(hy, { s, cote: visee.cote, angle: visee.angle, graine: 4 });
+  const coB = new Contenu(br, { graine: 4, sMax: Math.max(1, br.total - br.Lb - 0.4) });
+  while (Math.hypot(br.x - p.x, br.y - p.y) < 17) {
+    pasMicro(br, coB, dt, 0, {});
+    coB.etendre(br.total - br.Lb - 0.4);
+  }
+  const capBranche = br.th;
+  const L = Math.hypot(br.x - p.x, br.y - p.y);
+  /* Origine reculee le long du cap pour que l'apex tombe juste : c'est ce
+     que fait le cycle, et c'est ce qu'on mesure. */
+  const ox = br.x - Math.cos(visee.cap) * L, oy = br.y - Math.sin(visee.cap) * L;
+  const dOrigine = Math.hypot(ox - p.x, oy - p.y);
+  const sp = new Sporange({ graine: 9, x: ox, y: oy, th: Math.atan2(p.ty, p.tx),
+                            capImage: visee.cap, z0: L / PENTE });
+  const q = sp.pointe;
+  /* La direction et la longueur telles qu'on les VOIT : la projection
+     oblique remonte l'image de KZ par micrometre de z, il faut donc la
+     retirer pour comparer a la branche, qui est a z = 0. */
+  const capTige = Math.atan2(q.y - oy - KZ * q.z, q.x - ox);
+  const Ltige = Math.hypot(q.x - ox, q.y - oy - KZ * q.z);
+  const dCap = Math.abs(((capTige - capBranche + Math.PI * 3) % (Math.PI * 2)) - Math.PI) * 180 / Math.PI;
+  /* Ce qu'on regarde vraiment : de combien la POINTE saute au raccord. */
+  const dApexRaccord = Math.hypot(q.x - br.x, q.y - br.y - KZ * q.z);
+  const dL = Math.abs(Ltige - L);
+
+  /* (d) et la visee tient sur TOUTES les orientations de mere possibles ? */
+  let pireResidu = 0;
+  for (let d = 0; d < 360; d += 3) {
+    pireResidu = Math.max(pireResidu, viserSporangiophore(d * Math.PI / 180).residu);
+  }
+
+  dire(dApex < 1e-9 && ecartLong < 7 && dDescente < 1e-6
+       && visee.residu < 1e-9 && dCap < 1.0 && dApexRaccord < 0.05 && dL < 0.05
+       && dOrigine < 2.5 && pireResidu < 0.95,
+    'le cycle ne coupe pas l organisme, et le sporocyste reprend la branche',
+    `greffe : ${germes.length} germes, apex a ${dApex.toExponential(1)} um de la pointe macro, `
+    + `${ecartLong.toFixed(1)} um d'ecart entre ce que la micro avait construit et ce que le `
+    + `macro inscrit (pas de 6 um) ; `
+    + `apres ${(th.t / 3600).toFixed(1)} h la colonie fait ${(th.total / 1000).toFixed(0)} mm et `
+    + `${th.pointes.filter((x) => x.vive).length} pointes, on redescend sur une pointe a `
+    + `${dDescente.toExponential(1)} um, residu de visee ${(visee.residu * 180 / Math.PI).toFixed(1)} deg ; `
+    + `la branche sort a ${(capBranche * 180 / Math.PI).toFixed(1)} deg sur ${L.toFixed(1)} um, `
+    + `la tige repart a ${(capTige * 180 / Math.PI).toFixed(1)} deg sur ${Ltige.toFixed(1)} um `
+    + `(ecart ${dCap.toFixed(2)} deg, la pointe saute de ${(dApexRaccord * 1000).toFixed(0)} nm, `
+    + `origine reculee de ${dOrigine.toFixed(2)} um) ; `
+    + `residu maximal sur 120 orientations de mere : ${(pireResidu * 180 / Math.PI).toFixed(0)} deg`);
 }
 
 /* 7. budget */

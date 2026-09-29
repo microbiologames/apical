@@ -264,10 +264,16 @@ export class Germination {
     const graine = opts.graine ?? 11;
     this.rng = mulberry32(graine ^ 0x5eed);
     this.graine = graine;
-    this.spore = new Spore({ ...opts, graine });
+    /* UN THALLE MICRO SANS SPORE. En redescendant du macro, le cycle
+       rattache un interieur a un axe qui a deja une histoire : il n'y a
+       plus de spore a dessiner, mais tout le reste — les tiges, leur
+       contenu, la loi de `pasMicro`, la regle de Trinci — est le meme.
+       Une seconde classe pour ce cas-la finirait par diverger de
+       celle-ci. */
+    this.spore = opts.tubes ? null : new Spore({ ...opts, graine });
     this.t = 0; this.tPhase = 0;
-    this.phase = 'dormance';
-    this.tubes = [];
+    this.phase = opts.tubes ? 'tube' : 'dormance';
+    this.tubes = opts.tubes ?? [];
 
     /* UN, DEUX OU TROIS TUBES. C'est ce qu'on voit sur une plaque : la
        plupart des spores en sortent un, une bonne part deux, quelques-unes
@@ -291,7 +297,7 @@ export class Germination {
 
   /** La liste que la `Scene` attend : la spore, puis les tubes. */
   get tiges() {
-    const l = [{ hy: this.spore, co: null }];
+    const l = this.spore ? [{ hy: this.spore, co: null }] : [];
     for (const t of this.tubes) l.push(t);
     return l;
   }
@@ -308,6 +314,9 @@ export class Germination {
   maj(dt, opts = {}) {
     this.t += dt; this.tPhase += dt;
     const sp = this.spore;
+    /* Sans spore, il ne reste que des tiges : c'est un thalle micro, et il
+       n'a plus de phases a traverser. */
+    if (!sp) { this.majTiges(dt, opts); return; }
     const P = this.phase;
     const u = clamp(this.tPhase / DUREES[P], 0, 1);
 
@@ -371,12 +380,24 @@ export class Germination {
       }
     }
 
-    /* Les tubes poussent par leur apex, avec la loi de `main.js` et pas une
-       autre : si la germination reecrivait le bilan des fusions de son
-       cote, un tube germinatif ne pousserait plus comme une hyphe. */
+    this.majTiges(dt, opts);
+  }
+
+  /**
+   * Les tiges poussent par leur apex, avec la loi de `main.js` et pas une
+   * autre : si la germination reecrivait le bilan des fusions de son cote,
+   * un tube germinatif ne pousserait plus comme une hyphe.
+   */
+  majTiges(dt, opts) {
     for (const tg of this.tubes) {
       const hy = tg.hy;
-      tg.phiCible += ((noise1(this.t * 0.055, tg.sem) - 0.5) * 1.5 - tg.phiCible) * clamp(dt * 0.9, 0, 1);
+      /* UN SPORANGIOPHORE NE SERPENTE PAS. C'est la seule hyphe du cycle
+         qui va quelque part : elle monte, et elle est negativement
+         gravitrope. Laissee a la derive du bruit, elle tournait de
+         plusieurs degres pendant les quarante secondes d'amorce et le cap
+         ne tombait plus sur celui du sporocyste qui la reprend. */
+      const cible = tg.droit ? 0 : (noise1(this.t * 0.055, tg.sem) - 0.5) * 1.5;
+      tg.phiCible += (cible - tg.phiCible) * clamp(dt * 0.9, 0, 1);
       pasMicro(hy, tg.co, dt, tg.phiCible, opts);
       tg.co.etendre(hy.total - hy.Lb - 0.4);
     }

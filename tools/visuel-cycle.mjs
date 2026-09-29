@@ -30,7 +30,10 @@ const etat = () => p.evaluate(() => {
     etape: a.etape, fondu: a.fondu ? +a.fondu.u.toFixed(2) : null,
     t: +a.t.toFixed(0), tours: a.tours, fps: Math.round(a.fps),
     px: +a.px.toFixed(2),
-    detail: a.etape === 'sporulation' ? a.sp.phase
+    cap: a.cap ? +(a.cap * 180 / Math.PI).toFixed(1) : null,
+    residu: a.residu ? +(a.residu * 180 / Math.PI).toFixed(1) : 0,
+    detail: a.etape === 'thalle' ? (a.th.t / 3600).toFixed(1) + ' h / ' + (a.th.total / 1000).toFixed(0) + ' mm'
+      : a.etape === 'sporulation' ? a.sp.phase
       : a.etape === 'vol' ? 'v=' + a.vol.v.toFixed(2)
       : a.g.phase + '/' + a.g.tubes.length + ' tubes',
   });
@@ -51,17 +54,37 @@ await tirer('0-gonflement');
 await attendre(() => globalThis.apical.etape === 'croissance');
 await p.waitForTimeout(1500); await tirer('1-croissance');
 await p.waitForTimeout(6000); await tirer('2-ramification');
-/* Le fondu vers la sporulation, pris au sommet du flou. */
-await attendre(() => globalThis.apical.fondu && globalThis.apical.fondu.u > 0.42 && globalThis.apical.fondu.u < 0.62);
-await tirer('3-fondu');
+/* LE THALLE : on recule, la colonie pousse, on redescend. Deux images — le
+   sommet du flou en montant, et la colonie a deux heures. */
+await attendre(() => globalThis.apical.fondu && globalThis.apical.fondu.vers === 'thalle'
+  && globalThis.apical.fondu.u > 0.42 && globalThis.apical.fondu.u < 0.62);
+await tirer('3-montee');
+await attendre(() => globalThis.apical.etape === 'thalle' && globalThis.apical.th.t > 1.4 * 3600);
+await tirer('4-thalle');
+
+/* L'AMORCE : la branche qui deviendra sporangiophore, prise deux fois —
+   au bourgeon, puis juste avant le fondu. C'est le raccord qu'on regarde. */
+await attendre(() => globalThis.apical.etape === 'amorce');
+await p.waitForTimeout(700); await tirer('5-bourgeon');
+await attendre(() => globalThis.apical.etape === 'amorce'
+  && Math.hypot(globalThis.apical.amorce.hy.x - globalThis.apical.jonction.x,
+                globalThis.apical.amorce.hy.y - globalThis.apical.jonction.y) > 15);
+await tirer('6-amorce');
+/* Le fondu, pris au sommet du flou, puis la premiere image d'apres : c'est
+   LE raccord de direction, celui qu'aucun flou ne rattrape. */
+await attendre(() => globalThis.apical.fondu && globalThis.apical.fondu.vers === 'sporulation'
+  && globalThis.apical.fondu.u > 0.42 && globalThis.apical.fondu.u < 0.62);
+await tirer('7-fondu');
+await attendre(() => globalThis.apical.etape === 'sporulation' && !globalThis.apical.fondu);
+await tirer('8-reprise');
 await attendre(() => globalThis.apical.etape === 'sporulation' && globalThis.apical.sp.rSac > 30);
-await tirer('4-sporocyste');
+await tirer('9-sporocyste');
 await attendre(() => globalThis.apical.etape === 'sporulation' && globalThis.apical.sp.phase === 'eclatement');
-await p.waitForTimeout(260); await tirer('5-eclatement');
+await p.waitForTimeout(260); await tirer('10-eclatement');
 await attendre(() => globalThis.apical.etape === 'vol' && globalThis.apical.tEtape > 2);
-await tirer('6-vol');
+await tirer('11-vol');
 await attendre(() => globalThis.apical.etape === 'vol' && globalThis.apical.vol.v < 0.35);
-await tirer('7-retombee');
+await tirer('12-retombee');
 await attendre(() => globalThis.apical.tours >= 1);
-await p.waitForTimeout(1200); await tirer('8-tour2');
+await p.waitForTimeout(1200); await tirer('13-tour2');
 await br.close(); srv.close();
