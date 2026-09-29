@@ -5,11 +5,12 @@ en pixel art vu au microscope. Sans dépendance, sans build.
 
 ```
 npm run serve           # http://localhost:8080/
-npm run banc            # 15 verdicts de mesure
+npm run banc            # 16 verdicts de mesure
 npm run visuel          # captures de contrôle
 npm run visuel:branche  # captures de la page ramification
 npm run visuel:thalle   # captures de la page colonie
 npm run visuel:monde    # captures du pont entre les deux échelles
+npm run visuel:sporange # captures de la sporulation
 ```
 
 Trois optiques : contraste de phase, fond noir, microscopie électronique.
@@ -32,6 +33,11 @@ on clique sur une pointe, on descend sur son apex, on remonte. L'axe n'est
 jamais interrompu — zoomer attache un intérieur à un axe qui existe déjà — et
 le fondu dure exactement le temps que met le réservoir apical à se remplir,
 pendant lequel la colonie entière vit.
+
+`sporange.html` est la **sporulation**, forme sporocyste : rhizoïdes,
+sporangiophore qui monte vers l'observateur, columelle, sac qui se remplit de
+spores par clivage, puis déchirure et envol. La mise au point suit la pointe —
+c'est elle qui raconte la scène.
 
 `ramification.html` est la proposition qui a précédé : trois concepts
 d'animation, avec les silhouettes calculées hors ligne. Le mécanisme retenu

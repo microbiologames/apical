@@ -1,0 +1,161 @@
+<title>Le sporocyste</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;450;600&display=swap">
+<style>
+:root{
+  color-scheme: light;
+  --ground:#efece4; --surface:#e3ded2; --surface-2:#d8d2c4;
+  --ink:#1d1f22; --ink-2:#5d5f64; --ink-3:#8a8b8f; --rule:#c8c1b0;
+  --brass:#8a6520; --brass-soft:#b08b3d; --stage:#0a0b0d;
+  /* schema : memes roles que dans la simulation */
+  --paroi:#b9b2a2; --peri:#e7e3d8; --memb:#4a463f; --cyto:#a9a495;
+  --serif:"Fraunces",Georgia,serif;
+  --sans:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  color-scheme: dark;
+  --ground:#0c0d10; --surface:#15171b; --surface-2:#1d2026;
+  --ink:#e9e6df; --ink-2:#a2a49f; --ink-3:#74767b; --rule:#2a2e35;
+  --brass:#cfae6c; --brass-soft:#9d854f; --stage:#08090b;
+  --paroi:#8d939c; --peri:#4e545e; --memb:#c3c9d2; --cyto:#282b31;
+}}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --ground:#0c0d10; --surface:#15171b; --surface-2:#1d2026;
+  --ink:#e9e6df; --ink-2:#a2a49f; --ink-3:#74767b; --rule:#2a2e35;
+  --brass:#cfae6c; --brass-soft:#9d854f; --stage:#08090b;
+  --paroi:#8d939c; --peri:#4e545e; --memb:#c3c9d2; --cyto:#282b31;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.page{max-width:1120px;margin:0 auto;padding-inline:16px;padding-block:28px 64px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--brass);margin:0 0 10px}
+h1{font-family:var(--serif);font-optical-sizing:auto;font-weight:600;font-size:clamp(2rem,6vw,3rem);line-height:1.05;letter-spacing:-.015em;margin:0 0 12px;text-wrap:balance}
+.lead{margin:0 0 26px;max-width:62ch;color:var(--ink-2);font-size:clamp(15px,1.9vw,17px)}
+.lead b{color:var(--ink);font-weight:600}
+.instrument{border:1px solid var(--rule);border-radius:3px;overflow:hidden;background:var(--surface)}
+#vue{position:relative;background:var(--stage);overflow:hidden;display:grid;place-items:center;height:min(68vh,720px);min-height:340px}
+canvas{image-rendering:pixelated;display:block;touch-action:none}
+#bandeau{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;gap:12px;align-items:baseline;pointer-events:none;padding:9px 13px;font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:#8f9299;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+#phase{color:#d6bc86;font-weight:500;font-style:normal}
+#etat{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;text-transform:none;letter-spacing:.04em}
+#pupitre{background:var(--surface-2);border-top:1px solid var(--rule);padding:11px 13px;display:flex;flex-direction:column;gap:9px}
+.rangee{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+.rangee>span{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+button{font-family:var(--sans);font-size:12.5px;font-weight:450;color:var(--ink);background:transparent;border:1px solid var(--rule);border-radius:2px;padding:4px 10px;cursor:pointer}
+button:hover{background:var(--surface);border-color:var(--brass-soft)}
+button:focus-visible{outline:2px solid var(--brass);outline-offset:1px}
+button[aria-pressed="true"]{background:var(--brass);border-color:var(--brass);color:var(--ground);font-weight:600}
+button[disabled]{opacity:.42;cursor:default}
+button[disabled]:hover{background:transparent;border-color:var(--rule)}
+.curseur{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);flex:1 1 220px}
+.curseur input[type=range]{flex:1;min-width:120px;accent-color:var(--brass)}
+.curseur output{font-size:11px;text-transform:none;letter-spacing:0;color:var(--ink);min-width:3.6em;font-variant-numeric:tabular-nums}
+#legende{font-size:13px;color:var(--ink-2);margin:2px 0 0;min-height:2.6em;max-width:70ch}
+#chiffres{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+#chiffres b{color:var(--ink);font-weight:500}
+.colonnes{margin-top:44px;display:grid;gap:34px 46px;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));align-items:start}
+h2{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--brass);margin:0 0 10px;padding-bottom:7px;border-bottom:1px solid var(--rule)}
+.colonnes p{margin:0 0 12px;max-width:62ch}
+.colonnes p:last-child{margin-bottom:0}
+.colonnes b{font-weight:600}
+em{font-style:italic;color:var(--ink-2)}
+.mesures{margin:44px 0 0;border-top:1px solid var(--rule)}
+.mesures table{width:100%;border-collapse:collapse;font-size:13px}
+.mesures caption{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--brass);text-align:left;padding:14px 0 10px}
+.mesures th,.mesures td{text-align:left;padding:6px 14px 6px 0;border-bottom:1px solid var(--rule);vertical-align:baseline}
+.mesures th{font-weight:450;color:var(--ink-2)}
+.mesures td{font-family:var(--mono);font-size:12px;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
+.mesures td.ref{color:var(--ink-3);white-space:normal}
+.source{margin-top:40px;padding-top:16px;border-top:1px solid var(--rule);font-size:12.5px;color:var(--ink-3);max-width:76ch}
+.source a{color:var(--brass);text-underline-offset:2px}
+@media (max-width:620px){#vue{height:56vh;min-height:320px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="page">
+  <p class="eyebrow">Croissance apicale — reproduction asexuée</p>
+  <h1>Le sporocyste</h1>
+  <p class="lead">Sur une hyphe non septée, la moisissure ne fait pas de conidies en chaînes : elle
+  fait un <b>sac</b>. Des rhizoïdes plongent, un sporangiophore monte vers l'observateur, sa pointe
+  gonfle en columelle, la paroi ballonne par-dessus, le cytoplasme s'y cloisonne en spores — et la
+  pression finit par déchirer le sac.</p>
+
+  <div class="instrument">
+    <div id="vue">
+      <canvas id="toile"></canvas>
+      <div id="bandeau"><span>optique — <i id="phase"></i></span><span id="etat"></span></div>
+    </div>
+    <div id="pupitre">
+      <div class="rangee">
+        <button id="bPause" aria-pressed="false">Pause</button>
+        <button id="bNeuf">Rejouer</button>
+        <span>vitesse</span>
+        <button data-vit="1" aria-pressed="true">×1</button>
+        <button data-vit="2" aria-pressed="false">×2</button>
+        <button data-vit="4" aria-pressed="false">×4</button>
+        <span>optique</span>
+        <button data-pal="phase" aria-pressed="true">Phase</button>
+        <button data-pal="noir" aria-pressed="false">Fond noir</button>
+        <button data-pal="met" aria-pressed="false">MET</button>
+        <label class="curseur" for="cZoom">zoom<input id="cZoom" type="range" min="0.5" max="2.5" step="0.05" value="1"><output id="oZoom"></output></label>
+      </div>
+      <p id="legende"></p>
+      <div id="chiffres"></div>
+    </div>
+  </div>
+
+  <div class="colonnes">
+    <section>
+      <h2>La mise au point suit la pointe</h2>
+      <p>Toute la mise en scène tient dans cette phrase. Le sporangiophore monte <em>vers
+      l'observateur</em> — 380 µm en z pour 99 dans l'image : il est vu en raccourci. La mise au
+      point le suit, donc le stolon et les rhizoïdes sortent du plan dès la deuxième seconde. La
+      profondeur de champ est de <b>22 µm</b>.</p>
+      <p>On ne verra donc presque pas les rhizoïdes. Ils existent quand même : c'est le même
+      événement qui les déclenche, et un sporangiophore sans ancrage est un dessin, pas un
+      organisme.</p>
+    </section>
+    <section>
+      <h2>Les spores naissent par clivage</h2>
+      <p>Elles ne bourgeonnent pas sur la columelle. Le sporocyste est un <b>cénocyte</b> — un sac
+      de cytoplasme à plusieurs milliers de noyaux — et les spores y naissent par <b>clivage</b> :
+      des membranes se referment autour de paquets de cytoplasme, à peu près en même temps, dans
+      tout le volume.</p>
+      <p>D'où le grain qui se prend partout à la fois au lieu de croître depuis un centre. Elles
+      sont placées en <em>trois dimensions</em> dans la coque entre columelle et paroi : celles du
+      fond sont derrière le plan de mise au point, celles du devant sont nettes. Dessinées à plat,
+      elles feraient un motif, pas un volume.</p>
+    </section>
+    <section>
+      <h2>Le sac est une corde</h2>
+      <p>Même modèle que la membrane plasmique : un anneau fermé de nœuds portant un écart radial,
+      même équation, plus un terme de <b>pression</b> vers l'extérieur. Longueur de cicatrisation
+      13 µm, soit un tiers du sac — la déformation <em>court</em> le long de la paroi au lieu
+      d'apparaître partout, et la déchirure met quelques secondes à faire le tour.</p>
+      <p>Il fallait qu'il soit mou : une sphère rigide qui disparaît d'un coup ne se lit pas comme
+      une déchirure. Au-delà de 42 % de remplissage le sac ne se comprime plus, il se tend ; il se
+      bombe de 2 à 3 µm, puis cède au nœud le plus tendu et se retrousse en collerette autour de la
+      columelle.</p>
+    </section>
+    <section>
+      <h2>Simplifié, et assumé</h2>
+      <p>Une sporulation réelle prend des heures ; elle est jouée ici en <b>90 secondes</b>. Le
+      sporangiophore fait 380 µm au lieu du millimètre réel — au-delà, la montée dure une éternité
+      pour un tube de toute façon hors du plan après vingt micromètres. Sporocyste de 80 µm, spores
+      de 8 : ce sont les valeurs basses de <em>Rhizopus</em> (100–350 µm et 4–11 µm).</p>
+      <p>La rupture est ici <b>mécanique</b>, par pression interne. Chez beaucoup de Mucorales la
+      paroi se lyse ou se dessèche plutôt qu'elle n'éclate ; la pression est le mécanisme d'autres
+      genres, et c'est celui qui se voit.</p>
+    </section>
+  </div>
+
+  <p class="source">Anatomie d'après les planches de <code>Apex_references/Art/conidia</code> :
+  stolon, rhizoïdes, sporangiophore, apophyse, columelle, sporocyste, sporangiospores. Dimensions
+  d'après <em>Rhizopus</em>. La germination sera une autre page.</p>
+</div>
+
+<script type="module">
+import { AppSporange, brancherSporange } from './src/sporange.js';
+brancherSporange(new AppSporange(document.getElementById('toile'), document.getElementById('vue')));
+</script>

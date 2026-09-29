@@ -13,11 +13,12 @@ les captures de contrôle.
 | Commande | Ce qu'elle fait |
 |---|---|
 | `npm run serve` | sert le dépôt tel quel |
-| `npm run banc` | 15 verdicts de mesure, sans rendu, en node |
+| `npm run banc` | 16 verdicts de mesure, sans rendu, en node |
 | `npm run visuel` | captures dans `/tmp/apical-shots` (Playwright) |
 | `npm run visuel:branche` | captures de la page ramification |
 | `npm run visuel:thalle` | captures de la page colonie |
 | `npm run visuel:monde` | captures du pont entre les deux échelles |
+| `npm run visuel:sporange` | captures de la sporulation |
 
 ---
 
@@ -37,7 +38,7 @@ que l'exocytose » évite de refaire l'erreur.
 
 ---
 
-## Les neuf règles de fond
+## Les dix règles de fond
 
 ### 1. L'hyphe est UN objet
 
@@ -308,7 +309,44 @@ pas — il n'y a qu'un organisme et qu'une horloge.
 `cadre.html` est la version contemplative **figée** : la simulation seule, sans
 panneau. Le travail sur le jeu part d'ailleurs et n'y touche pas.
 
-### 9. Le Spitzenkörper n'est jamais dessiné
+### 9. La sporulation est un sac, pas une chaîne
+
+`src/sim/sporange.js`, `sporange.html`. Sur une hyphe **non septée**, la
+reproduction asexuée se fait par **sporocyste** : rhizoïdes, sporangiophore,
+apophyse, columelle, sac, spores, déchirure. Anatomie relevée sur
+`Apex_references/Art/conidia`.
+
+**Les spores naissent par CLIVAGE, pas par bourgeonnement.** Le sporocyste est
+un cénocyte — un sac de cytoplasme à plusieurs milliers de noyaux — et des
+membranes s'y referment autour de paquets de cytoplasme, à peu près en même
+temps, dans tout le volume. D'où le grain qui se prend partout à la fois au
+lieu de croître depuis la columelle. Elles sont placées en **trois
+dimensions** dans la coque : celles du fond sont derrière le plan de mise au
+point. À plat, elles font un motif, pas un volume.
+
+**Le sac est une corde**, comme la membrane plasmique (règle 4) : un anneau
+fermé, même équation, plus un terme de pression. Longueur de cicatrisation
+13 µm, soit un tiers du sac. Au-delà de 42 % de remplissage il ne se comprime
+plus, il se tend ; il se bombe de 2,3 µm, cède au nœud le plus tendu, et la
+paroi déchirée cesse de tirer vers sa forme de sac pour se retrousser en
+**collerette** autour de la columelle.
+
+**Il y a ici une VRAIE troisième dimension**, et c'est elle qui raconte la
+scène. Le sporangiophore monte vers l'observateur — 380 µm en z pour 99 dans
+l'image, il est vu en **raccourci** —, les rhizoïdes plongent sous lui, le
+stolon reste où il est. La mise au point suit la pointe, donc tout le reste
+sort du plan dès la deuxième seconde. Profondeur de champ **22 µm**, qui se
+**referme à 6,5** quand la caméra monte en grossissement pour suivre une
+spore : c'est ce que fait un objectif réel, et c'est la seule chose qui isole
+une spore dans un nuage.
+
+**Assumé.** Une sporulation réelle prend des heures, elle est jouée en 90 s ;
+le sporangiophore fait 380 µm au lieu du millimètre réel ; la rupture est
+**mécanique**, alors que chez beaucoup de Mucorales la paroi se lyse ou se
+dessèche — la pression est le mécanisme d'autres genres, et c'est celui qui se
+voit.
+
+### 10. Le Spitzenkörper n'est jamais dessiné
 
 C'est une densité, pas un objet : un puits de rétention à ~2 µm de la pointe,
 et le nuage apparaît tout seul. Le dessiner net était la mauvaise réponse
@@ -368,6 +406,16 @@ Et pour le pont :
 | pas de 6 µm tenu à la reprise | 60 nm | 0 |
 | ré-échantillonnage | 307 points macro → 1 148 fins | — |
 | durée du fondu | 20 s simulées, ~1,3 s réelle | = le préchauffage |
+
+Et pour la sporulation :
+
+| | mesuré | référence |
+|---|---|---|
+| remplissage maximal du sac | 53 % | empilement physique < 75 % |
+| spores hors du sac avant rupture | 0 | 0 |
+| bombement de la paroi avant rupture | 2,3 µm | > 0 |
+| séquence complète | 7 phases dans l'ordre, éclatement à 87 s | — |
+| spores libérées | 344 sur 520 | — |
 
 Un chiffre documenté sans avoir été mesuré est un chiffre qu'on croit seulement
 avoir. Ça s'est déjà payé.
@@ -496,6 +544,19 @@ partie du travail**, pas après, pendant.
   attendait l'autre et lâchait tout le reste en une image. `tr` est maintenant
   *dérivé* du préchauffage — `1 − pasRestants/pasTotal` — et le problème ne
   peut plus exister.
+- **Un halo dessiné tronçon par tronçon recouvre le tronçon suivant.** C'est
+  un quadrilatère opaque, élargi de part et d'autre : dessiné dans la foulée
+  de son propre tronçon, il posait une couture claire en travers du tube tous
+  les six micromètres. Le halo est une **passe à part**, sur toute la
+  géométrie, avant les corps.
+- **Ce qui est dans un sac ne peut pas être dessiné au premier plan.** Le
+  remplissage du sporocyste, posé sur le calque que sa profondeur donnait,
+  recouvrait la columelle — la pièce la plus reconnaissable d'un sporocyste.
+  Il va sur un calque **arrière imposé** : derrière la face avant du sac,
+  devant sa face arrière.
+- **La silhouette d'une sphère cisaillée par une projection oblique est une
+  ellipse**, pas un cercle : demi-axe vertical × √(1+KZ²). Tracée en cercle,
+  les spores du fond et du devant débordaient de la paroi.
 - **Un `sed` qui ne trouve pas son motif ne dit rien.** Deux remplacements
   successifs de `Q_FUSION` ont échoué en silence et j'ai documenté une valeur
   que le fichier n'avait pas. Seul le banc l'a vu (22,8 µm/min au lieu de 20).

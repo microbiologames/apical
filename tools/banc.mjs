@@ -8,6 +8,7 @@ import { DUREE_FUSION } from '../src/sim/contenu.js';
 import { Scene } from '../src/render/scene.js';
 import { Thalle, V_MICRO, UCH, R_VIRAGE } from '../src/sim/thalle.js';
 import { depuisMacro } from '../src/sim/hyphe.js';
+import { Sporange, PHASES, R_SAC, R_COL, Z_TOTAL } from '../src/sim/sporange.js';
 import { pasMicro } from '../src/main.js';
 
 const KOM = 0.016, TAU_OM = 3.5;
@@ -471,6 +472,57 @@ function dire(ok, titre, detail) { R.push({ ok, titre, detail }); }
     + `${(pire * 1000).toFixed(0)} nm ; apres 90 s pilotees par la micro, `
     + `${(pousse).toFixed(1)} um construits et ${p.axe.n - nAvant} points ajoutes, `
     + `ecart maximal au pas de 6 um : ${(saut * 1000).toFixed(0)} nm`);
+}
+
+/* 16. le sporocyste se remplit, se tend, et cede */
+{
+  /* Trois choses qu'on ne voit pas a l'oeil et qui ont chacune casse une
+     iteration : le sac qui ne se remplit jamais assez pour rompre, les
+     spores qui debordent de la paroi, et la rupture sans bombement. */
+  const sp = new Sporange({ graine: 23 });
+  const dt = 1 / 60;
+  const vues = [], jalons = {};
+  let debord = 0, bombMax = 0, fMax = 0, pRupture = -1, bombRupture = -1;
+
+  while (sp.t < 260) {
+    const avant = sp.phase;
+    sp.maj(dt);
+    if (sp.phase !== avant) {
+      vues.push(sp.phase);
+      jalons[sp.phase] = sp.t;
+      if (sp.phase === 'eclatement') { pRupture = sp.pression; bombRupture = bombMax; }
+    }
+    if (sp.rSac > 1) {
+      let b = 0;
+      for (let i = 0; i < sp.sac.n; i++) b = Math.max(b, sp.sac.off[i]);
+      if (sp.rupture < 0) bombMax = Math.max(bombMax, b);
+      fMax = Math.max(fMax, sp.remplissage || 0);
+      /* ETANCHEITE : avant la rupture, aucune spore ne doit depasser la
+         paroi. Tirees a 0,94 R, celles de 4,6 um debordaient de 10 % et on
+         voyait une couronne accrochee a l'exterieur du sac. */
+      if (sp.rupture < 0) {
+        for (const s of sp.spores) {
+          const d = Math.hypot(s.x, s.y, s.z) + s.r;
+          if (d > sp.rSac * 1.02) debord++;
+        }
+      }
+    }
+  }
+
+  const libres = sp.spores.filter((s) => s.libre).length;
+  const ordre = ['montee', 'apophyse', 'sporocyste', 'clivage', 'pression', 'eclatement', 'envol'];
+  const bonOrdre = ordre.every((ph, i) => vues[i] === ph);
+
+  dire(bonOrdre && debord === 0 && fMax > 0.50 && fMax < 0.75
+       && bombRupture > 1.2 && pRupture >= 1 && libres > sp.spores.length * 0.5
+       && sp.suivie !== null && jalons.eclatement < 140,
+    'le sporocyste se remplit, se tend, et cede',
+    `${vues.length} phases dans l'ordre ; tige ${sp.z.toFixed(0)} um ; `
+    + `remplissage maximal ${(fMax * 100).toFixed(0)} % (empilement physique : < 75) ; `
+    + `${debord} spore-image hors du sac avant rupture ; la paroi s'est bombee de `
+    + `${bombRupture.toFixed(1)} um avant de ceder a p = ${pRupture.toFixed(2)} `
+    + `(t = ${jalons.eclatement.toFixed(0)} s) ; ${libres}/${sp.spores.length} spores liberees, `
+    + `une suivie par la camera`);
 }
 
 /* 7. budget */
