@@ -326,6 +326,56 @@ l'identique.** Le sporangiophore, lui, est une hyphe comme les autres : ogive
 apicale 1,40 R, exposant 2,1 — les valeurs arrêtées pour l'apex. Il pousse par
 sa pointe, rien ne justifie qu'il se termine autrement.
 
+**L'ordre n'est pas celui qu'on croit, et il était à l'envers.** On voyait
+« l'apophyse arriver puis le sac apparaître ensuite » — trois objets qui se
+succèdent, alors qu'il n'y a qu'un corps. La séquence réelle, relevée sur la
+littérature *Rhizopus* / *Mucor* :
+
+1. la pointe du sporangiophore **gonfle et devient le sporocyste entier**,
+   noyaux et cytoplasme poussant vers l'apex ;
+2. le cytoplasme s'organise : riche en périphérie sous la paroi, vacuolisé au
+   centre ;
+3. **une série de petites vacuoles apparaît juste au-dessus du centre,
+   s'aplatit et coalesce en une cavité de clivage** ;
+4. **une paroi se forme du côté interne de cette cavité** et sépare le centre
+   — la columelle — de la périphérie. Elle se bombe et pousse dans le
+   sporocyste ;
+5. la périphérie se clive en spores.
+
+La columelle est donc un **septum qui bombe**, pas un bourgeon qui pousse, et
+le sac n'arrive pas par-dessus elle : il est là depuis le début, c'est la
+pointe elle-même. `PHASES` suit cet ordre — `renflement`, `cavite`,
+`columelle` — et **le verdict 16 le mesure** : le sac fait 80 µm quand la
+cavité se creuse, la columelle mesure encore 0,0 µm à ce moment-là, et la
+cavité est faite à 100 % quand le septum commence.
+
+**La cavité de clivage se dessine sur le contour de la columelle À VENIR** —
+`profil(q, R_COL)`, la même fonction avec le rayon qu'elle aura. Quand le
+septum se forme, la paroi est déjà là où la cavité était : rien ne se
+déplace, l'une remplace l'autre. Deux définitions de « où est la columelle »
+finiraient par ne plus coïncider, et le septum se formerait à côté de la
+cavité qui l'annonce. C'est pour ça que `profil` **et** `partCol` prennent
+toutes deux le rayon en paramètre.
+
+**Dans le sac, la paroi n'existe que quand le septum existe.** Le liseré et le
+halo tirés à pleine force autour du renflement en faisaient une **ampoule
+fermée posée dans le ballon** : on lisait deux corps à paroi alors qu'à ce
+stade il n'y en a qu'un. Les deux montent avec `rCol`, c'est-à-dire avec la
+paroi qui se forme. Un halo est l'artefact de phase d'un **saut d'indice** ;
+sans paroi, pas de saut.
+
+**La spore qu'on suit est une cellule, pas une bille.** À neuf pixels par
+micromètre elle fait soixante-dix pixels de large, et à cette taille l'aplat
+ne tient plus : elle porte les mêmes couches que le tube — paroi épaisse,
+périplasme, membrane, cytoplasme —, le même vocabulaire d'organites que
+l'apex (`noyau` + `nucleole`, `cap` pour les mitochondries, `dot` pour les
+grains) et des globules lipidiques, qui sont ce qui rend une spore
+réfringente. Le détail est réservé à **celle que la mise au point désigne** :
+sur le seul critère de taille, les deux secondes où la caméra passe de
+l'échelle du sac à celle de la spore mettaient cinq cents spores au-dessus du
+seuil d'un coup, et le nuage entier devenait granuleux — dans un tas, une
+spore est vue à travers les autres.
+
 **Les spores naissent par CLIVAGE, pas par bourgeonnement.** Le sporocyste est
 un cénocyte — un sac de cytoplasme à plusieurs milliers de noyaux — et des
 membranes s'y referment autour de paquets de cytoplasme, à peu près en même
@@ -426,7 +476,10 @@ Et pour la sporulation :
 | remplissage maximal du sac | 53 % | empilement physique < 75 % |
 | spores hors du sac avant rupture | 0 | 0 |
 | bombement de la paroi avant rupture | 2,3 µm | > 0 |
-| séquence complète | 7 phases dans l'ordre, éclatement à 87 s | — |
+| séquence complète | 8 phases dans l'ordre, éclatement à 93 s | — |
+| diamètre du sac quand la cavité se creuse | 80 µm | le sac est complet |
+| columelle à ce moment-là | 0,0 µm | 0 |
+| cavité faite quand le septum commence | 100 % | 100 % |
 | spores libérées | 344 sur 520 | — |
 
 Un chiffre documenté sans avoir été mesuré est un chiffre qu'on croit seulement
@@ -601,3 +654,40 @@ partie du travail**, pas après, pendant.
   que le fichier n'avait pas. Seul le banc l'a vu (22,8 µm/min au lieu de 20).
   Vérifier le fichier après chaque substitution, ou passer par Python avec un
   `assert`.
+- **Une extrémité définie par une interpolation de largeur est coupée net.**
+  L'apophyse était écrite en tronc de cône — `lerp(a, R_TIGE, q/La)` — et se
+  terminait donc à q = 0 sur une **coupe franche de vingt micromètres**, avec
+  le liseré de paroi en travers. Tant que la columelle la coiffait, on ne
+  voyait rien ; dès que l'ordre des phases a été corrigé et que le renflement
+  s'est retrouvé seul, on a lu un gobelet posé dans le ballon. **C'est la
+  règle 1 une troisième fois.** Une extrémité se ferme : ogive, comme tout le
+  reste.
+- **Un piège réparé revient quand l'anatomie change.** Le corps compact était
+  détecté par `rCol > 0.3` ; l'ordre corrigé laisse vingt secondes de
+  renflement sans columelle, et le dôme s'est remis à sortir coupé net entre
+  deux calques, avec son halo flottant au-dessus. Le critère appartient à la
+  **simulation** (`Sporange.qCompact`), pas au rendu : un corps compact est
+  compact, qu'il s'appelle apophyse ou columelle.
+- **Espacer des objets le long d'un axe ne les espace pas sur un contour
+  décalé.** Les vacuoles de la cavité étaient placées tous les 4 µm d'axe puis
+  poussées de dix-sept micromètres vers l'extérieur : sur une courbe convexe,
+  un décalage `e` multiplie la longueur d'arc par `(1 + e·κ)`. Serrées au
+  sommet du dôme, séparées d'un demi-diamètre sur les flancs, elles ne
+  coalesçaient jamais là où c'est le plus visible. **On marche sur le contour
+  décalé**, pas sur l'axe.
+- **Un test d'écart entre deux profils s'annule là où les deux valent zéro.**
+  La couronne devait s'arrêter là où le contour de la columelle rejoint celui
+  de l'apophyse ; au sommet les deux valent 0, l'écart aussi, et la boucle
+  sortait à son premier point — il ne restait de la cavité qu'un trait. Le
+  test ne vaut qu'**après** le dôme.
+- **Un seuil de détail fondé sur la taille seule bascule tout un nuage d'un
+  coup.** Pendant les deux secondes où la caméra passe de l'échelle du sac à
+  celle de la spore, cinq cents spores franchissaient les onze pixels
+  ensemble : le tas entier devenait granuleux et cerclé de halos. Le détail
+  est ce que **la mise au point désigne**, pas ce qui est assez gros.
+- **Une capture prise N millisecondes après un changement de phase ne montre
+  pas ce qu'on croit.** L'éclatement dure 1,6 s simulée, soit 0,4 s réelle à
+  ×4 : la capture arrivait régulièrement quatre images après le basculement en
+  envol, donc pendant que la caméra plongeait déjà sur la spore suivie — et on
+  en tirait des conclusions sur le cadrage de l'éclatement. **On fige la
+  simulation avant de déclencher.**

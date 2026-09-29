@@ -483,13 +483,22 @@ function dire(ok, titre, detail) { R.push({ ok, titre, detail }); }
   const dt = 1 / 60;
   const vues = [], jalons = {};
   let debord = 0, bombMax = 0, fMax = 0, pRupture = -1, bombRupture = -1;
+  /* L'ORDRE DE L'ONTOGENIE, et c'est lui qui etait faux : la pointe gonfle
+     et DEVIENT le sporocyste, la cavite de clivage se creuse ensuite, et la
+     columelle n'est que la paroi qui se forme du cote interne de cette
+     cavite. On mesure donc que le sac est complet avant que la columelle
+     n'existe, et non l'inverse. */
+  let rColAvantSac = 0, sacALaCavite = 0, cavAvantCol = 0;
 
   while (sp.t < 260) {
     const avant = sp.phase;
+    if (sp.phase === 'renflement' || sp.phase === 'cavite') rColAvantSac = Math.max(rColAvantSac, sp.rCol);
+    if (sp.phase === 'columelle') cavAvantCol = Math.max(cavAvantCol, sp.cav);
     sp.maj(dt);
     if (sp.phase !== avant) {
       vues.push(sp.phase);
       jalons[sp.phase] = sp.t;
+      if (sp.phase === 'cavite') sacALaCavite = sp.rSac;
       if (sp.phase === 'eclatement') { pRupture = sp.pression; bombRupture = bombMax; }
     }
     if (sp.rSac > 1) {
@@ -510,14 +519,19 @@ function dire(ok, titre, detail) { R.push({ ok, titre, detail }); }
   }
 
   const libres = sp.spores.filter((s) => s.libre).length;
-  const ordre = ['montee', 'apophyse', 'sporocyste', 'clivage', 'pression', 'eclatement', 'envol'];
+  const ordre = ['montee', 'renflement', 'cavite', 'columelle', 'clivage', 'pression', 'eclatement', 'envol'];
   const bonOrdre = ordre.every((ph, i) => vues[i] === ph);
 
   dire(bonOrdre && debord === 0 && fMax > 0.50 && fMax < 0.75
        && bombRupture > 1.2 && pRupture >= 1 && libres > sp.spores.length * 0.5
-       && sp.suivie !== null && jalons.eclatement < 140,
+       && sp.suivie !== null && jalons.eclatement < 140
+       && rColAvantSac === 0 && sacALaCavite >= R_SAC * 0.98 && cavAvantCol > 0.9,
     'le sporocyste se remplit, se tend, et cede',
-    `${vues.length} phases dans l'ordre ; tige ${sp.z.toFixed(0)} um ; `
+    `${vues.length} phases dans l'ordre ; le sac fait `
+    + `${(sacALaCavite * 2).toFixed(0)} um quand la cavite se creuse, la columelle `
+    + `mesure encore ${rColAvantSac.toFixed(1)} um a ce moment-la et la cavite est `
+    + `faite a ${(cavAvantCol * 100).toFixed(0)} % quand elle commence ; `
+    + `tige ${sp.z.toFixed(0)} um ; `
     + `remplissage maximal ${(fMax * 100).toFixed(0)} % (empilement physique : < 75) ; `
     + `${debord} spore-image hors du sac avant rupture ; la paroi s'est bombee de `
     + `${bombRupture.toFixed(1)} um avant de ceder a p = ${pRupture.toFixed(2)} `

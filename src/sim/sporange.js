@@ -60,12 +60,29 @@ const RAPPEL = 26;                // /s^2, vers la forme au repos
    au tiers du remplissage et on ne voyait jamais le sac plein. */
 const SEUIL_RUPTURE = 1.0;
 
-export const PHASES = ['rhizoides', 'montee', 'apophyse', 'sporocyste', 'clivage', 'pression', 'eclatement', 'envol'];
+/* L'ORDRE, et il n'est pas celui qu'on croit. J'avais fait grossir la
+   columelle d'abord, puis ballonner le sac par-dessus. C'est l'inverse :
+
+     1. la pointe du sporangiophore GONFLE et devient le sporocyste entier,
+        noyaux et cytoplasme poussant vers l'apex ;
+     2. le cytoplasme s'organise : riche en peripherie sous la paroi, tres
+        vacuolise au centre ;
+     3. une serie de petites VACUOLES apparait juste au-dessus du centre,
+        s'aplatissent et coalescent en une cavite de clivage ;
+     4. une paroi se forme du cote interne de cette cavite et separe le
+        centre — la columelle — de la peripherie. Elle se BOMBE et pousse
+        dans le sporocyste ;
+     5. la peripherie se clive en spores.
+
+   La columelle est donc un SEPTUM qui bombe, pas un bourgeon qui pousse. Et
+   le sac n'arrive pas par-dessus elle : il est la depuis le debut, c'est la
+   pointe elle-meme. Sources : biologylearner (Rhizopus), Wikipedia Mucor. */
+export const PHASES = ['rhizoides', 'montee', 'renflement', 'cavite', 'columelle', 'clivage', 'pression', 'eclatement', 'envol'];
 
 /* Duree de chaque phase en secondes simulees. Une sporulation reelle prend
    des heures ; on la joue en deux minutes, et c'est assume — le but est de
    voir le mecanisme, pas d'attendre. */
-const DUREES = { rhizoides: 7, montee: 26, apophyse: 9, sporocyste: 11, clivage: 26, pression: 999, eclatement: 1.6, envol: 999 };
+const DUREES = { rhizoides: 7, montee: 26, renflement: 13, cavite: 7, columelle: 8, clivage: 24, pression: 999, eclatement: 1.6, envol: 999 };
 
 export class Sporange {
   /** `base` : le point du stolon d'ou tout part, en um monde. */
@@ -82,6 +99,7 @@ export class Sporange {
     this.rCol = 0;              // rayon de la columelle
     this.rSac = 0;              // rayon au repos du sac
     this.pression = 0;
+    this.cav = 0;              // avancement de la cavite de clivage
     this.rupture = -1;          // indice du noeud rompu
     this.ouverture = 0;         // demi-largeur de la dechirure, en noeuds
     this.suivie = null;         // la spore que la camera suit
@@ -148,17 +166,31 @@ export class Sporange {
       /* Vitesse en cloche : lente au depart, elle file, puis ralentit en
          arrivant. Une montee lineaire se lit comme un ascenseur. */
       this.monter(Z_TOTAL * (0.06 + 0.94 * smoothstep(0, 1, u)));
-      if (u >= 1) this.passer('apophyse');
+      if (u >= 1) this.passer('renflement');
 
-    } else if (P === 'apophyse') {
-      /* La pointe gonfle : apophyse puis columelle. */
+    } else if (P === 'renflement') {
+      /* LA POINTE DEVIENT LE SPOROCYSTE. Ce n'est pas un sac qui arrive
+         par-dessus quelque chose : c'est l'apex lui-meme qui gonfle, les
+         noyaux et le cytoplasme poussant vers lui. La columelle n'existe
+         pas encore. */
+      this.rSac = lerp(R_TIGE * 1.15, R_SAC, smoothstep(0, 1, u));
+      this.monter(Z_TOTAL);
+      this.majSac(dt);
+      if (u >= 1) this.passer('cavite');
+
+    } else if (P === 'cavite') {
+      /* Une serie de petites vacuoles apparait juste au-dessus du centre,
+         s'aplatissent et coalescent en une CAVITE DE CLIVAGE. C'est elle
+         qui dessine ou le septum va se former. */
+      this.cav = smoothstep(0, 1, u);
+      this.majSac(dt);
+      if (u >= 1) this.passer('columelle');
+
+    } else if (P === 'columelle') {
+      /* Une paroi se forme du cote interne de la cavite, separe le centre
+         de la peripherie, et se BOMBE en poussant dans le sporocyste. */
       this.rCol = R_COL * smoothstep(0, 1, u);
-      this.monter(Z_TOTAL + this.rCol * 0.5);
-      if (u >= 1) this.passer('sporocyste');
-
-    } else if (P === 'sporocyste') {
-      /* La paroi du sac ballonne PAR-DESSUS la columelle. */
-      this.rSac = lerp(this.rCol * 1.04, R_SAC, smoothstep(0, 1, u));
+      this.cav = 1 - smoothstep(0.35, 1, u);
       this.majSac(dt);
       if (u >= 1) this.passer('clivage');
 
@@ -170,14 +202,12 @@ export class Sporange {
          crevait dans la foulee, sans qu'on ait vu la paroi se tendre. */
       const vise = Math.round(N_SPORES * 0.78 * smoothstep(0, 1, u));
       while (this.spores.length < vise) this.naitreSpore();
-      for (const s of this.spores) s.r = Math.min(s.rMax, s.r + s.rMax * dt * 0.55);
       this.majSac(dt);
       if (u >= 1) this.passer('pression');
 
     } else if (P === 'pression') {
       const vise = Math.min(N_SPORES, Math.round(N_SPORES * (0.78 + 0.03 * this.tPhase)));
       while (this.spores.length < vise) this.naitreSpore();
-      for (const s of this.spores) s.r = Math.min(s.rMax, s.r + s.rMax * dt * 0.55);
       this.majSac(dt);
       /* Laplace : la tension de paroi vaut p.R/2. On rompt au noeud le plus
          tendu, celui qui s'est le plus ecarte. */
@@ -215,6 +245,14 @@ export class Sporange {
       this.liberer(dt);
     }
 
+    /* LA MATURATION NE S'ARRETE PAS A LA RUPTURE. Rangee dans les phases
+       de clivage et de mise sous pression, elle laissait les dernieres nees
+       a 2,6 um — et la camera suit justement une spore partie loin, donc
+       tardive : on la regardait a soixante pour cent de sa taille, et le
+       detail qu'elle porte ne tenait pas dans les pixels qui restaient. */
+    for (const s of this.spores) {
+      if (s.r < s.rMax) s.r = Math.min(s.rMax, s.r + s.rMax * dt * 0.55);
+    }
     this.voler(dt);
   }
 
@@ -260,7 +298,7 @@ export class Sporange {
    * a mesure qu'elle gonfle, et qui se raccorde a la tige par une
    * decroissance exponentielle — l'apophyse.
    */
-  profil(q) {
+  profil(q, rc = this.rCol) {
     const n = 2.1;
     const ogive = (R, Lc) => (q >= Lc ? R
       : R * Math.pow(Math.max(1 - Math.pow((Lc - q) / Lc, n), 0), 1 / n));
@@ -270,11 +308,34 @@ export class Sporange {
     const z = Math.max(0, this.z - q);
     w *= 1 + 1.5 * Math.exp(-z / 22);
 
-    if (this.rCol > 0.3) {
-      const Lc = 1.30 * this.rCol;
-      const wc = q >= Lc
-        ? this.rCol * Math.exp(-(q - Lc) / (this.rCol * 0.62))
-        : ogive(this.rCol, Lc);
+    /* L'APOPHYSE : le col evase sous le sporocyste. Elle se forme avec le
+       renflement — c'est le raccord entre une tige de 4 um et une sphere de
+       40 — et non avec la columelle, qui vient bien plus tard. Sans elle le
+       tube rencontrait la sphere a angle droit.
+
+       ELLE EST OGIVEE, COMME TOUT LE RESTE. Ecrite en tronc de cone — une
+       interpolation de la largeur qui s'arretait a q = 0 —, elle se
+       terminait par une COUPE FRANCHE de vingt micrometres de large, avec
+       le lisere de paroi en travers. Tant que la columelle etait la pour
+       la coiffer, on ne la voyait pas ; des que l'ordre a ete corrige et
+       que le renflement s'est retrouve seul, on a lu un gobelet pose dans
+       le ballon. C'est la regle 1 une troisieme fois : une extremite se
+       ferme, sinon elle est coupee.
+
+       0,34 R et non 0,52 : a 0,52 le dome de l'apophyse faisait deja la
+       taille de la columelle, et celle-ci n'avait plus rien a ajouter en
+       se formant. Le geste de la phase suivante — le septum qui bombe — ne
+       se voyait plus. */
+    if (this.rSac > R_TIGE * 1.2) {
+      const a = this.rSac * 0.34;
+      const La = 1.30 * a;
+      const wa = q >= La ? a * Math.exp(-(q - La) / (a * 1.30)) : ogive(a, La);
+      w = Math.max(w, wa);
+    }
+
+    if (rc > 0.3) {
+      const Lc = 1.30 * rc;
+      const wc = q >= Lc ? rc * Math.exp(-(q - Lc) / (rc * 0.62)) : ogive(rc, Lc);
       w = Math.max(w, wc);
     }
     return w;
@@ -285,15 +346,34 @@ export class Sporange {
    * l'assombrir : c'est du cytoplasme dense, la piece la plus sombre d'un
    * sporocyste.
    *
+   * Le rayon est un PARAMETRE, comme dans `profil` : la cavite de clivage
+   * dessine le contour de la columelle a venir alors que `rCol` vaut encore
+   * zero. Deux definitions de « ou est la columelle » finiraient par ne
+   * plus coincider, et le septum se formerait a cote de la cavite qui
+   * l'annonce.
+   *
    * Definie sur le MATERIAU et non sur la largeur. Comparee a la largeur du
    * tube nu, elle tombait a zero sur toute l'ogive apicale de la columelle
    * — la ou le profil est plus ETROIT que la tige — et le sommet du dome se
    * dessinait en couleur de cytoplasme, donc invisible sur le sac. Le dome
    * paraissait coupe net aux deux tiers de sa hauteur.
    */
-  partCol(q) {
-    if (this.rCol < 0.3) return 0;
-    return 1 - smoothstep(1.5 * this.rCol, 2.9 * this.rCol, q);
+  partCol(q, rc = this.rCol) {
+    if (rc < 0.3) return 0;
+    return 1 - smoothstep(1.5 * rc, 2.9 * rc, q);
+  }
+
+  /**
+   * Longueur du CORPS COMPACT a la pointe, en um depuis la pointe.
+   *
+   * C'est la columelle quand elle existe, sinon le renflement apical lui-
+   * meme — l'apophyse. Le rendu s'en sert pour dessiner ce corps d'un seul
+   * tenant : decoupe en bandes de profondeur, une piece compacte sort
+   * coupee net a la hauteur d'un changement de calque.
+   */
+  get qCompact() {
+    const r = Math.max(this.rCol, this.rSac > R_TIGE * 1.2 ? this.rSac * 0.34 : 0);
+    return r > 0.3 ? r * 2.9 : 0;
   }
 
   /* --- le sac -------------------------------------------------------------- */
@@ -380,6 +460,45 @@ export class Sporange {
       }
       if (ok || essai === 23) { this.spores.push(p); return; }
     }
+  }
+
+  /**
+   * Le contenu d'une spore, tire une fois pour toutes.
+   *
+   * Une spore est une CELLULE : paroi epaisse, membrane, cytoplasme
+   * granuleux, un noyau, des globules lipidiques, des mitochondries. On ne
+   * le construit que pour celle qu'on regarde de pres — a dix-huit pixels
+   * rien de tout ca n'est lisible, et il y en a cinq cents.
+   */
+  detailler(s) {
+    if (s.org) return s.org;
+    const rng = mulberry32(((s.ang * 1e6) | 0) ^ 0x9e37);
+    const org = [];
+    /* Le noyau, un peu excentre : centre, il a l'air dessine. */
+    org.push({ t: 'noyau', x: (rng() - 0.5) * 0.4, y: (rng() - 0.5) * 0.4,
+               a: 0.30 + rng() * 0.07, ang: rng() * TAU });
+    /* Globules lipidiques : ce sont eux qui rendent une spore refringente. */
+    for (let i = 0; i < 2 + ((rng() * 2) | 0); i++) {
+      const a = rng() * TAU, d = 0.30 + rng() * 0.30;
+      org.push({ t: 'lipide', x: Math.cos(a) * d, y: Math.sin(a) * d,
+                 a: 0.11 + rng() * 0.09, ang: rng() * TAU });
+    }
+    for (let i = 0; i < 4 + ((rng() * 4) | 0); i++) {
+      const a = rng() * TAU, d = 0.25 + rng() * 0.38;
+      org.push({ t: 'mito', x: Math.cos(a) * d, y: Math.sin(a) * d,
+                 a: 0.17 + rng() * 0.08, b: 0.05 + rng() * 0.02, ang: rng() * TAU });
+    }
+    /* 46 grains et non 26 : a vingt-sept pixels de rayon, vingt-six points
+       se comptent, et un cytoplasme dont on compte les grains n'est pas
+       granuleux — c'est un semis. Le cytoplasme de l'apex en porte le
+       meme ordre par unite de surface. */
+    for (let i = 0; i < 46; i++) {
+      const a = rng() * TAU, d = Math.sqrt(rng()) * 0.66;
+      org.push({ t: 'grain', x: Math.cos(a) * d, y: Math.sin(a) * d,
+                 a: 0.026 + rng() * 0.026, clair: rng() < 0.4 });
+    }
+    s.org = org;
+    return org;
   }
 
   /** Les spores proches de la dechirure sont emportees. */

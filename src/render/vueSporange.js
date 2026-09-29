@@ -79,6 +79,7 @@ export class VueSporange extends Scene {
       this.stolon(sp, P, passe);
     }
     this.tige(sp, P);
+    this.cavite(sp, P);
     this.sacEtSpores(sp, P);
 
     this.ombreColumelle(sp, P);
@@ -243,13 +244,21 @@ export class VueSporange extends Scene {
     const ys = this._by || (this._by = new Float32Array(2048));
     const cP = hexToRgba(P.paroi);
 
-    /* La COLUMELLE est une bande a elle seule, forcee sur le calque de la
-       pointe. C'est un corps compact de cinquante micrometres : le
+    /* LE CORPS COMPACT DE LA POINTE est une bande a elle seule, forcee sur
+       le calque de la pointe. C'est un corps de cinquante micrometres : le
        decouper en bandes de profondeur le faisait sortir coupe net a la
        hauteur d'un changement de calque, avec sa calotte apicale dessinee
-       a part et par-dessus. Un dome se dessine d'un seul tenant. */
+       a part et par-dessus. Un dome se dessine d'un seul tenant.
+
+       On le demande a la SIMULATION (`qCompact`) et on ne le deduit plus de
+       `rCol` : des que l'ordre des phases a ete corrige, le renflement s'est
+       retrouve seul pendant vingt secondes, sans columelle pour le couvrir
+       — et le meme piege est revenu a l'identique, dome coupe net et lisere
+       de halo flottant au-dessus. Un corps compact est compact, qu'il
+       s'appelle apophyse ou columelle. */
     let iCol = 0;
-    if (sp.rCol > 0.3) while (iCol < A.length - 1 && A[iCol].q < sp.rCol * 2.9) iCol++;
+    const qC = sp.qCompact;
+    if (qC > 0.3) while (iCol < A.length - 1 && A[iCol].q < qC) iCol++;
 
     let i0 = 0;
     while (i0 < A.length - 1) {
@@ -284,7 +293,7 @@ export class VueSporange extends Scene {
         }
         /* LE HALO EST SUR LE MEME CALQUE QUE SA BANDE, dessine juste avant.
            Sur un calque plus flou, il changeait de rang dans l'ordre de
-           composition et repassait par-dessus la bande voisine : un liseré
+           composition et repassait par-dessus la bande voisine : un lisere
            blanc en travers du tube, a chaque changement de profondeur. Un
            halo ne peut pas etre devant ce qu'il entoure.
 
@@ -299,25 +308,156 @@ export class VueSporange extends Scene {
             const e = W[k] + (passe === 0 ? Math.min(2.2, 0.35 * W[k] + 0.35) : 0);
             xs[m] = PX[k] + NX[k] * sg * e; ys[m] = PY[k] + NY[k] * sg * e; m++;
           }
+          const qm = (A[i0].q + A[i1].q) * 0.5;
+          /* Le halo est l'artefact de phase d'un SAUT D'INDICE, donc d'une
+             paroi. Tant que le septum n'est pas la, il n'y en a pas dans le
+             sac : garde a pleine force, c'est lui — et non le lisere — qui
+             cerclait le renflement et en faisait une ampoule posee dans le
+             ballon. Il monte avec `rCol`, comme la paroi. */
+          let fInt = 1;
+          if (qC > 0.3 && qm < qC && sp.rSac > R_TIGE * 1.2) {
+            fInt = lerp(0.18, 1, smoothstep(0.02, 0.40, sp.rCol / R_COL));
+          }
           if (passe === 0) {
-            this.remplir(xs, ys, m, fade32(hexToRgba(P.halo), P.haloForce * 0.5));
+            this.remplir(xs, ys, m, fade32(hexToRgba(P.halo), P.haloForce * 0.5 * fInt));
             continue;
           }
-          const qm = (A[i0].q + A[i1].q) * 0.5;
           const col = sp.partCol(qm);
           let c = hexToRgba(P.cyto);
           if (col > 0) c = mix32(c, hexToRgba(P.membrane), col * 0.80);
           c = shade32(c, (noise1(qm * 0.075, 41) - 0.5) * 0.13);
           this.remplir(xs, ys, m, c);
           /* Paroi : deux traits, pas une bande — a 4 um de demi-largeur elle
-             fait moins de deux pixels et une bande la mangerait. */
+             fait moins de deux pixels et une bande la mangerait.
+
+             DANS LE SAC, LA PAROI N'EXISTE QUE QUAND LE SEPTUM EXISTE. Le
+             lisere tire a pleine force autour du renflement en faisait une
+             ampoule fermee posee dans le ballon : on lisait deux corps a
+             paroi, alors qu'a ce stade il n'y en a qu'un et que le
+             cytoplasme s'y accumule simplement vers l'apex. Le trait monte
+             avec `rCol`, c'est-a-dire avec la paroi qui se forme du cote
+             interne de la cavite. */
+          const cB = fInt < 1 ? fade32(cP, fInt) : cP;
           for (let k = 1; k < n; k++) {
-            sc.line(xs[k - 1], ys[k - 1], xs[k], ys[k], cP);
-            sc.line(xs[m - k], ys[m - k], xs[m - k - 1], ys[m - k - 1], cP);
+            sc.line(xs[k - 1], ys[k - 1], xs[k], ys[k], cB);
+            sc.line(xs[m - k], ys[m - k], xs[m - k - 1], ys[m - k - 1], cB);
           }
         }
       }
       i0 = i1;
+    }
+  }
+
+  /* --- la cavite de clivage -------------------------------------------------- */
+
+  /**
+   * LA CAVITE DE CLIVAGE, celle qui annonce la columelle.
+   *
+   * C'est le chainon qui manquait et qui rendait la scene fausse : on
+   * voyait l'apophyse arriver, puis le sac apparaitre, puis une columelle
+   * pousser dedans — trois objets qui se succedent. Dans un sporocyste il
+   * n'y a qu'un seul corps, et le septum ne pousse pas : il se CREUSE.
+   * « A series of small vacuoles appear just above the columella, which
+   * become flattened and form a cavity. A wall then develops towards the
+   * inner side of the cavity. » La cavite vient AVANT la paroi, et c'est
+   * elle qui dit ou la paroi ira.
+   *
+   * On la dessine donc sur le contour de la columelle A VENIR —
+   * `profil(q, R_COL)`, la meme fonction, avec le rayon qu'elle aura — et
+   * non sur une courbe a part. Quand `cav` retombe pendant la phase
+   * suivante, la paroi est deja la ou la cavite etait : rien ne se
+   * deplace, l'une remplace l'autre.
+   *
+   * Deux temps, et ce sont ceux du texte :
+   *   - `cav` < 0,55 : des vacuoles rondes, isolees, qui apparaissent
+   *     une a une le long du contour ;
+   *   - `cav` > 0,55 : elles s'APLATISSENT — le grand axe s'allonge
+   *     tangentiellement jusqu'a rejoindre les voisines, le petit axe se
+   *     resserre — et coalescent en une fente continue.
+   */
+  cavite(sp, P) {
+    if (!(sp.cav > 0.01)) return;
+    const sc = this.sc;
+    const A = this._axe;                 // pose par `tige`, meme axe fin
+    if (!A || A.length < 3) return;
+
+    const cav = sp.cav;
+    /* Le contour de la columelle a venir, echantillonne en arc. */
+    const PX = [], PY = [], TX = [], TY = [], EP = [];
+    for (let i = 0; i < A.length; i++) {
+      const a = A[i];
+      /* On s'arrete OU LA COLUMELLE S'ARRETE : la ou son contour a venir
+         rejoint celui de l'apophyse. Coupee a une abscisse fixe, la
+         couronne descendait le long des flancs du sporangiophore et on
+         lisait un collier accroche a la tige, alors que la cavite ne
+         separe que le dome de la peripherie. */
+      const e = sp.profil(a.q, R_COL);
+      /* Le test ne vaut qu'APRES le dome : au sommet les deux profils
+         valent zero tous les deux, l'ecart aussi, et la boucle s'arretait
+         a son premier point — il ne restait de la couronne qu'un trait. */
+      if (a.q > R_COL * 1.4 && e - sp.profil(a.q, 0) < 1.5) break;
+      PX.push(this.px3(a.x, a.y, a.z)); PY.push(this.py3(a.x, a.y, a.z));
+      EP.push(e * 1.06 * this.pxUm);
+    }
+    const n = PX.length;
+    if (n < 3) return;
+    for (let k = 0; k < n; k++) {
+      const p = PX[Math.max(0, k - 1)], q = PX[Math.min(n - 1, k + 1)];
+      const r = PY[Math.max(0, k - 1)], s = PY[Math.min(n - 1, k + 1)];
+      const l = Math.hypot(q - p, s - r) || 1e-6;
+      TX.push((q - p) / l); TY.push((s - r) / l);
+    }
+
+    /* Un seul calque, celui de la pointe : la cavite est DANS le
+       sporocyste, a la profondeur de la columelle qu'elle prepare. Repartie
+       sur les calques de profondeur du contour, elle se coupait en deux a
+       chaque changement, exactement comme la columelle avant elle. */
+    sc.layer(this.plan3(A[0].z));
+
+    const cVac = hexToRgba(P.vacuole);
+    const cBord = hexToRgba(P.grainClair);
+    /* Espacement des vacuoles le long du contour, en um : douze a quinze
+       poches sur un dome de dix-huit, ce qui est l'ordre des planches. */
+    const PAS = 4.0 * this.pxUm;
+    const RV = 1.30 * this.pxUm;
+
+    /* ON MARCHE SUR LE CONTOUR DECALE, PAS SUR L'AXE. Espacees le long de
+       l'axe puis poussees de dix-sept micrometres vers l'exterieur, les
+       poches s'ecartaient d'autant que la courbure du dome est forte :
+       serrees au sommet, separees d'un demi-diametre sur les flancs, elles
+       ne coalescaient jamais la ou c'est le plus visible. Sur une courbe
+       convexe, un decalage e multiplie la longueur d'arc par (1 + e.k). */
+    const OX = new Float64Array(n), OY = new Float64Array(n);
+    for (let cote = -1; cote <= 1; cote += 2) {
+      for (let k = 0; k < n; k++) {
+        OX[k] = PX[k] - TY[k] * cote * EP[k];
+        OY[k] = PY[k] + TX[k] * cote * EP[k];
+      }
+      let arc = 0, prochain = PAS * 0.5, i = 0;
+      while (i < n - 1) {
+        const dx = OX[i + 1] - OX[i], dy = OY[i + 1] - OY[i];
+        const d = Math.hypot(dx, dy);
+        if (d < 1e-9) { i++; continue; }
+        while (prochain <= arc + d) {
+          const u = (prochain - arc) / d;
+          const cx = OX[i] + dx * u, cy = OY[i] + dy * u;
+          /* Chaque poche a son heure : toutes ensemble, on lit un
+             pointille dessine, pas des vacuoles qui apparaissent. */
+          const h = (Math.sin(prochain * 0.37 + cote * 2.1) * 0.5 + 0.5);
+          const naiss = smoothstep(h * 0.42, h * 0.42 + 0.26, cav);
+          if (naiss > 0.02) {
+            /* L'aplatissement : le grand axe rejoint les voisines, le
+               petit se resserre. C'est la coalescence, pas un fondu. */
+            const ap = smoothstep(0.45, 1, cav);
+            const a = lerp(RV, PAS * 0.60, ap) * naiss;
+            const b = lerp(RV, RV * 0.44, ap) * naiss;
+            sc.ell(cx, cy, a, b, Math.atan2(dy, dx), fade32(cVac, 0.62 * naiss),
+                   ap < 0.5 ? fade32(cBord, 0.26 * naiss * (1 - ap * 2)) : 0);
+          }
+          prochain += PAS;
+        }
+        arc += d; i++;
+      }
     }
   }
 
@@ -378,7 +518,7 @@ export class VueSporange extends Scene {
           nettes. C'est ce qui donne l'epaisseur au sac — dessinees a plat,
           elles font un motif, pas un volume. */
     /* UNE SPORE N'EST PAS UN APLAT. A dix-huit pixels de large, le disque
-       plein a liseré de la vesicule — qui marche a deux pixels — devient une
+       plein a lisere de la vesicule — qui marche a deux pixels — devient une
        rondelle de couleur unie, et on perd la matiere qu'a l'hyphe. Une
        spore est une CELLULE : paroi epaisse et refringente, cytoplasme
        granuleux, et le point clair excentre que donne une bille
@@ -397,7 +537,22 @@ export class VueSporange extends Scene {
       sc.layer(this.plan3(wz, 0));
       const b = r * s.ov;
       if (r < 1.8) { sc.ell(x, y, r, b, s.ang, cFill, 0); continue; }
-      /* paroi : un anneau clair, puis le liseré sombre du contraste */
+      /* Au-dela de onze pixels de rayon, l'aplat ne tient plus : c'est la
+         SPORE QU'ON SUIT, elle occupe un cinquieme du cadre, et a cette
+         taille une cellule doit montrer ce qu'un apex montre.
+
+         CELLE QU'ON SUIT, ET ELLE SEULE. Sur le seul critere de taille,
+         les deux secondes ou la camera passe de l'echelle du sac a celle
+         de la spore mettaient cinq cents spores au-dessus du seuil d'un
+         coup : le nuage entier devenait granuleux et cercle de halos, ce
+         qui n'a aucun sens optique — dans un tas, une spore est vue a
+         travers les autres. Le detail est ce que la mise au point
+         designe. */
+      if (s === sp.suivie && r > 11
+          && Math.abs(wz - this.zF) < (this.dof || DOF) * 0.55) {
+        this.sporeDetaillee(sp, s, x, y, r, b, P); continue;
+      }
+      /* paroi : un anneau clair, puis le lisere sombre du contraste */
       sc.ell(x, y, r, b, s.ang, mix32(cFill, cParoi, 0.42), cRim);
       sc.ell(x, y, r * 0.78, b * 0.78, s.ang, shade32(cFill, s.clair ? 0.06 : -0.05), 0);
       if (r > 3.2) {
@@ -415,6 +570,112 @@ export class VueSporange extends Scene {
                r * 0.24, fade32(cCoeur, s.clair ? 0.55 : 0.34));
       }
     }
+  }
+
+  /**
+   * LA SPORE QU'ON SUIT, a l'echelle ou c'est une cellule.
+   *
+   * « J'aurais prefere avoir le meme niveau de detail sur la spore que sur
+   * l'apex, la granularite, les organites. » C'est la meme demande que la
+   * regle 3 : ce qu'on voit doit etre le mecanisme. Une spore n'est pas une
+   * bille, c'est une cellule au repos, et une cellule au repos se reconnait
+   * a trois choses — une paroi epaisse (c'est elle qui la fait survivre),
+   * des globules lipidiques (c'est sa reserve, et c'est ce qui la rend
+   * refringente), un cytoplasme dense et granuleux.
+   *
+   * On emprunte le vocabulaire du cytoplasme de l'apex, terme pour terme :
+   * meme `noyau` + `nucleole`, memes `cap` pour les mitochondries, memes
+   * `dot` pour les granules. Deux vocabulaires differents pour le meme
+   * objet a deux echelles, et on ne lit plus le meme organisme.
+   *
+   * Les couches vont de l'exterieur vers l'interieur, comme au tube :
+   * paroi, periplasme, membrane, cytoplasme. Ce sont les memes entrees de
+   * palette — une spore n'a pas plus de couleur a elle qu'une vesicule.
+   */
+  sporeDetaillee(sp, s, x, y, r, b, P) {
+    const sc = this.sc;
+    const org = sp.detailler(s);
+    const co = Math.cos(s.ang), si = Math.sin(s.ang);
+    /* Repere de la spore : on echelle d'abord (r sur son grand axe, b sur
+       le petit — c'est l'ellipse de la projection oblique), on tourne
+       ensuite. Dans l'autre ordre, les organites sortiraient du contour du
+       cote ou la spore est aplatie. */
+    const ox = (u, v) => x + u * r * co - v * b * si;
+    const oy = (u, v) => y + u * r * si + v * b * co;
+
+    const cCyto = hexToRgba(P.cyto);
+    const cBord = hexToRgba(P.cytoBord);
+
+    /* 1. le halo : une spore isolee dans le milieu en porte un, comme le
+          tube. Sans lui elle est posee sur le fond au lieu d'y flotter. */
+    sc.ell(x, y, r * 1.07, b * 1.07, s.ang,
+           fade32(hexToRgba(P.halo), P.haloForce * 0.38), 0);
+
+    /* 2. la paroi. EPAISSE — c'est le trait d'une spore, et c'est pour ca
+          qu'elle survit a la dessiccation. Un seizieme du rayon comme au
+          tube serait un trait ; ici elle fait un huitieme. */
+    sc.ell(x, y, r, b, s.ang, mix32(cCyto, hexToRgba(P.paroi), 0.58),
+           hexToRgba(P.paroi));
+    /* Ornementation : les spores de Mucorales sont striees. Un TRAIT FIN
+       et pale, pas un secteur epais — a 0,30 d'alpha et deux pixels de
+       large, les sept stries se lisaient comme des dents noires plantees
+       dans la paroi, et la spore avait l'air sale. */
+    for (let k = 0; k < 7; k++) {
+      const t0 = k * (TAU / 7) + s.ov * 2.3;
+      sc.arcE(x, y, r * 0.93, b * 0.93, s.ang,
+              fade32(hexToRgba(P.grainSombre), 0.16), t0, t0 + 0.30, 1);
+    }
+    /* 3. periplasme puis membrane : les memes couleurs qu'au tube, dans le
+          meme ordre. C'est la regle 3, a l'echelle de la spore. */
+    sc.ell(x, y, r * 0.875, b * 0.875, s.ang, fade32(hexToRgba(P.periplasme), 0.85), 0);
+    sc.ell(x, y, r * 0.825, b * 0.825, s.ang, hexToRgba(P.membrane), 0);
+
+    /* 4. le cytoplasme, assombri au bord : une sphere vue par transparence
+          est plus dense sur ses bords, parce qu'on la traverse plus
+          longtemps. A plat, on relit une rondelle. */
+    /* Quatre pas et non deux : en deux, l'assombrissement de bord se lisait
+       comme un ANNEAU sombre pose sous la paroi — un objet de plus — au
+       lieu du degrade continu que donne une sphere translucide. */
+    for (let k = 0; k < 4; k++) {
+      const u = k / 3;
+      const e = lerp(0.795, 0.52, u);
+      sc.ell(x, y, r * e, b * e, s.ang,
+             mix32(shade32(cCyto, s.clair ? 0.10 : 0.03), cBord, 0.42 * (1 - u)), 0);
+    }
+
+    /* 5. les organites, tires une fois pour toutes dans la simulation :
+          recalcules a chaque image ils scintilleraient. */
+    const cGC = hexToRgba(P.grainClair), cGS = hexToRgba(P.grainSombre);
+    for (const o of org) {
+      const px = ox(o.x, o.y), py = oy(o.x, o.y);
+      if (o.t === 'grain') {
+        sc.dot(px, py, Math.max(0.8, o.a * r), fade32(o.clair ? cGC : cGS, 0.78));
+      } else if (o.t === 'mito') {
+        sc.cap(px, py, o.a * 2 * r, Math.max(1.1, o.b * 2 * r), s.ang + o.ang,
+               fade32(hexToRgba(P.mito), 0.60));
+      } else if (o.t === 'lipide') {
+        /* LE GLOBULE LIPIDIQUE EST CE QUI FAIT BRILLER UNE SPORE. En
+           contraste de phase c'est une bille dans une bille : bord sombre,
+           coeur lumineux. Dessine en aplat clair, on lit une bulle de
+           montage. */
+        sc.ell(px, py, o.a * r, o.a * b, s.ang, fade32(hexToRgba(P.vacuole), 0.80),
+               fade32(cGS, 0.40));
+        sc.dot(px - o.a * r * 0.24, py - o.a * b * 0.28, o.a * r * 0.40,
+               fade32(hexToRgba(P.milieuClair), 0.50));
+      } else {
+        /* Le noyau : une zone plus dense, pas un schema de manuel — le
+           meme parti que dans l'apex. */
+        sc.ell(px, py, o.a * r, o.a * b * 0.86, s.ang + o.ang * 0.1,
+               fade32(hexToRgba(P.noyau), 0.70), 0);
+        sc.dot(px, py, o.a * r * 0.38, fade32(hexToRgba(P.nucleole), 0.62));
+      }
+    }
+
+    /* 6. le point clair du contraste de phase : une bille transparente
+          concentre la lumiere un peu au-dessus de son centre. Il est LE
+          meme que sur les petites spores — une seule lecture optique. */
+    sc.dot(ox(-0.30, -0.26), oy(-0.30, -0.26), r * 0.15,
+           fade32(hexToRgba(P.milieuClair), 0.40));
   }
 
   /**

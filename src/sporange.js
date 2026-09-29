@@ -23,8 +23,9 @@ const $$ = (s) => [...document.querySelectorAll(s)];
 const LEGENDES = {
   rhizoides: 'Les rhizoïdes plongent dans le substrat et la tige démarre — un seul événement.',
   montee: 'Le sporangiophore monte vers l’observateur. Le stolon sort du plan de mise au point.',
-  apophyse: 'La pointe gonfle : apophyse, puis columelle.',
-  sporocyste: 'La paroi du sporocyste ballonne par-dessus la columelle.',
+  renflement: 'La pointe elle-même gonfle : elle devient le sporocyste. L’apophyse est le raccord.',
+  cavite: 'Des vacuoles apparaissent au-dessus du centre, s’aplatissent et coalescent en cavité de clivage.',
+  columelle: 'Une paroi se forme du côté interne de la cavité et bombe : la columelle.',
   clivage: 'Le cytoplasme se cloisonne. Les spores naissent partout à la fois, pas depuis un centre.',
   pression: 'Le sac est plein. La paroi se tend.',
   eclatement: 'Rupture. La déchirure court le long de la paroi, qui se retrousse en collerette.',
@@ -86,7 +87,11 @@ export class AppSporange {
     if (sp.phase === 'envol' && sp.suivie) {
       const s = sp.suivie, C = sp.centre;
       cx = C.x + s.x; cy = C.y + s.y; cz = C.z + s.z;
-      pxCible = 4.2;
+      /* 9 px/um : la spore fait soixante-dix pixels de large, ce qui est
+         l'echelle ou une cellule montre ses organites — la meme que celle
+         du cytoplasme apical. A 4,2 elle en faisait trente-cinq et on ne
+         lisait qu'une bille avec un point clair. */
+      pxCible = 9.0;
       /* On monte en grossissement, donc la profondeur de champ se referme :
          6,5 um au lieu de 22. Tout ce qui n'est pas la spore part dans le
          flou, y compris ses voisines immediates — c'est ce qui fait qu'on
