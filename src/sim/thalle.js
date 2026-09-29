@@ -117,6 +117,12 @@ export class Thalle {
     this.pointes = [];
     this.dens = new Map();     // cellule 60 um -> um de mycelium
     this.fin = new Map();      // cellule 8 um  -> [idxAxe, i, ...]
+    /* Les anastomoses reellement faites : {a, i, b, j}. Voir `pas`. */
+    this.jonctions = [];
+    /* Modulation facultative de la vitesse d'une pointe, et consigne de cap
+       facultative. Les deux servent au jeu et a lui seul. Voir `pas`. */
+    this.modul = null;
+    this.consigne = null;
 
     /* UNE COLONIE GREFFEE SUR UN GERME DEJA CONSTRUIT. C'est ce dont le
        cycle a besoin : le thalle qu'on regarde de loin doit etre le germe
@@ -149,11 +155,18 @@ export class Thalle {
     return p;
   }
 
-  semer(x, y, th, gen) {
+  /**
+   * @param {{ax:number, i:number}} [lien]  le point d'axe dont celui-ci sort.
+   *   Il ne sert pas a la colonie — une branche pousse aussi bien sans savoir
+   *   d'ou elle vient — mais le JEU en a besoin : sans lui, le reseau n'est
+   *   pas connexe et la reserve ne peut pas remonter du parent vers la
+   *   branche. Un thalle est un reseau, pas une collection de courbes.
+   */
+  semer(x, y, th, gen, lien = null) {
     /* L'indice est porte par l'axe : le chercher avec indexOf coutait O(n)
        a chaque point memorise, soit la moitie du temps de calcul une fois
        passe le millier d'axes. */
-    const axe = { idx: this.axes.length, xs: [x], ys: [y], n: 1, x0: x, y0: y, x1: x, y1: y, gen };
+    const axe = { idx: this.axes.length, xs: [x], ys: [y], n: 1, x0: x, y0: y, x1: x, y1: y, gen, lien };
     this.axes.push(axe);
     const p = {
       x, y, th, om: 0, gen, axe,
@@ -259,13 +272,26 @@ export class Thalle {
       const f = this.facteur(p.x + Math.cos(p.th) * MAILLE_DENS,
                              p.y + Math.sin(p.th) * MAILLE_DENS);
       if (f < FAMINE) { p.vive = false; p.famine = true; this.famines++; continue; }
-      const v = this.v0 * f;
+      /* MODULATION EXTERIEURE, et elle est facultative. La colonie
+         contemplative n'en a pas : une pointe pousse a `v0 . f(matrice)`,
+         c'est la loi calibree sur la micro (verdict 13) et elle ne se
+         negocie pas. Le JEU, lui, ajoute une seconde contrainte — la
+         reserve qui arrive jusqu'a cette pointe-la — et c'est par ici
+         qu'elle entre. A `modul` absent, rien ne change. */
+      const v = this.v0 * f * (this.modul ? this.modul(p) : 1);
       const da = v * dt;
 
       /* 1. Consigne de cap. Trois termes, et un seul est esthetique. */
       /*    a) derive lente : une hyphe libre n'est pas droite, elle serpente.
              Meme bruit et meme amplitude que la micro. */
       let cible = (noise1((this.t + p.phase) * 0.055, 31) - 0.5) * 1.5;
+
+      /* CONSIGNE EXTERIEURE, facultative elle aussi. Une pointe TENUE par le
+         joueur est conduite : on lui donne un cap, et les trois termes
+         ci-dessous ne s'appliquent plus. Elle garde en revanche l'inertie
+         (8,5 s mesurees) et le rayon de virage — on conduit une pointe, on
+         ne la telecommande pas. */
+      const forcee = this.consigne ? this.consigne(p) : null;
 
       /*    b) autotropisme NEGATIF : on descend le gradient de densite. C'est
              ce qui fait une colonie plutot qu'une fougere — sans lui les
@@ -292,7 +318,7 @@ export class Thalle {
 
       /* 2. Le cap suit avec la MEME inertie que la micro, et la vitesse
             angulaire maximale est v/R avec le rayon mesure au banc. */
-      const omCible = clamp(cible, -1, 1) * this.omMax;
+      const omCible = clamp(forcee !== null && forcee !== undefined ? forcee : cible, -1, 1) * this.omMax;
       p.om += (omCible - p.om) * clamp(dt / TAU_OM, 0, 1);
       p.th += p.om * dt;
 
@@ -322,15 +348,23 @@ export class Thalle {
               de Trinci, ce qui est le symptome : la regle de ramification
               tournait a vide. */
         if (p.l > AGE_MIN_ANASTOMOSE) {
-          let fusion = false;
+          let fusion = null;
           const px = p.x, py = p.y, pl = p.l;
           this.pres(px, py, (a2, i) => {
             if (a2 === ax && pl - i * PAS_GEO < AGE_MIN_ANASTOMOSE) return false;
             const dx = px - a2.xs[i], dy = py - a2.ys[i];
-            if (dx * dx + dy * dy < D_ANASTOMOSE * D_ANASTOMOSE) { fusion = true; return true; }
+            if (dx * dx + dy * dy < D_ANASTOMOSE * D_ANASTOMOSE) { fusion = { ax: a2.idx, i }; return true; }
             return false;
           });
-          if (fusion) { p.vive = false; this.anastomoses++; }
+          if (fusion) {
+            p.vive = false; this.anastomoses++;
+            /* ON RETIENT LA JONCTION. Pour la colonie, une anastomose n'est
+               qu'une pointe qui s'arrete ; pour le jeu c'est un RACCOURCI,
+               la seule facon qu'a la reserve d'aller d'une branche a l'autre
+               sans repasser par l'origine. Sans cette liste, l'anastomose
+               reste l'ornement qu'elle etait. */
+            this.jonctions.push({ a: ax.idx, i: ax.n - 1, b: fusion.ax, j: fusion.i });
+          }
         }
       }
     }
@@ -405,7 +439,7 @@ export class Thalle {
     const cote = dPlus < dMoins ? 1 : -1;
     const ang = (60 + this.rng() * 20) * Math.PI / 180;
 
-    this.semer(bx, by, best.th + cote * ang, best.gen + 1);
+    this.semer(bx, by, best.th + cote * ang, best.gen + 1, { ax: ax.idx, i });
     this.branchements++;
   }
 

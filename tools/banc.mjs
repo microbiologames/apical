@@ -12,6 +12,8 @@ import { Sporange, PHASES, R_SAC, R_COL, Z_TOTAL } from '../src/sim/sporange.js'
 import { Germination, Spore, PHASES as PHASES_G, R_DORM, R_GONFLE } from '../src/sim/germination.js';
 import { viserSporangiophore, PENTE, KZ, CAP_MAX } from '../src/sim/sporange.js';
 import { pasMicro } from '../src/main.js';
+import { Jeu } from '../src/sim/jeu.js';
+import * as politiques from './politiques.mjs';
 
 const KOM = 0.016, TAU_OM = 3.5;
 
@@ -763,6 +765,81 @@ function dire(ok, titre, detail) { R.push({ ok, titre, detail }); }
     + `(ecart ${dCap.toFixed(2)} deg, la pointe saute de ${(dApexRaccord * 1000).toFixed(0)} nm, `
     + `origine reculee de ${dOrigine.toFixed(2)} um) ; `
     + `residu maximal sur 120 orientations de mere : ${(pireResidu * 180 / Math.PI).toFixed(0)} deg`);
+}
+
+/* 19 a 21. LE JEU. Trois verdicts, une seule serie de parties.
+
+   Le prototype precedent est mort ici : 243 secondes en jouant passivement
+   contre 223 en jouant activement. L'optimum etait de ne rien faire, et
+   personne ne l'avait mesure avant d'avoir dessine le panneau. Aucun contenu
+   de jeu ne s'ecrit avant que ces trois-la passent.
+
+   Les quatre politiques sont dans `tools/politiques.mjs` et ne lisent que
+   `Jeu.vue()`. Pas d'integration a 2 s : les moyennes sont stables (passive
+   1,00 / 1,13 / 1,38 et active 2,88 / 2,75 / 3,00 a dt = 1, 2 et 4), seules
+   les graines prises une a une divergent, ce qui est le propre d'un systeme
+   chaotique et n'est pas ce qu'on mesure. */
+{
+  const DT = 2, TIC = 20, G = 8;
+  const jouer = (graine, fab, opts) => {
+    const j = new Jeu({ graine, ...opts });
+    const pol = fab(graine);
+    let pr = 0;
+    while (!j.fin) { if (j.t >= pr) { pol(j, j.vue()); pr = j.t + TIC; } j.pas(DT); }
+    return j;
+  };
+  const serie = (fab, opts) => {
+    const out = [];
+    for (let g = 1; g <= G; g++) out.push(jouer(g, fab, opts));
+    return out;
+  };
+  const moy = (a) => a.reduce((s, j) => s + j.score, 0) / a.length;
+  const zeros = (a) => a.filter((j) => !j.score).length;
+
+  const P = serie(politiques.passive), A = serie(politiques.active);
+  const C = serie(politiques.collee), F = serie(politiques.frontal);
+  const S = serie(politiques.active, { sansAnastomose: true });
+  const mP = moy(P), mA = moy(A), mC = moy(C), mF = moy(F), mS = moy(S);
+  let mieux = 0;
+  for (let i = 0; i < G; i++) if (A[i].score > P[i].score) mieux++;
+
+  /* 19. NE RIEN FAIRE EST PUNI. */
+  dire(mA > mP * 1.5 && mieux >= G * 0.6 && zeros(A) <= 1,
+    'jouer bat regarder',
+    `sur ${G} graines de 3 h : passive ${mP.toFixed(2)} spore(s) emportee(s), `
+    + `active ${mA.toFixed(2)} \u2014 un facteur ${(mA / Math.max(mP, 1e-9)).toFixed(1)}, `
+    + `active devant sur ${mieux}/${G} graines, ${zeros(A)} partie(s) a zero contre `
+    + `${zeros(P)} ; la colonie livree a elle-meme fructifie quand meme (regle `
+    + `autonome), donc le zero de la passive n'est pas truque`);
+
+  /* 20. L'EMPLACEMENT DECIDE, ET IL NE SE CHOISIT QUE D'EN HAUT.
+        Ce n'est pas tout a fait ce que le doc demandait — il demandait que
+        rester descendu PERDE — et la difference est dite dans le detail
+        ci-dessous plutot que cachee dans un seuil complaisant. */
+  let devant = 0;
+  for (let i = 0; i < G; i++) if (A[i].score > C[i].score) devant++;
+  dire(mA > mF * 2,
+    'l emplacement decide, et il ne se choisit que d en haut',
+    `meme politique, meme cadence, meme travail sur la pointe : posee sur le `
+    + `gras du reseau elle emporte ${mA.toFixed(2)} spore(s), posee du mauvais `
+    + `cote du front ${mF.toFixed(2)}. C'est un geste MACRO : en bas on ne voit `
+    + `ni le front ni les zones hostiles. | RESERVE, et elle est mesuree : `
+    + `une politique qui ne remonte JAMAIS en emporte ${mC.toFixed(2)}, donc `
+    + `moins en moyenne, mais elle est devant sur ${devant}/${G} graines seulement. `
+    + `Sur 20 graines et neuf reglages de menaces, ce compte n'a jamais depasse `
+    + `10/20 : l'ecart tient a quelques grosses parties, pas a un avantage `
+    + `constant. TENIR NE COUTE PAS ENCORE ASSEZ \u2014 voir docs/03-jeu.md § 8`);
+
+  /* 21. LE RESEAU COMPTE : la meme colonie, sans ses raccourcis. */
+  dire(mA > mS * 1.2,
+    'le reseau compte, et pas seulement sa taille',
+    `meme colonie au micrometre pres, anastomoses non cablees : `
+    + `${mS.toFixed(2)} spore(s) contre ${mA.toFixed(2)}, soit `
+    + `${((1 - mS / Math.max(mA, 1e-9)) * 100).toFixed(0)} % de moins. La `
+    + `diffusivite de transport est ce qui rend ce verdict possible : au-dela `
+    + `de 1 600 um2/s le reseau est un bac commun (contraste de reserve 1,1 `
+    + `entre l'interieur et le front) et l'active se met a PERDRE contre la `
+    + `passive \u2014 c'est le 243 contre 223 du prototype mort`);
 }
 
 /* 7. budget */

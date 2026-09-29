@@ -13,7 +13,7 @@ les captures de contrôle.
 | Commande | Ce qu'elle fait |
 |---|---|
 | `npm run serve` | sert le dépôt tel quel |
-| `npm run banc` | 18 verdicts de mesure, sans rendu, en node |
+| `npm run banc` | 21 verdicts de mesure, sans rendu, en node |
 | `npm run visuel` | captures dans `/tmp/apical-shots` (Playwright) |
 | `npm run visuel:branche` | captures de la page ramification |
 | `npm run visuel:thalle` | captures de la page colonie |
@@ -40,7 +40,7 @@ que l'exocytose » évite de refaire l'erreur.
 
 ---
 
-## Les douze règles de fond
+## Les treize règles de fond
 
 ### 1. L'hyphe est UN objet
 
@@ -534,6 +534,61 @@ flous qui défilent à des vitesses différentes — c'est la **parallaxe** qui 
 « ça va vite », pas le flou. La spore, elle, est dessinée exactement comme elle
 le sera au sol.
 
+### 13. Le jeu ne s'écrit qu'après la mesure
+
+`src/sim/jeu.js`, `docs/03-jeu.md`, verdicts 19 à 21. **Rien n'est dessiné
+tant que le modèle sans rendu n'a pas prouvé que jouer vaut mieux que
+regarder.** Le prototype précédent est mort exactement là : 243 secondes en
+jouant passivement contre 223 en jouant activement, l'optimum était de ne rien
+faire, et personne ne l'avait mesuré avant d'avoir dessiné le panneau.
+
+Le modèle n'ajoute que trois choses à la colonie de `thalle.js` : un
+**nutriment qui s'épuise**, une **réserve qui circule** sur un graphe posé sur
+les axes, et une **attention** — on ne tient qu'une pointe à la fois, et
+`vue()` ne rend que ce que le joueur voit *vraiment*, la carte en haut, une
+seule pointe en bas. Une politique de banc qui lirait l'état complet
+mesurerait un oracle, pas un joueur.
+
+**LE TRANSPORT EST LE RÉGLAGE QUI DÉCIDE SI LE JEU EXISTE**, et c'est le
+résultat le plus important de toute cette passe. Il s'écrit en **diffusivité**,
+µm²/s, et non en nombre de passes de relaxation — une diffusivité se lit, une
+perturbation parcourt √(D·t). Balayé sur cinq valeurs :
+
+| D (µm²/s) | contraste de réserve | passive | active |
+|---|---|---|---|
+| 800 | 2,2 | 1,00 | **1,88** |
+| 1 600 | 1,5 | 2,13 | 2,00 |
+| 9 500 | 1,1 | 3,25 | 2,88 |
+
+Au-delà de 1 600, **le réseau est un bac commun** et l'active se met à *perdre*
+contre la passive : quand la colonie nourrit un sporangiophore où qu'il soit,
+choisir où le poser ne sert plus à rien. **C'est la cause du 243 contre 223, et
+elle est tenue.** À 800, √(D·t) vaut 980 µm sur les vingt minutes d'un
+remplissage — le rayon de la colonie à la mi-partie. Un sporocyste est nourri
+par son voisinage, pas par la colonie entière.
+
+**Ce qu'on décide, c'est OÙ et QUAND**, et il n'y a pas de seuil de départ :
+la faisabilité d'un sporocyste n'est pas une affaire de stock, c'est une
+affaire de débit. Il se remplit de ce que son voisinage lui livre. Le seuil
+qu'il y avait tombait pile sur la moyenne du réseau et refusait une fois sur
+deux au hasard de la relaxation — 178 refus sur 178 essais dans une partie.
+**Un seuil qui trie au hasard n'est pas une contrainte, c'est du bruit.**
+
+**Le score est gradué.** Il a été binaire — la partie s'arrêtait au premier
+sporocyste — et c'était deux fautes : la mesure ne distinguait plus « à peine »
+de « largement », et il n'y avait plus d'arbitrage puisque sporuler tôt était
+gratuitement meilleur.
+
+**Et le verdict 20 est un demi-résultat, dit comme tel dans la sortie du
+banc.** L'emplacement décide (2,35 spores contre 0,45 posé du mauvais côté,
+un facteur cinq) et c'est un geste qui n'existe qu'en haut. Mais une politique
+qui ne remonte jamais perd seulement *en moyenne* (1,70 contre 2,35) : elle
+est devant sur 9 graines sur 20, et sur neuf réglages de menaces ce compte n'a
+jamais dépassé 10/20. **Tenir une pointe ne coûte pas encore assez.** Les
+pistes sont dans `docs/03-jeu.md` § 8 ; aucune ne s'écrit avant d'être mesurée.
+
+---
+
 ### 10. Le Spitzenkörper n'est jamais dessiné
 
 C'est une densité, pas un objet : un puits de rétention à ~2 µm de la pointe,
@@ -633,6 +688,20 @@ Et pour le cycle :
 | la pointe saute au raccord | 0 nm | 0 |
 | direction tenue au raccord | 0,7° | 0 |
 | recul de l'origine du stolon | 1,35 µm | < rayon du tube (5,5) |
+
+Et pour le jeu (20 graines de 3 h, `src/sim/jeu.js`) :
+
+| | mesuré | référence |
+|---|---|---|
+| passive / active | 1,10 / 2,35 spores | l'active devant sur 14/20 |
+| posé sur le gras / du mauvais côté | 2,35 / 0,45 | facteur 5 |
+| collée à une pointe / en alternant | 1,70 / 2,35 | devant sur 9/20 seulement |
+| avec / sans anastomoses | 2,75 / 1,25 | 55 % de moins |
+| contraste de réserve intérieur/front | 2,2 | > 1 (1,1 = bac commun) |
+| remplissage d'un sporocyste | 20 min, à 6 u/s livrées | palier mesuré |
+| débit livré à un puits | 2,1 u/s à 11 pointes, 9,4 à 49 | — |
+| budget d'une partie | 62 % entretien, 14 % extension, 18 % perdu | 7 % disponible |
+| indépendance au pas d'intégration | 2,88 / 2,75 / 3,00 à dt = 1, 2, 4 | égalité |
 
 Un chiffre documenté sans avoir été mesuré est un chiffre qu'on croit seulement
 avoir. Ça s'est déjà payé.
@@ -898,6 +967,46 @@ partie du travail**, pas après, pendant.
   `this.etape` bascule au sommet du flou alors qu'on dessine encore la scène
   précédente : la caméra cadrait la scène d'arrivée sur l'image de départ.
   L'étape se **passe en argument**.
+- **Un pool qui se relaxe vite est un pool global, et alors la topologie ne
+  veut rien dire.** Le transport était écrit en passes de relaxation par
+  seconde ; la diffusivité effective valait 9 500 µm²/s, soit sept minutes
+  pour égaliser une colonie de deux millimètres. La réserve allait de 47 à
+  102 par nœud du centre au front — un facteur deux —, le commentaire du
+  fichier sur le cul-de-sac était un vœu, et **la politique active perdait
+  contre la passive**. Un modèle de flux doit se dire en µm²/s, pas en passes.
+- **Un puits qui tient son nœud à zéro le tue.** Le sporangiophore pompait
+  14 u/s sur un nœud qui en absorbe 0,5 : la dette d'entretien montait par
+  construction et au bout de 260 s le nœud s'autolysait en emportant son
+  sporocyste — cinq à dix-huit avortements par partie, **pas une seule spore
+  sur quarante-huit parties**. La dette dit qu'un tronçon n'est plus nourri ;
+  elle ne dit rien quand c'est lui qui nourrit.
+- **Un seuil posé sur la moyenne d'une grandeur plate trie au hasard.** Le
+  seuil de départ d'un sporangiophore était à 140 et la réserve moyenne par
+  nœud à 137 : 178 refus sur 178 essais dans une partie, score nul, et rien
+  dans la sortie pour le dire. Ce n'est pas une contrainte, c'est du bruit.
+- **Le geste du joueur doit être le geste de la colonie.** La branche forcée
+  partait de la pointe elle-même, alors que la règle de Trinci sème 9 à 20 µm
+  en arrière : la fille naissait dans la cellule que sa mère venait de
+  remplir, y lisait une densité saturée et mourait de faim à la seconde
+  suivante. Treize famines contre cinq, et cinquante-sept branches posées
+  pour rien.
+- **Demander un choix sans montrer sur quoi il porte.** Le sporangiophore
+  naît six nœuds derrière la pointe ; la vue ne donnait que la pointe. Le
+  joueur choisissait « la pointe la plus loin du front » et posait son
+  sporocyste sur une jeune branche, près de l'origine : les deux sporocystes
+  d'une partie mouraient à 70 % et 93 %, `x = front` à l'unité près.
+- **Une politique de banc qui tire à `Math.random` ne mesure rien.** Deux
+  mesures de la MÊME politique sur les mêmes graines donnaient 1,50 et 1,88
+  spores, et on ne pouvait plus distinguer un réglage d'un coup de dés.
+- **Huit graines ne suffisent pas à trancher un écart de 10 %.** Le verdict
+  « tenir a un coût » passait à 2,75 contre 2,50 sur huit graines ; à vingt,
+  la politique collée gagnait, 2,60 contre 2,55. Un verdict qui bascule sur
+  une graine n'est pas un verdict — il faut regarder le compte graine par
+  graine, pas seulement la moyenne.
+- **Un stress sans borne n'est pas un stress, c'est une fin.** Les zones
+  hostiles grossissaient à 0,35 µm/s sans rayon final : 3,8 mm après trois
+  heures, cinq disques couvrent le plateau, et toutes les politiques tombaient
+  de 2,55 à 1,05 d'un coup. Une croûte de sel est une tache, pas une fatalité.
 - **Une capture prise N millisecondes après un changement de phase ne montre
   pas ce qu'on croit.** L'éclatement dure 1,6 s simulée, soit 0,4 s réelle à
   ×4 : la capture arrivait régulièrement quatre images après le basculement en

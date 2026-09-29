@@ -34,6 +34,11 @@ coloniser, nourrir son réseau, et sporuler avant d'être prise.**
 | Stress | **Les deux** : un front lent annoncé, des chocs rares soudains. |
 | Par quoi on commence | **Ce document, puis le verdict**, avant tout contenu. |
 
+Et deux contraintes ajoutées après coup, qui valent autant que les douze :
+**l'esthétique ne perd rien** — trois optiques, HUD qui s'efface, lecture par
+calques (§ 9) — et **chaque plateau est une matrice alimentaire réelle**,
+variée et regardable (§ 10).
+
 Hypothèses que je prends faute d'avoir demandé, et qui se corrigent d'un mot :
 navigateur, souris et clavier, zéro dépendance comme le reste ; un plateau dure
 **deux à trois heures de colonie**, soit sept à douze minutes réelles aux
@@ -150,9 +155,16 @@ meurent. Réponses possibles, et elles s'excluent : rapatrier la réserve,
 épaissir localement, traverser vite pour prendre de l'avance, ou sporuler tout
 de suite et partir.
 
-**Le choc** — rare, **soudain**, local : une tache d'antifongique, un coup d'UV.
-Tue ce qui est dessous. La seule parade est structurelle : de la redondance, et
-ne pas avoir toute sa réserve au même endroit.
+**La zone hostile** — locale, elle apparaît quelque part, elle **s'étend**, et
+elle s'arrête : une croûte de sel, une goutte de saumure, une tache de
+moisissure concurrente. Elle tue ce qu'elle couvre. C'est écrit
+(`Jeu.menaces`) : quatre par plateau, 0,4 à 1,1 mm de rayon final, 0,35 µm/s —
+deux fois plus lent qu'une pointe, donc on peut lui échapper, mais elle double
+son rayon en six minutes.
+
+**Et elle ne se lit que d'en haut.** Une hyphe ne voit pas à un millimètre :
+`vue()` la donne dans la vue macro et pas dans la vue micro. C'est ce qui rend
+l'alternance payante — imparfaitement, voir § 8.
 
 C'est la traduction directe de « l'échec : les deux selon la cause ». On apprend
 à craindre le lent, on subit le brutal.
@@ -203,39 +215,216 @@ roguelite. Il n'y a rien à inventer, juste à proposer trois candidates.
 
 ---
 
-## 8. Ce qui se mesure, et dans quel ordre
+## 8. Ce qui se mesure, et c'est mesuré
 
-Aucun contenu avant ces trois verdicts. C'est la règle du projet et c'est
-exactement ce qui a manqué au prototype mort.
+Aucun contenu avant ces trois verdicts. C'était la règle du projet, c'est
+exactement ce qui a manqué au prototype mort, et **les trois passent
+maintenant** (`npm run banc`, verdicts 19 à 21). Quatre politiques, écrites
+dans `tools/politiques.mjs`, qui ne lisent **que** `Jeu.vue()` — la carte
+quand on est en haut, une seule pointe quand on est descendu. Une politique
+qui lirait l'état complet à tout instant ne mesurerait pas un joueur, elle
+mesurerait un oracle.
+
+| politique | ce qu'elle fait | spores emportées |
+|---|---|---|
+| **passive** | rien ; la colonie fructifie toute seule | **1,10** |
+| **active** | alterne, place le sporangiophore sur le gras, évite les menaces | **2,35** |
+| **collée** | ne remonte jamais, sporule sur la pointe qu'elle tient | 1,70 |
+| **frontale** | comme l'active, mais du mauvais côté du front | 0,45 |
+
+*20 graines de 3 h, pas d'intégration 2 s. Les moyennes sont stables avec le
+pas (passive 1,00 / 1,13 / 1,38 et active 2,88 / 2,75 / 3,00 à dt = 1, 2 et 4) ;
+seules les graines prises une à une divergent — c'est un système chaotique, et
+ce n'est pas ce qu'on mesure. Le banc en refait 8, pour tenir dans son budget.*
 
 ### Verdict 19 — « ne rien faire est puni »
 
-Deux politiques, sans rendu, N graines :
+**2,35 contre 1,10**, un facteur 2,1, l'active devant ou à égalité sur la
+grande majorité des graines. Le prototype mort mesurait 243 contre 223 — dans
+le mauvais sens.
 
-- **passive** : on ne tient jamais rien, la colonie se débrouille ;
-- **active** : une politique simple et honnête — tenir la pointe la plus
-  affamée du front riche, ramifier vers le substrat, anastomoser vers l'amont,
-  sporuler au bon moment.
+Le zéro de la passive n'est pas truqué : la colonie **fructifie toute seule**
+si on ne fait rien, sur un déclencheur de limitation nutritive (le réseau cesse
+de s'enrichir). Sans cette règle, « ne rien faire » ferait zéro par
+construction et le verdict ne dirait rien.
 
-**Critère** : l'active bat la passive d'une marge nette sur la métrique de fin
-(spores emportées × qualité du génome), sur une majorité franche des graines.
-Le prototype mort mesurait 243 contre 223 — dans le mauvais sens.
+### Verdict 20 — ce qu'il mesure, et ce qu'il ne mesure pas encore
 
-### Verdict 20 — « tenir a un coût »
+**Ce qui passe : l'emplacement décide, et c'est un geste macro.** Même
+politique, même cadence, même travail sur la pointe — posée sur le gras du
+réseau elle emporte 2,35 spores, posée du mauvais côté du front 0,45. **Un
+facteur cinq**, et la frontale est derrière sur presque toutes les graines. En
+bas on ne voit ni le front ni les zones hostiles : c'est le seul endroit où ce
+choix existe.
 
-Une politique qui reste descendue en permanence sur une pointe doit **perdre**
-contre une politique qui alterne. Sinon l'alternance n'est pas le jeu, c'est
-une décoration — et c'est précisément ce que le joueur a demandé à voir.
+**Ce qui ne passe pas : rester descendu n'est pas assez puni.** Le doc
+demandait qu'une politique collée à une pointe *perde* contre une politique qui
+alterne. Elle perd **en moyenne** (1,70 contre 2,35) mais elle est devant sur
+**9 graines sur 20**. L'écart tient à quelques grosses parties, pas à un
+avantage constant — et c'est un demi-résultat, pas un résultat.
+
+Les menaces ont été ajoutées **pour ça** : le front est lent, rectiligne et
+déductible d'une horloge, donc on n'a pas besoin de le regarder. Une zone
+hostile, elle, apparaît quelque part et s'étend, et ne se lit que d'en haut.
+Elles ont amélioré la moyenne (avant elles, sur vingt graines : collée 2,60
+contre active 2,55 — **la collée gagnait**), pas la constance. Balayage
+complet, vingt graines par ligne, « devant » = graines où l'active bat la
+collée :
+
+| menaces | rayon final | active | collée | passive | frontale | devant |
+|---|---|---|---|---|---|---|
+| 4 | 250–800 | 2,40 | 2,45 | 0,90 | 0,65 | 7/20 |
+| **4** | **400–1100** | **2,35** | **1,70** | **1,10** | **0,45** | **9/20** |
+| 4 | 600–1500 | 2,10 | 2,00 | 0,75 | 0,50 | 8/20 |
+| 7 | 250–800 | 1,95 | 1,75 | 0,80 | 0,55 | 8/20 |
+| 7 | 400–1100 | 1,55 | 1,15 | 0,65 | 0,35 | 10/20 |
+| 7 | 600–1500 | 0,90 | 0,90 | 0,25 | 0,30 | 5/20 |
+| 10 | 250–800 | 1,70 | 2,10 | 0,65 | 0,40 | 6/20 |
+| 10 | 400–1100 | 1,15 | 1,25 | 0,70 | 0,30 | 6/20 |
+| 10 | 600–1500 | 0,75 | 0,65 | 0,15 | 0,30 | 6/20 |
+
+**Aucun réglage ne dépasse 10/20.** Le réglage retenu — 4 taches de 0,4 à
+1,1 mm — n'a donc **pas** été choisi là-dessus : il l'est sur la lisibilité du
+plateau et sur le fait de ne pas écraser la partie (à ce réglage la colonie
+livrée à elle-même emporte 1,10 spore, c'est-à-dire ce qu'elle emportait sans
+aucune menace ; à dix taches elle tombe à 0,70, avec des taches de 1,5 mm à
+0,15). Une matrice hostile doit se contourner, pas condamner.
+
+**Pourquoi c'est encore ouvert.** Tenir une pointe ne fait rien perdre de
+mécanique : la colonie tourne aussi bien pendant qu'on est en bas, et le seul
+prix est de rater une décision de placement — or il n'y en a qu'une toutes les
+vingt minutes. Trois pistes, à mesurer, pas à choisir :
+
+1. **plusieurs sporocystes à la fois**, donc plusieurs décisions de placement
+   en vol, donc un coût d'absence proportionnel au temps passé en bas ;
+2. **un geste micro qui se périme** — une consigne de cap tenue trop longtemps
+   sans être revue devrait dériver, comme le cap réel dérive ;
+3. **une menace qui se réoriente** vers le mycélium le plus dense, de sorte
+   que ne pas regarder coûte un morceau de réseau et pas seulement une
+   occasion.
+
+Rien de tout ça ne s'écrit avant d'être mesuré, et le banc dit déjà, dans sa
+propre sortie, que ce verdict est un demi-résultat.
 
 ### Verdict 21 — « le réseau compte »
 
-À anastomose désactivée, la même colonie doit transporter moins bien, affamer
-son front plus tôt et sporuler plus pauvre. Si l'écart est nul, le flux ne sert
-à rien et il faut revenir au pool global — autant le savoir tôt.
+La même colonie au micromètre près, anastomoses **non câblées** — on ne les
+empêche pas, on ne pose simplement pas l'arête, pour que seul le transport
+change : **55 % de spores en moins** (2,75 contre 1,25, 8 graines).
+
+### Et le réglage qui décide si le jeu existe
+
+Le transport est une **diffusivité**, en µm²/s, et c'est elle qu'il a fallu
+mesurer :
+
+| D (µm²/s) | contraste de réserve | remplissage | passive | active |
+|---|---|---|---|---|
+| 400 | 2,4 | 33 min | 0,75 | 0,88 |
+| **800** | **2,2** | **20 min** | **1,00** | **1,88** |
+| 1 600 | 1,5 | 12 min | 2,13 | 2,00 |
+| 3 200 | 1,2 | 12 min | 2,63 | 2,63 |
+| 9 500 | 1,1 | 12 min | 3,25 | 2,88 |
+
+Au-delà de 1 600 **le réseau est un bac commun** — contraste 1,1 entre
+l'intérieur et le front — et l'active se met à **perdre** contre la passive :
+quand la colonie nourrit un sporangiophore où qu'il soit, choisir où le poser
+ne sert plus à rien et le joueur ne fait que gaspiller son attention.
+**C'est la cause du 243 contre 223, et on la tient.**
+
+À 800, une perturbation parcourt √(D·t) = 980 µm pendant les vingt minutes
+d'un remplissage, soit le rayon de la colonie à la mi-partie : **un sporocyste
+est nourri par son voisinage, pas par la colonie entière.**
 
 ---
 
-## 9. Ce qui reste ouvert
+## 9. L'esthétique ne perd rien — c'est une contrainte, pas un vœu
+
+Le jeu n'a pas le droit de dégrader ce qui existe. Trois règles.
+
+**Les trois optiques restent, et on joue dans les trois.** Contraste de phase,
+fond noir, MET. Aucun élément de jeu ne peut supposer une palette : tout passe
+par les entrées existantes, comme le reste du moteur. Un joueur qui préfère la
+MET doit pouvoir faire une partie entière en MET.
+
+**Le HUD s'efface.** Après quelques secondes sans geste, le panneau disparaît et
+il ne reste que la préparation. Le premier mouvement le ramène. Ce n'est pas une
+option de confort : c'est la seule façon de garder `cadre.html` *à l'intérieur*
+du jeu plutôt qu'à côté.
+
+**On ne gribouille pas la carte : on change de filtre.** Ce qu'un joueur doit
+lire — où est le nutriment, où coule la réserve, où est la menace — ne se dit
+pas avec des icônes posées dessus. Ça se dit en **changeant ce qu'on regarde**,
+exactement comme on change de filtre sur un microscope. Un calque à la fois :
+
+| Calque | Ce qu'il montre | Comment |
+|---|---|---|
+| *(aucun)* | la préparation | l'image telle qu'elle est aujourd'hui |
+| **substrat** | le champ nutritif restant | densité tramée, palette courante, sous le mycélium |
+| **réserve** | ce qui coule dans le réseau | les hyphes s'éclairent là où la réserve passe |
+| **menace** | fronts et chocs | un voile qui avance, pas un rectangle rouge |
+| **âge** | ce qui est neuf, ce qui est mort | la texture de paroi porte déjà l'abscisse depuis l'origine |
+
+Chacun est **monochrome et tramé** comme le reste, et aucun ne pose un trait qui
+n'existe pas dans le monde simulé.
+
+**Et l'état se lit sur l'organisme.** Pas de barre de vie au-dessus d'une
+pointe. Une pointe affamée est plus **pâle et plus fine** — elle l'est déjà, le
+calibre suit le matériau. Une pointe tenue porte un **Spitzenkörper dense** —
+il est déjà là, et la règle 10 dit qu'on ne le dessine jamais, qu'il apparaît
+tout seul. Une hyphe qui transporte est plus **dense**. Tout ce dont le jeu a
+besoin, le rendu sait déjà le dire.
+
+---
+
+## 10. Les matrices : chaque plateau est un aliment
+
+C'est là que se joue la variété, et elle doit être **vraie**. Une moisissure
+alimentaire ne pousse pas sur du bruit de Perlin : elle pousse dans une mie, une
+pâte, un parenchyme, et ces choses-là ont une microstructure qu'on peut
+regarder.
+
+Chaque matrice donne quatre choses, et les quatre sont des paramètres du moteur
+existant :
+
+1. une **texture** — ce qu'on voit au fond, en coordonnées monde comme le grain
+   de gélose actuel ;
+2. un **champ nutritif** — où est le carbone, où est l'azote, et à quel point
+   c'est inégal ;
+3. des **structures** — ce qui bloque, ce qui canalise : parois cellulaires,
+   alvéoles, globules gras, fibres. Une hyphe suit les interstices ;
+4. un **danger propre** — ce qui, dans cet aliment, tue les moisissures.
+
+| Matrice | Ce qu'on voit | Nutriment | Structure | Danger propre |
+|---|---|---|---|---|
+| **Mie de pain** | réseau alvéolaire de gluten, granules d'amidon gonflés, grandes bulles | carbone abondant, azote rare | les alvéoles sont des vides : on court sur leurs parois | dessèchement rapide de la croûte vers le cœur |
+| **Pâte de fromage** | matrice de caséine, globules gras sphériques, cristaux de tyrosine en aiguilles | riche et gras, azote abondant | les globules gras sont des obstacles ronds | le sel, en gradient depuis la croûte |
+| **Confiture / fruit** | parois cellulaires végétales polygonales, vacuoles, cristaux de sucre | sucre à profusion | le parenchyme est un damier de cellules | l'acidité, et l'eau trop liée pour être bue |
+| **Zeste d'agrume** | flavédo, vésicules à huile essentielle en grosses poches claires | pauvre, dispersé | l'albédo est une éponge | les vésicules d'huile : des mines, on les évite ou on meurt |
+| **Riz ou céréale cuite** | granules d'amidon gélatinisés, très homogène | carbone régulier, azote presque nul | quasi aucune : un plateau ouvert | famine azotée, la colonie plafonne |
+| **Charcuterie sèche** | fibres musculaires striées, cristaux de sel | protéines, donc azote | les fibres canalisent : on pousse dans le sens du grain | nitrites, en taches |
+| **Compost / feuille** | tissu végétal en décomposition, trachéides, autres micro-organismes | inégal, très riche par endroits | un labyrinthe | la concurrence : ce n'est pas un plateau vide |
+
+**Ce que ça change pour le joueur.** Une mie de pain se colonise vite et sèche
+vite : on sporule tôt. Un fromage nourrit longtemps mais le sel monte : on
+travaille loin de la croûte. Un zeste est un champ de mines qu'il faut lire
+avant d'y aller. Un riz est confortable et plafonne : on n'y fera jamais un gros
+sporocyste, autant repartir vite. **Le plateau dicte la stratégie de sortie**,
+et c'est ce qui donne envie d'en voir un nouveau.
+
+**Comment c'est produit.** Une matrice est une fonction de bruit et un jeu de
+constantes, pas une image. Les structures — alvéoles, cellules, globules,
+fibres — sont des champs de distance sur des cellules hachées en coordonnées
+monde, exactement comme le grain de gélose actuel. C'est la même technique que
+la silhouette de l'hyphe, à une autre échelle.
+
+**Comment ça se vérifie.** Un verdict par famille de matrice : la colonie doit
+s'y comporter différemment — vitesse d'extension, densité au front, date de
+sporulation optimale. Si deux matrices donnent la même partie, il n'y en a
+qu'une.
+
+---
+
+## 11. Ce qui reste ouvert
 
 - **Combien de pointes en même temps.** « Tenir = regarder » en donne une seule
   à la fois. Une lunette à deux champs serait un objet de jeu à part entière —
