@@ -316,6 +316,16 @@ reproduction asexuée se fait par **sporocyste** : rhizoïdes, sporangiophore,
 apophyse, columelle, sac, spores, déchirure. Anatomie relevée sur
 `Apex_references/Art/conidia`.
 
+**La columelle n'est pas un objet.** C'est l'**extrémité gonflée** du
+sporangiophore : une seconde ogive, plus large, qui prend le dessus dans
+`Sporange.profil(q)` à mesure qu'elle enfle, et qui se raccorde à la tige par
+une décroissance exponentielle — l'apophyse. Dessinée à part, en cercle plein
+posé au bout de la tige, on lisait une bille accrochée à un bâton, et elle
+semblait exister dès la première seconde. **C'est la règle 1, refaite à
+l'identique.** Le sporangiophore, lui, est une hyphe comme les autres : ogive
+apicale 1,40 R, exposant 2,1 — les valeurs arrêtées pour l'apex. Il pousse par
+sa pointe, rien ne justifie qu'il se termine autrement.
+
 **Les spores naissent par CLIVAGE, pas par bourgeonnement.** Le sporocyste est
 un cénocyte — un sac de cytoplasme à plusieurs milliers de noyaux — et des
 membranes s'y referment autour de paquets de cytoplasme, à peu près en même
@@ -335,7 +345,9 @@ paroi déchirée cesse de tirer vers sa forme de sac pour se retrousser en
 scène. Le sporangiophore monte vers l'observateur — 380 µm en z pour 99 dans
 l'image, il est vu en **raccourci** —, les rhizoïdes plongent sous lui, le
 stolon reste où il est. La mise au point suit la pointe, donc tout le reste
-sort du plan dès la deuxième seconde. Profondeur de champ **22 µm**, qui se
+sort du plan dès la deuxième seconde — **le fond compris** : le substrat est à
+z = 0, il n'a aucune raison d'être net à 380 µm au-dessus. Profondeur de champ
+**22 µm**, qui se
 **referme à 6,5** quand la caméra monte en grossissement pour suivre une
 spore : c'est ce que fait un objectif réel, et c'est la seule chose qui isole
 une spore dans un nuage.
@@ -557,6 +569,33 @@ partie du travail**, pas après, pendant.
 - **La silhouette d'une sphère cisaillée par une projection oblique est une
   ellipse**, pas un cercle : demi-axe vertical × √(1+KZ²). Tracée en cercle,
   les spores du fond et du devant débordaient de la paroi.
+- **`COMPOSITE_ORDER` vaut `[3,2,1,0,4,5,6,7]` : les calques 4 à 7 sont
+  composés EN DERNIER, donc par-dessus.** La convention de `layerFor` est donc
+  « zRel positif = plus **loin** ». Dans une scène qui a une vraie troisième
+  dimension, le signe compte : avec l'inverse, tout ce qui était proche passait
+  derrière, et les rhizoïdes — qui plongent — se dessinaient par-dessus le
+  stolon.
+- **Un halo ne peut pas être sur un calque plus flou que ce qu'il entoure.**
+  Il change alors de rang dans l'ordre de composition et repasse devant la
+  bande voisine : un liseré blanc en travers du tube à chaque changement de
+  profondeur. Il va sur le **même** calque que sa bande, dessiné juste avant.
+  Et sa largeur suit celle du tube : à largeur fixe, les derniers points d'une
+  ogive se recouvraient en une lentille blanche posée sur le sommet.
+- **Un corps compact ne se découpe pas en bandes de profondeur.** La columelle
+  fait cinquante micromètres : bandée, elle sortait coupée net à la hauteur
+  d'un changement de calque. Et au pas fin — un demi-pixel de long pour
+  quarante de large — chaque jointure de quadrilatère laissait une couture, si
+  bien qu'elle sortait striée comme un volet. **Un polygone par bande**, et la
+  columelle en une seule.
+- Définir une pièce par sa **largeur** plutôt que par son **matériau** la fait
+  disparaître là où elle s'affine : `partCol` comparée à la largeur du tube nu
+  tombait à zéro sur toute l'ogive apicale de la columelle, et le sommet du
+  dôme se dessinait en couleur de cytoplasme — invisible.
+- **Un axe qui pointe vers l'observateur se voit en bout.** À 0,16 d'image pour
+  1 de z, la columelle — corps de révolution autour de cet axe — sortait en
+  lentille plate de 80 px de large pour 15 de haut. À 0,55, l'axe fait ~55° avec
+  la ligne de visée : le dôme est un dôme, et la montée en z reste entière.
+  **Le flou dit qu'on s'élève, pas la pente.**
 - **Un `sed` qui ne trouve pas son motif ne dit rien.** Deux remplacements
   successifs de `Q_FUSION` ont échoué en silence et j'ai documenté une valeur
   que le fichier n'avait pas. Seul le banc l'a vu (22,8 µm/min au lieu de 20).
