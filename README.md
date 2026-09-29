@@ -39,6 +39,17 @@ sporangiophore qui monte vers l'observateur, columelle, sac qui se remplit de
 spores par clivage, puis déchirure et envol. La mise au point suit la pointe —
 c'est elle qui raconte la scène.
 
+`germination.html` est le **retour à l'hyphe** : une spore dormante boit,
+gonfle dans toutes les directions à la fois, rassemble ses vésicules sous sa
+paroi, puis sort un à trois tubes germinatifs. La spore n'est pas peinte sur
+le tube : c'est un contour de plus dans le champ de distance, et le col
+concave est le congé de leur union.
+
+`cycle.html` est **le tour complet, sans fin** : germination, croissance,
+ramification, sporocyste, éclatement, vol, retombée — puis germination. Rien
+de nouveau n'y est simulé ; c'est un enchaînement, et la spore qui vole est
+littéralement celle qui germe.
+
 `ramification.html` est la proposition qui a précédé : trois concepts
 d'animation, avec les silhouettes calculées hors ligne. Le mécanisme retenu
 (A, second Spitzenkörper sub-apical) est maintenant implémenté.

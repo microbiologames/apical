@@ -69,6 +69,8 @@ const GLYPHES = {
 
 export class Scene {
   constructor(screen) {
+    /* Rayon du conge de l'union, en um. Voir `unir`. */
+    this.kConge = 2.5;
     this.sc = screen;
     this.cam = { x: 0, y: 0 };
     this.pxUm = 10;
@@ -134,6 +136,11 @@ export class Scene {
 
     this.fond(P, opts);
     if (opts.milieu !== false) this.milieu(P, t);
+    /* Passe d'ARRIERE-PLAN. Elle sert a une seule chose, mais elle n'est
+       possible qu'ici : pendant le vol d'une spore, le decor n'est plus un
+       substrat mais des masses qui defilent, et il doit etre pose apres le
+       fond et avant les corps. Voir aussi `opts.corps`, son pendant. */
+    opts.arriere?.(this, P, t);
 
     for (let i = 0; i < n; i++) {
       const f = this.champ(i);
@@ -146,9 +153,20 @@ export class Scene {
     this.unir(n);
 
     this.cytoplasme(tiges, P, t, opts);
-    for (let i = 0; i < n; i++) this.contenu(tiges[i].hy, tiges[i].co, P, opts);
+    /* UNE TIGE SANS `co` EST UN CORPS SANS TUBE. La spore qui germe en est
+       un : elle a un contour, donc une silhouette, une paroi et un halo,
+       mais pas de coordonnees (s, v) — son contenu ne vit pas le long d'un
+       axe, il vit dans un disque. Le rendu n'a pas a savoir ce que c'est ;
+       il lui suffit de ne pas lui demander ce qu'elle n'a pas. */
+    for (let i = 0; i < n; i++) if (tiges[i].co) this.contenu(tiges[i].hy, tiges[i].co, P, opts);
+    /* Passe supplementaire, a la place ou elle appartient : le contenu d'un
+       corps est du contenu, il se dessine avant la paroi. Posee apres, elle
+       passait par-dessus le liseré et les objets de bord flottaient hors du
+       corps. */
+    opts.corps?.(this, P, t);
     this.paroi(tiges, P, opts);
     for (let i = 0; i < n; i++) {
+      if (!tiges[i].co) continue;
       this.membraneLigne(tiges[i].hy, tiges[i].co, P, opts, i);
       this.fusions(tiges[i].hy, tiges[i].co, P, opts, i);
       if (opts.depots !== false) this.tracesParoi(tiges[i].hy, tiges[i].co, P, i);
@@ -404,7 +422,13 @@ export class Scene {
     const { w, h, dist, mask, own } = this;
     const C = this.champs;
     const BANDE = this.portee;
-    const k = clamp(2.5 * this.pxUm, 4, BANDE - 3);
+    /* RAYON DU CONGE, en um. 2,5 est la valeur mesuree pour une branche sur
+       sa mere : deux tubes de 5,5 um de rayon. Il est reglable parce qu'il
+       n'a de sens que rapporte aux corps qu'il raccorde — sur une spore de
+       6,6 um de rayon percee d'un tube de 2, un conge de 2,5 um flare si
+       large que les deux evasements se rejoignent par les flancs et que le
+       corps sort en citron, avec un angle net a neuf heures. */
+    const k = clamp(this.kConge * this.pxUm, 4, BANDE - 3);
 
     let X0 = w, Y0 = h, X1 = -1, Y1 = -1;
     for (let i = 0; i < nt; i++) {
@@ -753,10 +777,20 @@ export class Scene {
        en plein milieu du tube, a l'endroit exact ou la corde finit. Meme pas
        d'echantillonnage que le contour, pour que les deux restent
        paralleles. */
+    /* UNE BRANCHE N'A PAS DE MEMBRANE AU-DELA DE SON PROPRE MATERIAU. Le
+       prolongement allait jusqu'a S_VU pour tout le monde ; au-dela du fond
+       du bourgeon, `atS` extrapole l'axe EN LIGNE DROITE, et le trace
+       suivait cette droite imaginaire. Sur une branche ordinaire ca ne se
+       voyait pas : la droite reste dans le cytoplasme de la mere, ou
+       `cache` la masque. Sur un tube germinatif, dont l'amorce est un
+       crochet, elle ressortait par le flanc de la spore — deux hachures
+       sombres en travers de la paroi, a l'endroit precis ou `cache` cesse
+       de masquer parce qu'on est pres du contour. */
+    const sFin = hy.branche ? Math.max(mb.sMax, hy.total - hy.Lb) : S_VU;
     const bout = [];
-    for (let a = mb.sMax; a < S_VU; ) {
+    for (let a = mb.sMax; a < sFin; ) {
       a += pasContour(a, hy.Lc);
-      bout.push(Math.min(a, S_VU));
+      bout.push(Math.min(a, sFin));
     }
 
     const item = [];

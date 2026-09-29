@@ -9,6 +9,7 @@ import { Scene } from '../src/render/scene.js';
 import { Thalle, V_MICRO, UCH, R_VIRAGE } from '../src/sim/thalle.js';
 import { depuisMacro } from '../src/sim/hyphe.js';
 import { Sporange, PHASES, R_SAC, R_COL, Z_TOTAL } from '../src/sim/sporange.js';
+import { Germination, Spore, PHASES as PHASES_G, R_DORM, R_GONFLE } from '../src/sim/germination.js';
 import { pasMicro } from '../src/main.js';
 
 const KOM = 0.016, TAU_OM = 3.5;
@@ -537,6 +538,131 @@ function dire(ok, titre, detail) { R.push({ ok, titre, detail }); }
     + `${bombRupture.toFixed(1)} um avant de ceder a p = ${pRupture.toFixed(2)} `
     + `(t = ${jalons.eclatement.toFixed(0)} s) ; ${libres}/${sp.spores.length} spores liberees, `
     + `une suivie par la camera`);
+}
+
+/* 17. la spore gonfle avant de pointer, et le tube nait dedans */
+{
+  /* Quatre choses qu'on ne voit pas a l'oeil et qui ont chacune casse une
+     iteration : le tube qui sort avant la fin du gonflement, l'amorce qui
+     ressort par le flanc du corps, le bourgeon qui ajoute de la silhouette
+     a sa naissance, et le tube germinatif qui ne pousse pas faute de place
+     pour un Spitzenkorper. */
+  const dt = 1 / 60;
+
+  /* (a) douze graines : combien de tubes, et les sites sont-ils separes ? */
+  let tubesMin = 99, tubesMax = 0, ecartMin = 999;
+  for (let gr = 1; gr <= 12; gr++) {
+    const g = new Germination({ graine: gr });
+    tubesMin = Math.min(tubesMin, g.sites.length);
+    tubesMax = Math.max(tubesMax, g.sites.length);
+    for (let i = 0; i < g.sites.length; i++) {
+      for (let j = i + 1; j < g.sites.length; j++) {
+        const d = Math.abs(((g.sites[i].a - g.sites[j].a + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+        ecartMin = Math.min(ecartMin, d * 180 / Math.PI);
+      }
+    }
+  }
+  if (ecartMin > 900) ecartMin = 180;    // une seule spore n'a qu'un site
+
+  /* (b) une germination complete : le gonflement precede-t-il le tube, et
+         l'amorce tient-elle dans le corps ? */
+  const g = new Germination({ graine: 11 });
+  let rNaissance = 0, phaseNaissance = '', jeuMin = 1e9, rMax = 0;
+  let vues = new Set();
+  while (g.t < 210) {
+    const avant = g.tubes.length;
+    g.maj(dt, {});
+    vues.add(g.phase);
+    rMax = Math.max(rMax, g.spore.r);
+    if (g.tubes.length > avant) {
+      if (!rNaissance) { rNaissance = g.spore.r; phaseNaissance = g.phase; }
+      /* JEU A LA PAROI : le conge de l'union ponte tout ecart inferieur a
+         deux fois son rayon. A 0,9 um de conge il faut donc plus de 1,8 um
+         de jeu, sinon la paroi de la spore est tiree vers le bourgeon a
+         quatre-vingt-dix degres du tube. */
+      const hy = g.tubes[g.tubes.length - 1].hy;
+      for (let i = 0; i < hy.ax.length; i++) {
+        const d = Math.hypot(hy.ax[i] - g.spore.x, hy.ay[i] - g.spore.y);
+        const w = hy.W(hy.total - hy.al[i]);
+        jeuMin = Math.min(jeuMin, g.spore.rayon(Math.atan2(hy.ay[i] - g.spore.y, hy.ax[i] - g.spore.x)) - (d + w));
+      }
+    }
+  }
+  const pr = g.principal;
+  /* (c) le tube germinatif POUSSE : il a la place d'un Spitzenkorper. */
+  const l0 = pr.hy.longueur;
+  let t0 = g.t;
+  while (g.t < t0 + 120) g.maj(dt, {});
+  const vitesse = ((pr.hy.longueur - l0) / 120) * 60;
+
+  /* (d) a la naissance, le bourgeon ne doit RIEN ajouter a la silhouette :
+         c'est le meme test que pour la ramification, et le meme defaut a
+         eviter — un tube qui apparait pose sur le corps au lieu d'en
+         sortir. On rejoue une germination jusqu'au premier tube. */
+  const W = 240, H = 240;
+  const g2 = new Germination({ graine: 11 });
+  while (g2.tubes.length === 0 && g2.t < 200) g2.maj(dt, {});
+  const sc0 = new Scene(null);
+  sc0.alloc(W, H); sc0.pxUm = 12; sc0.kConge = 0.9;
+  sc0.cam.x = g2.spore.x; sc0.cam.y = g2.spore.y;
+  const masque = (tiges) => {
+    sc0.portee = tiges.length > 1 ? 30 : 7;
+    for (let i = 0; i < tiges.length; i++) {
+      const f = sc0.champ(i); f.actif = true;
+      sc0.contourEcran(tiges[i].hy, f);
+      sc0.bandeDistance(f);
+      sc0.remplirMasque(f);
+    }
+    for (let i = tiges.length; i < sc0.champs.length; i++) sc0.champs[i].actif = false;
+    sc0.unir(tiges.length);
+    return Uint8Array.from(sc0.mask);
+  };
+  /* Deux Scenes NEUVES : hors de sa boite, un champ garde l'image
+     precedente, et deux cadrages ne sont pas comparables. */
+  const mSeule = masque([{ hy: g2.spore }]);
+  const scA = new Scene(null);
+  scA.alloc(W, H); scA.pxUm = 12; scA.kConge = 0.9;
+  scA.cam.x = g2.spore.x; scA.cam.y = g2.spore.y;
+  scA.portee = 30;
+  const tiges = [{ hy: g2.spore }, { hy: g2.tubes[0].hy }];
+  for (let i = 0; i < 2; i++) {
+    const f = scA.champ(i); f.actif = true;
+    scA.contourEcran(tiges[i].hy, f);
+    scA.bandeDistance(f);
+    scA.remplirMasque(f);
+  }
+  scA.unir(2);
+  const mUnion = scA.mask;
+  let ajout = 0, morceaux = 0;
+  for (let o = 0; o < W * H; o++) if (mUnion[o] && !mSeule[o]) ajout++;
+  /* Un seul morceau. */
+  const vu = new Uint8Array(W * H), pile = new Int32Array(W * H);
+  let n = 0, depart = -1;
+  for (let o = 0; o < W * H; o++) if (mUnion[o]) { n++; if (depart < 0) depart = o; }
+  let atteint = 0, sp = 0;
+  if (depart >= 0) { pile[sp++] = depart; vu[depart] = 1; }
+  while (sp > 0) {
+    const o = pile[--sp]; atteint++;
+    const x = o % W, y = (o / W) | 0;
+    if (x > 0 && mUnion[o - 1] && !vu[o - 1]) { vu[o - 1] = 1; pile[sp++] = o - 1; }
+    if (x < W - 1 && mUnion[o + 1] && !vu[o + 1]) { vu[o + 1] = 1; pile[sp++] = o + 1; }
+    if (y > 0 && mUnion[o - W] && !vu[o - W]) { vu[o - W] = 1; pile[sp++] = o - W; }
+    if (y < H - 1 && mUnion[o + W] && !vu[o + W]) { vu[o + W] = 1; pile[sp++] = o + W; }
+  }
+  if (atteint !== n) morceaux = 1;
+
+  const ordre = PHASES_G.every((p) => vues.has(p));
+  dire(ordre && rNaissance > R_GONFLE * 0.99 && phaseNaissance === 'emergence'
+       && jeuMin > 1.8 && ajout === 0 && morceaux === 0 && vitesse > 8
+       && tubesMin >= 1 && tubesMax <= 3 && ecartMin > 75,
+    'la spore gonfle avant de pointer, et le tube nait dedans',
+    `${vues.size} phases vues ; la spore passe de ${R_DORM} a ${rMax.toFixed(1)} um de rayon `
+    + `(x${(rMax / R_DORM).toFixed(2)}) et le premier tube nait a ${rNaissance.toFixed(1)} um, `
+    + `en phase « ${phaseNaissance} » ; l'amorce garde ${jeuMin.toFixed(2)} um de jeu a la paroi `
+    + `(conge 0,9 um, il en faut 1,8) ; a la naissance le bourgeon ajoute ${ajout} px a la `
+    + `silhouette, qui est en ${morceaux + 1} morceau ; le tube pousse a ${vitesse.toFixed(1)} um/min ; `
+    + `sur 12 spores, ${tubesMin} a ${tubesMax} tubes, sites separes d'au moins `
+    + `${ecartMin.toFixed(0)} degres`);
 }
 
 /* 7. budget */

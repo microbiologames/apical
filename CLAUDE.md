@@ -13,12 +13,14 @@ les captures de contrôle.
 | Commande | Ce qu'elle fait |
 |---|---|
 | `npm run serve` | sert le dépôt tel quel |
-| `npm run banc` | 16 verdicts de mesure, sans rendu, en node |
+| `npm run banc` | 17 verdicts de mesure, sans rendu, en node |
 | `npm run visuel` | captures dans `/tmp/apical-shots` (Playwright) |
 | `npm run visuel:branche` | captures de la page ramification |
 | `npm run visuel:thalle` | captures de la page colonie |
 | `npm run visuel:monde` | captures du pont entre les deux échelles |
 | `npm run visuel:sporange` | captures de la sporulation |
+| `npm run visuel:germination` | captures de la germination |
+| `npm run visuel:cycle` | captures du cycle complet |
 
 ---
 
@@ -38,7 +40,7 @@ que l'exocytose » évite de refaire l'erreur.
 
 ---
 
-## Les dix règles de fond
+## Les douze règles de fond
 
 ### 1. L'hyphe est UN objet
 
@@ -408,6 +410,89 @@ le sporangiophore fait 380 µm au lieu du millimètre réel ; la rupture est
 dessèche — la pression est le mécanisme d'autres genres, et c'est celui qui se
 voit.
 
+### 11. La germination est un gonflement, pas un pointage
+
+`src/sim/germination.js`, `germination.html`. C'est le seul moment du cycle où
+la croissance n'est **pas apicale**. Une spore qui germe commence par gonfler
+dans toutes les directions à la fois — croissance isodiamétrique —, et ce n'est
+qu'après, quand un site de polarité s'est établi, que la machine apicale
+démarre. Sauter le gonflement, c'est faire sortir un tube d'une bille inerte ;
+c'est exactement ce qui se voit.
+
+Quatre temps, et chacun a son signe à l'écran :
+
+1. **dormance** — paroi épaisse et ornementée, cytoplasme dense, quelques gros
+   globules lipidiques réfringents. Rien ne bouge : `mob = 0`, et un cytoplasme
+   dormant qui brasse quand même est le moyen le plus sûr de ne pas faire lire
+   la dormance ;
+2. **imbibition** — elle boit. Le volume ne change presque pas (+8 % en rayon)
+   mais la turgescence monte, l'ornementation s'efface — une paroi tendue se
+   lisse — et le contenu se remet en mouvement. **Ça se voit avant que la
+   taille n'ait bougé** ;
+3. **gonflement** — le rayon passe de **4,0 à 6,6 µm**, soit ×1,65 en rayon et
+   ×4,5 en volume, la fourchette des Mucorales. La paroi s'**amincit** : la
+   même quantité de matériau s'étale sur 2,7 fois plus de surface. Les réserves
+   lipidiques fondent, les vacuoles grossissent, la granulation monte ;
+4. **polarisation** — un à trois sites se choisissent, séparés d'au moins 75°,
+   et les vésicules s'y rassemblent. C'est un **Spitzenkörper qui se forme
+   avant qu'il y ait un tube pour le contenir** — le mécanisme A de la
+   ramification (règle 7), à ceci près qu'ici la mère est une spore.
+
+**La spore est une tige de plus, pas une peinture.** Elle expose exactement ce
+que la `Scene` demande — un contour fermé en coordonnées monde, un centre, un
+cap, une maturité de paroi, une abscisse totale — et rien d'autre. Le rendu
+n'a pas à savoir ce que c'est ; il lui suffit de ne pas lui demander ce
+qu'elle n'a pas (`co === null` : pas de coordonnées `(s, v)`, donc pas de
+passe de contenu de tube). Son remplissage, sa paroi, son halo et le **col
+concave** au pied du tube sortent du même champ de distance que ceux de
+l'hyphe. Une spore peinte par-dessus un tube, ce serait la règle 1 une
+quatrième fois.
+
+**Le tube germinatif EST une branche.** Pas une analogie : la même classe, la
+même option `branche`, le même fond de bourgeon arrondi, le même
+élargissement indexé sur le matériau. Il naît à 4 µm de diamètre et met 60 µm
+à prendre son calibre — un tube germinatif est **longtemps étroit**, et à 34 µm
+il sortait en cône.
+
+**Elle s'arrondit en gonflant.** Dormante elle est ovoïde et un peu anguleuse ;
+turgescente elle est une sphère, parce que c'est la pression interne qui la met
+en forme et qu'une pression est isotrope. Ce n'est pas qu'une lecture : le
+petit axe passe de 5,4 à 6,3 µm, et **c'est ce qui donne à l'amorce du tube les
+2,05 µm de jeu dont elle a besoin** pour que le congé de l'union ne la ponte
+pas à la paroi.
+
+**Le contenu vit en polaire normalisé.** C'est la seule façon d'obtenir un
+gonflement isodiamétrique sans rien déplacer : le contenu garde ses
+coordonnées, c'est le corps qui s'étire sous lui. Même geste que la membrane
+plasmique, où l'on n'écarte pas les nœuds — on fait dériver le repère.
+
+### 12. Le cycle n'est qu'un enchaînement
+
+`src/cycle.js`, `cycle.html`. Germination, croissance apicale, ramification,
+sporocyste, éclatement, vol, retombée — puis germination. **Rien de nouveau
+n'y est simulé.** L'apex avance avec `pasMicro`, le sporocyste est cadré par
+`cadrerSporange`, le flou de fondu est `flouEcran` : si cette page réécrivait
+l'une de ces lois de son côté, la même étape ne se regarderait pas de la même
+façon selon la page qui la montre.
+
+**C'est le même organisme, et c'est littéralement vrai dans le code.** La
+spore que la caméra suit après l'éclatement est instanciée comme une
+`Germination` dormante, tenue telle quelle pendant tout le vol, puis relâchée.
+Il n'y a rien à raccorder à l'atterrissage : c'est le même objet.
+
+**Deux fondus par tour, pas quatre.** Germination et croissance sont la même
+scène — seul le cadrage change, et il change en glissant. Vol et germination
+aussi. Il ne reste à fondre que les deux endroits où l'on change vraiment
+d'objectif, et le fondu y est celui du pont entre les échelles : on
+défocalise, on change d'objectif, on refocalise, **et pendant ce temps les deux
+simulations vivent**.
+
+**Le vol est la seule chose inventée, et elle est assumée.** Une spore emportée
+ne voit plus un substrat : elle voit passer des masses. Trois plans de disques
+flous qui défilent à des vitesses différentes — c'est la **parallaxe** qui dit
+« ça va vite », pas le flou. La spore, elle, est dessinée exactement comme elle
+le sera au sol.
+
 ### 10. Le Spitzenkörper n'est jamais dessiné
 
 C'est une densité, pas un objet : un puits de rétention à ~2 µm de la pointe,
@@ -481,6 +566,18 @@ Et pour la sporulation :
 | columelle à ce moment-là | 0,0 µm | 0 |
 | cavité faite quand le septum commence | 100 % | 100 % |
 | spores libérées | 344 sur 520 | — |
+
+Et pour la germination :
+
+| | mesuré | référence |
+|---|---|---|
+| gonflement | 4,0 → 6,6 µm de rayon, ×1,65 | ×1,5 à ×3 en diamètre (Mucorales) |
+| rayon de la spore à la naissance du tube | 6,6 µm, phase « émergence » | le gonflement est fini |
+| jeu de l'amorce à la paroi | 2,05 µm | > 1,8 (deux fois le congé) |
+| ce que le bourgeon ajoute à sa naissance | 0 px, silhouette en 1 morceau | 0 |
+| croissance du tube germinatif | 20,8 µm/min | hyphe mûre : 19,4 |
+| tubes par spore, sur 12 spores | 1 à 3 | 1 à 3 |
+| écart minimal entre deux sites | 83° | > 75° |
 
 Un chiffre documenté sans avoir été mesuré est un chiffre qu'on croit seulement
 avoir. Ça s'est déjà payé.
@@ -685,6 +782,36 @@ partie du travail**, pas après, pendant.
   celle de la spore, cinq cents spores franchissaient les onze pixels
   ensemble : le tas entier devenait granuleux et cerclé de halos. Le détail
   est ce que **la mise au point désigne**, pas ce qui est assez gros.
+- **Une amorce qui bombe vers l'extérieur ressort d'un corps qui se referme.**
+  Celle de la ramification est une quadratique qui s'écarte du tube : sur une
+  mère **tubulaire** elle s'enfonce dans un cylindre qui continue derrière, et
+  tout va bien. Plantée dans une spore, son point de départ se retrouvait à
+  5,1 µm du centre d'un corps qui en fait 6,6, et le fond du bourgeon — rond,
+  donc large — ressortait par le flanc : deux pointes latérales sur la spore et
+  deux traits de membrane en travers, **à 90° du tube**. Une cubique qui tourne
+  *dans* le corps donne le même arc (6,5 µm, de quoi loger un Spitzenkörper)
+  sans jamais dépasser 52 % du rayon.
+- **Le rayon du congé n'a de sens que rapporté aux corps qu'il raccorde.**
+  2,5 µm est la valeur mesurée pour deux tubes de 5,5 µm de rayon. Sur une
+  spore de 6,6 percée d'un tube de 2, les deux évasements se rejoignaient par
+  les flancs et le corps sortait **en citron**, avec un angle net à neuf
+  heures. Et un congé **ponte tout écart inférieur à deux fois son rayon** :
+  c'est cette inégalité — pas l'œil — qui dit combien de jeu il faut laisser
+  entre un bourgeon et la paroi qui l'entoure.
+- **Une branche n'a pas de membrane au-delà de son propre matériau.** Le tracé
+  était prolongé jusqu'à `S_VU` pour tout le monde ; au-delà du fond du
+  bourgeon, `atS` extrapole l'axe **en ligne droite** et la ligne suivait cette
+  droite imaginaire. Sur une branche ordinaire ça ne se voyait pas — la droite
+  reste dans le cytoplasme de la mère, où `cache` la masque.
+- **Des vésicules qui convergent vers un point unique s'empilent sur un
+  pixel.** Quarante-quatre par site, toutes visant le même angle : à l'écran on
+  lisait trois vésicules et pas un Spitzenkörper. Chacune a sa place dans le
+  nuage, tirée une fois pour toutes — 0,30 rad d'écart type, soit deux
+  micromètres, ce qui est la taille d'un Spitzenkörper.
+- **Cadrer sur la taille courante d'un corps qui gonfle annule le
+  gonflement** : la spore garde la même taille à l'écran pendant qu'elle
+  double. Le grossissement est plafonné à ce qu'il vaut à l'état gonflé, et il
+  ne fait ensuite que descendre.
 - **Une capture prise N millisecondes après un changement de phase ne montre
   pas ce qu'on croit.** L'éclatement dure 1,6 s simulée, soit 0,4 s réelle à
   ×4 : la capture arrivait régulièrement quatre images après le basculement en

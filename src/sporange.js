@@ -32,6 +32,65 @@ const LEGENDES = {
   envol: 'La mise au point quitte le sporocyste et part avec une spore.',
 };
 
+/**
+ * LA MISE EN SCENE DE LA SPORULATION, en une fonction.
+ *
+ * Elle est exportee parce que la page du cycle complet la rejoue : si elle
+ * y recopiait ce cadrage, les deux finiraient par diverger et la meme
+ * sporulation ne se regarderait pas de la meme facon selon la page qui la
+ * montre. Meme raison que `pasMicro` dans `main.js`.
+ *
+ * `etat` porte et recoit `px`, `dof`, `zF` et lit `zoom`.
+ */
+export function cadrerSporange(sp, vue, etat, dt0) {
+  /* --- ou regarde-t-on, et a quelle profondeur ------------------------- */
+  let cz, cx, cy, pxCible;
+  if (sp.phase === 'envol' && sp.suivie) {
+    const s = sp.suivie, C = sp.centre;
+    cx = C.x + s.x; cy = C.y + s.y; cz = C.z + s.z;
+    /* 9 px/um : la spore fait soixante-dix pixels de large, ce qui est
+       l'echelle ou une cellule montre ses organites — la meme que celle
+       du cytoplasme apical. A 4,2 elle en faisait trente-cinq et on ne
+       lisait qu'une bille avec un point clair. */
+    pxCible = 9.0;
+    /* On monte en grossissement, donc la profondeur de champ se referme :
+       6,5 um au lieu de 22. Tout ce qui n'est pas la spore part dans le
+       flou, y compris ses voisines immediates — c'est ce qui fait qu'on
+       en suit UNE. */
+    etat.dof = lerp(22, 6.5, smoothstep(0, 2.4, sp.tPhase));
+  } else if (sp.rSac > 1) {
+    const C = sp.centre;
+    cx = C.x; cy = C.y; cz = C.z;
+    /* Le cadrage suit la taille du sac : il tient toujours dans 62 % du
+       cadre, quelle que soit sa croissance. */
+    /* On recule a l'eclatement : le nuage part a cinquante micrometres du
+       sac, et au cadrage qui allait au sporocyste plein il sortait du
+       cadre avant qu'on ait vu la dechirure. */
+    const part = sp.phase === 'eclatement' || sp.phase === 'envol' ? 0.40 : 0.62;
+    pxCible = (part * Math.min(vue.w, vue.h)) / (2 * Math.max(sp.rSac, R_SAC * 0.5) * 1.25);
+  } else {
+    const p = sp.pointe;
+    cx = p.x; cy = p.y; cz = p.z;
+    /* On recule a mesure que la tige monte : a 5 px/um l'hyphe fait 55 px
+       de large, ce qui est l'echelle du tube ; a 2,6 on voit arriver le
+       sac. */
+    pxCible = lerp(5.0, 2.6, smoothstep(0, 1, sp.z / 380));
+  }
+  pxCible *= etat.zoom ?? 1;
+
+  etat.px = etat.px ? etat.px + (pxCible - etat.px) * 0.05 : pxCible;
+  vue.pxUm = etat.px;
+  vue.dof = etat.dof || 22;
+  /* La mise au point suit la pointe, avec un peu de retard : un plan de
+     mise au point qui colle exactement n'a plus l'air d'etre regle par
+     quelqu'un. */
+  etat.zF += (cz - etat.zF) * clamp(dt0 * 2.2, 0, 1);
+  const ty = cy - cz * KZ;
+  vue.cam.x += (cx - vue.cam.x) * clamp(dt0 * 2.4, 0, 1);
+  vue.cam.y += (ty - vue.cam.y) * clamp(dt0 * 2.4, 0, 1);
+  return etat;
+}
+
 export class AppSporange {
   constructor(canvas, hote) {
     this.canvas = canvas;
@@ -80,55 +139,8 @@ export class AppSporange {
       this.t += dt0;
     }
 
-    const sp = this.sp, vue = this.vue;
-
-    /* --- ou regarde-t-on, et a quelle profondeur ------------------------- */
-    let cz, cx, cy, pxCible;
-    if (sp.phase === 'envol' && sp.suivie) {
-      const s = sp.suivie, C = sp.centre;
-      cx = C.x + s.x; cy = C.y + s.y; cz = C.z + s.z;
-      /* 9 px/um : la spore fait soixante-dix pixels de large, ce qui est
-         l'echelle ou une cellule montre ses organites — la meme que celle
-         du cytoplasme apical. A 4,2 elle en faisait trente-cinq et on ne
-         lisait qu'une bille avec un point clair. */
-      pxCible = 9.0;
-      /* On monte en grossissement, donc la profondeur de champ se referme :
-         6,5 um au lieu de 22. Tout ce qui n'est pas la spore part dans le
-         flou, y compris ses voisines immediates — c'est ce qui fait qu'on
-         en suit UNE. */
-      this.dof = lerp(22, 6.5, smoothstep(0, 2.4, sp.tPhase));
-    } else if (sp.rSac > 1) {
-      const C = sp.centre;
-      cx = C.x; cy = C.y; cz = C.z;
-      /* Le cadrage suit la taille du sac : il tient toujours dans 62 % du
-         cadre, quelle que soit sa croissance. */
-      /* On recule a l'eclatement : le nuage part a cinquante micrometres du
-         sac, et au cadrage qui allait au sporocyste plein il sortait du
-         cadre avant qu'on ait vu la dechirure. */
-      const part = sp.phase === 'eclatement' || sp.phase === 'envol' ? 0.40 : 0.62;
-      pxCible = (part * Math.min(vue.w, vue.h)) / (2 * Math.max(sp.rSac, R_SAC * 0.5) * 1.25);
-    } else {
-      const p = sp.pointe;
-      cx = p.x; cy = p.y; cz = p.z;
-      /* On recule a mesure que la tige monte : a 5 px/um l'hyphe fait 55 px
-         de large, ce qui est l'echelle du tube ; a 2,6 on voit arriver le
-         sac. */
-      pxCible = lerp(5.0, 2.6, smoothstep(0, 1, sp.z / 380));
-    }
-    pxCible *= this.zoom;
-
-    this.px = this.px ? this.px + (pxCible - this.px) * 0.05 : pxCible;
-    vue.pxUm = this.px;
-    vue.dof = this.dof || 22;
-    /* La mise au point suit la pointe, avec un peu de retard : un plan de
-       mise au point qui colle exactement n'a plus l'air d'etre regle par
-       quelqu'un. */
-    this.zF += (cz - this.zF) * clamp(dt0 * 2.2, 0, 1);
-    const ty = cy - cz * KZ;
-    vue.cam.x += (cx - vue.cam.x) * clamp(dt0 * 2.4, 0, 1);
-    vue.cam.y += (ty - vue.cam.y) * clamp(dt0 * 2.4, 0, 1);
-
-    vue.dessiner(sp, PALETTES[this.palette], this.t, this.zF, this.opts);
+    cadrerSporange(this.sp, this.vue, this, dt0);
+    this.vue.dessiner(this.sp, PALETTES[this.palette], this.t, this.zF, this.opts);
     this.screen.present();
   }
 

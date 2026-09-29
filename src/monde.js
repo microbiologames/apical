@@ -273,7 +273,7 @@ export class AppMonde {
  * porte sur l'image entiere et ne compense pas le pic (`BLUR_GAIN`), parce
  * qu'un objectif qu'on devisse n'eclaircit rien — il etale.
  */
-function flouEcran(px, w, h, r) {
+export function flouEcran(px, w, h, r) {
   const n = w * h;
   let tmp = flouEcran._t;
   if (!tmp || tmp.length !== n * 3) tmp = flouEcran._t = new Uint16Array(n * 3);
