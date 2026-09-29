@@ -99,7 +99,10 @@ export class Sporange {
     this.rhizoides = [];
     const n = 3 + ((this.rng() * 3) | 0);
     for (let i = 0; i < n; i++) {
-      const a = (i / n) * TAU + this.rng() * 0.6;
+      /* Vers le BAS de l'image, entre 30 et 150 degres : ce sont des
+         racines. Reparties sur tout le tour, la moitie remontait au-dessus
+         du stolon et on lisait des branches, pas un ancrage. */
+      const a = (0.17 + (i + this.rng() * 0.7) / n * 0.66) * Math.PI;
       this.rhizoides.push({
         a, long: 0, max: 26 + this.rng() * 34,
         plonge: 0.55 + this.rng() * 0.35,     // part de z dans la descente
@@ -225,23 +228,72 @@ export class Sporange {
       const dz = Math.min(PAS, z - this.z);
       this.z += dz;
       const p = this.pointe;
-      /* Un peu dans l'image, beaucoup vers l'observateur : c'est ce qui le
-         fait sortir du plan de mise au point en quelques micrometres. */
+      /* L'INCLINAISON. A 0,16 dans l'image pour 1 en z, la tige pointait
+         quasiment sur l'observateur : on la voyait EN BOUT, et la columelle
+         — un corps de revolution autour de cet axe — sortait en lentille
+         plate de 80 px de large pour 15 de haut au lieu d'un dome. A 0,55,
+         l'axe fait environ 55 degres avec la ligne de visee : le dome est
+         un dome, et la montee en z reste entiere, donc le flou raconte la
+         meme chose. C'est lui qui dit qu'on s'eleve, pas la pente. */
       this.tige.push({
-        x: p.x + Math.sin(this.incl) * dz * 0.22,
-        y: p.y - Math.cos(this.incl) * dz * 0.16,
+        x: p.x + Math.sin(this.incl) * dz * 0.16,
+        y: p.y - Math.cos(this.incl) * dz * 0.55,
         z: p.z + dz,
       });
     }
   }
 
-  /** Demi-largeur du sporangiophore a la hauteur z. */
-  largeur(z) {
-    /* Evasee a la base — elle sort d'un stolon deux fois plus large — et
-       legerement renflee sous l'apophyse. */
-    const b = 1 + 1.5 * Math.exp(-z / 22);
-    const a = 1 + 0.55 * smoothstep(Z_TOTAL - 40, Z_TOTAL, z);
-    return R_TIGE * b * a;
+  /**
+   * Demi-largeur du sporangiophore, a la distance `q` de sa POINTE.
+   *
+   * C'est un profil d'apex, pas un tube coupe : la meme ogive que
+   * `Hyphe.W`, calotte de 1,40 R et exposant 2,1 — les valeurs arretees pour
+   * l'hyphe. Un sporangiophore EST une hyphe, il pousse par son apex, et
+   * rien ne justifie qu'il se termine autrement.
+   *
+   * LA COLUMELLE SORT DE CE PROFIL. Elle etait dessinee a part, en cercle
+   * plein pose au bout de la tige : on lisait une bille accrochee a un
+   * baton, et elle apparaissait des la premiere seconde parce que la pointe
+   * arrondie, elle aussi dessinee a part, en avait deja l'air. C'est la
+   * regle 1, celle qui a coule le projet precedent, refaite a l'identique.
+   * Ici la columelle est une SECONDE OGIVE, plus large, qui prend le dessus
+   * a mesure qu'elle gonfle, et qui se raccorde a la tige par une
+   * decroissance exponentielle — l'apophyse.
+   */
+  profil(q) {
+    const n = 2.1;
+    const ogive = (R, Lc) => (q >= Lc ? R
+      : R * Math.pow(Math.max(1 - Math.pow((Lc - q) / Lc, n), 0), 1 / n));
+
+    let w = ogive(R_TIGE, 1.40 * R_TIGE);
+    /* Evasement a la base : elle sort d'un stolon deux fois plus large. */
+    const z = Math.max(0, this.z - q);
+    w *= 1 + 1.5 * Math.exp(-z / 22);
+
+    if (this.rCol > 0.3) {
+      const Lc = 1.30 * this.rCol;
+      const wc = q >= Lc
+        ? this.rCol * Math.exp(-(q - Lc) / (this.rCol * 0.62))
+        : ogive(this.rCol, Lc);
+      w = Math.max(w, wc);
+    }
+    return w;
+  }
+
+  /**
+   * Part de columelle a l'abscisse `q`, mesuree depuis la pointe. Sert a
+   * l'assombrir : c'est du cytoplasme dense, la piece la plus sombre d'un
+   * sporocyste.
+   *
+   * Definie sur le MATERIAU et non sur la largeur. Comparee a la largeur du
+   * tube nu, elle tombait a zero sur toute l'ogive apicale de la columelle
+   * — la ou le profil est plus ETROIT que la tige — et le sommet du dome se
+   * dessinait en couleur de cytoplasme, donc invisible sur le sac. Le dome
+   * paraissait coupe net aux deux tiers de sa hauteur.
+   */
+  partCol(q) {
+    if (this.rCol < 0.3) return 0;
+    return 1 - smoothstep(1.5 * this.rCol, 2.9 * this.rCol, q);
   }
 
   /* --- le sac -------------------------------------------------------------- */

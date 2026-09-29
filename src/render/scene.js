@@ -168,7 +168,11 @@ export class Scene {
     const cx = w * 0.5, cy = h * 0.5;
     const ox = this.cam.x - cx * inv, oy = this.cam.y - cy * inv;
     const vg = this.vign;
-    const asp = opts.milieu === false ? 0 : 1;
+    /* `netFond` : 1 = net, 0 = completement defocalise. Une texture vue hors
+       du plan de mise au point ne se brouille pas, elle S'APLATIT — c'est ce
+       qu'on obtient en reduisant son amplitude. Sert a la sporulation, ou on
+       s'eleve de 380 um au-dessus du substrat. */
+    const asp = opts.milieu === false ? 0 : (opts.netFond ?? 1);
     /* Texture du milieu, indexee sur les coordonnees MONDE : c'est elle qui
        rend l'avancee lisible. Sur un fond uniforme l'apex a l'air de faire
        du surplace meme quand il progresse de trois pixels par seconde.
