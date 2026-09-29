@@ -14,6 +14,7 @@ les captures de contrôle.
 |---|---|
 | `npm run serve` | sert le dépôt tel quel |
 | `npm run banc` | 15 verdicts de mesure, sans rendu, en node |
+| `npm run banc:son` | 10 verdicts sur le moteur sonore, en temps réel dans Chromium |
 | `npm run visuel` | captures dans `/tmp/apical-shots` (Playwright) |
 | `npm run visuel:branche` | captures de la page ramification |
 | `npm run visuel:thalle` | captures de la page colonie |
@@ -315,6 +316,39 @@ et le nuage apparaît tout seul. Le dessiner net était la mauvaise réponse
 (« le fait de représenter si net le spitzenkorper n'est peut-être pas la bonne
 solution »).
 
+### 10. Le son obéit aux mêmes grandeurs que l'image
+
+`src/audio/son.js`, `src/data/son-presets.js`, `studio.html`. Ambient / liquid
+drum and bass, **entièrement synthétisé** : pas un octet d'échantillon dans le
+dépôt, pour la raison qui fait qu'il n'y a pas de build — on doit pouvoir
+changer une sonorité en changeant un chiffre.
+
+Même partage que la palette, et pour le même motif. Le moteur ne connaît
+**aucune ambiance** : il pose toujours **six voix** — drone, nappe, cloche,
+basse, break, texture — et c'est la table de données qui décide de ce qu'on
+entend. Ajouter une ambiance, c'est ajouter une entrée, rien d'autre.
+
+**Quatre grandeurs de contexte, et pas une cinquième** : `echelle`,
+`croissance`, `densite`, `miseAuPoint`. Ce sont celles que la simulation sait
+déjà produire, et `miseAuPoint` est *littéralement* le flou du pont. Un moteur
+qui accepte douze signaux finit par être piloté au hasard.
+
+**Le break n'existe pas en bas.** À l'échelle où une exocytose dure 0,85 s et
+où l'apex avance de 194 nm par fusion, une mesure ne veut rien dire : la
+batterie monte avec `echelle` entre 0,25 et 0,7 — exactement la plage où le
+fondu du pont travaille — et il ne reste, en bas, que le drone, les gouttes et
+le souffle. C'est le seul endroit où le son dit la même chose que le rendu :
+on change d'objectif, pas de sujet.
+
+**Le code** (`AP1-…`, 120 caractères) porte l'ambiance, les seize réglages
+généraux, les six racks **et la graine**. Un code qui ne porterait que le
+preset rendrait un autre morceau chez celui qui le charge.
+
+`studio.html` est le banc où l'on choisit. Trois choses y sont vraies : on
+n'écoute jamais à l'arrêt (les quatre grandeurs sont là, et un bouton rejoue
+le pont), ce qui s'écarte de l'adopté est marqué, et le code est affiché en
+permanence.
+
 ---
 
 ## Chiffres mesurés (`npm run banc`)
@@ -368,6 +402,20 @@ Et pour le pont :
 | pas de 6 µm tenu à la reprise | 60 nm | 0 |
 | ré-échantillonnage | 307 points macro → 1 148 fins | — |
 | durée du fondu | 20 s simulées, ~1,3 s réelle | = le préchauffage |
+
+Et pour le son (`npm run banc:son`, 10/10) :
+
+| | mesuré | référence |
+|---|---|---|
+| niveau des six ambiances | −20,4 à −14,8 dB RMS | — |
+| crête la plus haute | 0,669 | < 1 |
+| résonances immobiles sous transposition | 0 sur 6 ambiances | 0 |
+| les six voix coupées, souffle coupé | −120,0 dB | silence |
+| niveau du break selon l'échelle | 0,000 / 0,345 / 0,592 | 0 en bas |
+| queue de réverbe à −60 dB | 5,75 s pour 6,2 s demandées | — |
+| coût de `majCouches` | 0,011 ms par appel | 16,7 ms disponibles |
+| sources vivantes au pic | 146 | — |
+| longueur du code, aller-retour | 120 caractères, 6/6 exacts | 0 écart |
 
 Un chiffre documenté sans avoir été mesuré est un chiffre qu'on croit seulement
 avoir. Ça s'est déjà payé.
@@ -496,6 +544,22 @@ partie du travail**, pas après, pendant.
   attendait l'autre et lâchait tout le reste en une image. `tr` est maintenant
   *dérivé* du préchauffage — `1 − pasRestants/pasTotal` — et le problème ne
   peut plus exister.
+- **Une courbe de saturation normalisée amplifie le silence.** `tanh(k·x) /
+  tanh(k)` a une pente de *k* à l'origine : elle ne colle pas les crêtes, elle
+  multiplie tout ce qui est faible. Mesuré : les six voix coupées, il restait
+  le souffle de l'optique à **−27,7 dB au lieu de −50**, parce que la chaleur
+  à 0,5 le multipliait par 5,5. On plie au-dessus d'un seuil et on ne touche à
+  rien en dessous — à chaleur nulle, la courbe est l'identité exacte.
+- **Une raie n'est pas un défaut : une note tenue EST une raie.** Mesuré voix
+  par voix : une nappe seule donne ×24, une cloche ×82. Le détecteur repris
+  tel quel signalait donc la musique. Ce qu'on cherche est une **résonance**,
+  c'est-à-dire une raie *immobile* : le banc transpose d'un triton et regarde
+  si le pic suit, la page garde seize secondes de relevés — onze mesures à
+  174 BPM, donc deux tours de progression — et signale ce qui n'a pas bougé.
+- **La boucle de retard de Web Audio ne descend pas sous 128 échantillons.**
+  Un Karplus-Strong câblé en `DelayNode` plafonne donc à 375 Hz à 48 kHz : tout
+  ce qui est au-dessus du fa dièse 4 sonne faux, sans erreur ni avertissement.
+  La corde est calculée hors ligne dans un `AudioBuffer`, et mise en cache.
 - **Un `sed` qui ne trouve pas son motif ne dit rien.** Deux remplacements
   successifs de `Q_FUSION` ont échoué en silence et j'ai documenté une valeur
   que le fichier n'avait pas. Seul le banc l'a vu (22,8 µm/min au lieu de 20).

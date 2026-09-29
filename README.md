@@ -6,6 +6,7 @@ en pixel art vu au microscope. Sans dépendance, sans build.
 ```
 npm run serve           # http://localhost:8080/
 npm run banc            # 15 verdicts de mesure
+npm run banc:son        # 10 verdicts sur le moteur sonore
 npm run visuel          # captures de contrôle
 npm run visuel:branche  # captures de la page ramification
 npm run visuel:thalle   # captures de la page colonie
@@ -39,6 +40,15 @@ d'animation, avec les silhouettes calculées hors ligne. Le mécanisme retenu
 
 `livraison.html` est une page de mise au point dédiée à la fusion des vésicules :
 même simulation, caméra collée à l'événement, curseur de rembobinage.
+
+`studio.html` est le **studio sonore** : ambient / liquid drum and bass,
+entièrement synthétisé, sans un octet d'échantillon dans le dépôt. Six voix —
+drone, nappe, cloche, basse, break, texture — quarante-cinq timbres de départ,
+six ambiances, et quatre grandeurs de contexte que la simulation sait déjà
+produire : l'échelle (le pont entre l'apex et la colonie), la croissance, la
+densité du substrat et la mise au point. Le break n'existe pas en bas : à
+l'échelle où une exocytose dure 0,85 s, une mesure ne veut rien dire. Un code
+de 120 caractères emballe l'ambiance, les réglages, les six racks et la graine.
 
 `artefact.html` est la version publiée sur claude.ai : même simulation, sans
 squelette HTML (la plateforme le fournit), avec le texte de présentation.

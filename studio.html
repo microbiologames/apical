@@ -1,0 +1,213 @@
+<title>Studio sonore Apical</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;450;600&display=swap">
+<style>
+/* Le banc d'un microscopiste : deux colonnes, la mesure a gauche, les
+   reglages a droite, et la meme identite que les autres pages du depot. */
+:root{
+  color-scheme: light;
+  --ground:#efece4; --surface:#e3ded2; --surface-2:#d8d2c4; --creux:#f5f3ee;
+  --ink:#1d1f22; --ink-2:#5d5f64; --ink-3:#8a8b8f; --rule:#c8c1b0;
+  --brass:#8a6520; --brass-soft:#b08b3d; --stage:#0a0b0d;
+  --vif:#2f6f57; --alerte:#9a3412;
+  --serif:"Fraunces",Georgia,"Times New Roman",serif;
+  --sans:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  color-scheme: dark;
+  --ground:#0c0d10; --surface:#15171b; --surface-2:#1d2026; --creux:#0f1114;
+  --ink:#e9e6df; --ink-2:#a2a49f; --ink-3:#74767b; --rule:#2a2e35;
+  --brass:#cfae6c; --brass-soft:#9d854f; --stage:#08090b;
+  --vif:#6fbf9a; --alerte:#e08a63;
+}}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --ground:#0c0d10; --surface:#15171b; --surface-2:#1d2026; --creux:#0f1114;
+  --ink:#e9e6df; --ink-2:#a2a49f; --ink-3:#74767b; --rule:#2a2e35;
+  --brass:#cfae6c; --brass-soft:#9d854f; --stage:#08090b;
+  --vif:#6fbf9a; --alerte:#e08a63;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font:15px/1.55 var(--sans); -webkit-font-smoothing:antialiased;
+}
+#barre{
+  position:sticky; top:env(safe-area-inset-top,0px); z-index:20;
+  display:flex; flex-wrap:wrap; gap:10px 14px; align-items:center;
+  padding:10px 16px; background:color-mix(in srgb, var(--ground) 94%, transparent);
+  backdrop-filter:blur(8px); border-bottom:1px solid var(--rule);
+}
+#barre h1{
+  font:600 15px/1.2 var(--serif); margin:0 auto 0 0; letter-spacing:.01em;
+}
+#barre h1 em{font-style:normal; color:var(--ink-3); font-weight:400}
+.enveloppe{max-width:1240px; margin:0 auto; padding-block:18px 60px; padding-inline:16px}
+.cols{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.15fr); gap:18px; align-items:start}
+@media (max-width:900px){ .cols{grid-template-columns:minmax(0,1fr)} }
+.carte{
+  background:var(--surface); border:1px solid var(--rule); border-radius:3px;
+  padding:14px 16px 16px; margin-bottom:18px; min-width:0;
+}
+.carte > h2{
+  font:600 10.5px/1 var(--sans); letter-spacing:.14em; text-transform:uppercase;
+  color:var(--brass); margin:0 0 12px;
+}
+.chapeau{margin:0 0 12px; color:var(--ink-2); font-size:12.5px; line-height:1.5}
+button{
+  font:450 13px/1.2 var(--sans); color:var(--ink); background:var(--surface-2);
+  border:1px solid var(--rule); border-radius:3px; padding:5px 11px; cursor:pointer;
+}
+button:hover{border-color:var(--brass-soft)}
+button:focus-visible{outline:2px solid var(--brass); outline-offset:2px}
+button[aria-pressed="true"]{background:var(--brass); border-color:var(--brass); color:var(--ground)}
+button.mince{padding:3px 8px; font-size:12px}
+.puces{display:flex; flex-wrap:wrap; gap:6px}
+.lig{display:flex; flex-wrap:wrap; gap:8px; align-items:center}
+.rang{display:grid; gap:2px; margin-bottom:12px}
+.rang .tete{display:flex; gap:10px; align-items:baseline}
+.rang .nom{flex:1 1 auto; font-size:13px}
+.rang .val{
+  font:500 12.5px/1 var(--mono); color:var(--brass);
+  font-variant-numeric:tabular-nums; white-space:nowrap;
+}
+.rang .aide{color:var(--ink-3); font-size:11.5px; line-height:1.4; min-height:1px}
+.rang.bouge .nom{color:var(--brass)}
+.rang.bouge .nom::after{content:" ·"; color:var(--brass)}
+input[type="range"]{width:100%; accent-color:var(--brass); margin:2px 0 1px}
+input[type="text"],input[type="number"],select,textarea{
+  font:13px var(--mono); color:var(--ink); background:var(--creux);
+  border:1px solid var(--rule); border-radius:3px; padding:4px 7px;
+}
+textarea{width:100%; height:200px; resize:vertical; font-size:11.5px; line-height:1.5}
+#codeCourant{
+  display:block; font:500 12.5px/1.6 var(--mono); color:var(--brass);
+  background:var(--creux); border:1px solid var(--rule); border-radius:3px;
+  padding:8px 10px; margin:0 0 10px; word-break:break-all;
+}
+canvas{
+  width:100%; height:120px; display:block; background:var(--stage);
+  border:1px solid var(--rule); border-radius:3px;
+}
+.note{color:var(--ink-2); font-size:12px; line-height:1.5; margin:8px 0 0}
+.note.mono{font-family:var(--mono); font-size:11.5px; font-variant-numeric:tabular-nums}
+.alerte{color:var(--alerte)}
+.vif{color:var(--vif)}
+.sep{height:1px; background:var(--rule); margin:14px 0 12px; border:0}
+.voix-muette{opacity:.4}
+kbd{font:500 11.5px var(--mono); background:var(--surface-2); border:1px solid var(--rule); border-radius:3px; padding:1px 5px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div id="barre">
+  <h1>Studio sonore <em id="titreAmbiance">— l'apex</em></h1>
+  <button id="jouer">Écouter</button>
+  <label class="note" style="margin:0">volume
+    <input type="range" id="vol" min="0" max="1" step="0.01" value="0.7" style="width:100px;vertical-align:middle">
+  </label>
+</div>
+
+<div class="enveloppe">
+  <div class="carte">
+    <h2>Ambiance</h2>
+    <p class="chapeau">
+      Six endroits où le jeu se tient, pas six humeurs. En bas, dans le temps de
+      la vésicule, il n'y a pas de batterie : une mesure n'a aucun sens quand une
+      exocytose dure 0,85 s. Elle monte avec l'échelle, comme le reste.
+    </p>
+    <div class="puces" id="onglets"></div>
+  </div>
+
+  <div class="cols">
+    <div>
+      <div class="carte">
+        <h2>Ce que le jeu envoie</h2>
+        <p class="chapeau">
+          Quatre grandeurs, et le moteur n'en connaît pas d'autres. Ce sont celles
+          que la simulation sait déjà produire.
+        </p>
+        <div id="contexte"></div>
+        <div class="lig">
+          <button id="arc" aria-pressed="false">Descendre sur un apex (40 s)</button>
+          <span class="note mono" id="arcEtat" style="margin:0">à l'arrêt</span>
+        </div>
+      </div>
+
+      <div class="carte">
+        <h2>Ce qui sort</h2>
+        <canvas id="spectre" width="640" height="120"></canvas>
+        <p class="note mono" id="verdict">&nbsp;</p>
+        <p class="note">
+          Chaque pic est comparé à la médiane de son propre tiers d'octave. Une raie
+          n'est pas un défaut : une nappe tenue seule en donne une à ×24, une cloche
+          à ×82 — c'est la définition d'une note. Ce qui se signale ici, c'est une
+          raie <em>immobile</em> pendant seize secondes, alors que l'harmonie a changé
+          deux fois : celle-là n'est pas une note, c'est un filtre ou une réverbe qui
+          chante.
+        </p>
+      </div>
+
+      <div class="carte">
+        <h2>Le code</h2>
+        <code id="codeCourant">—</code>
+        <div class="lig">
+          <button id="copier">Copier</button>
+          <label class="note" style="margin:0">graine
+            <input type="number" id="graine" min="0" max="65535" step="1" value="24301" style="width:86px">
+          </label>
+          <button id="tirer" class="mince">Autre interprétation</button>
+        </div>
+        <p class="note mono" id="compose">&nbsp;</p>
+        <div class="lig" style="margin-top:10px">
+          <input type="text" id="charger" placeholder="AP1-THALLE-…" style="flex:1 1 200px; min-width:0">
+          <button id="btnCharger">Charger</button>
+        </div>
+        <p class="note" id="etatCode">
+          Le code porte l'ambiance, les seize réglages généraux, les six racks et la
+          graine. C'est tout ce qu'il faut pour que le morceau soit le même chez
+          celui qui le charge.
+        </p>
+      </div>
+
+      <div class="carte">
+        <h2>Adopter</h2>
+        <div class="lig">
+          <button id="comparer">Maintenir pour comparer</button>
+          <button id="remettre">Tout remettre</button>
+          <button id="exporter">Exporter</button>
+        </div>
+        <p class="note">
+          « Exporter » rend le bloc à recopier dans <code>src/data/son-presets.js</code>.
+          Rien n'est écrit automatiquement : les presets adoptés se choisissent à la main.
+        </p>
+        <textarea id="sortie" readonly hidden></textarea>
+      </div>
+    </div>
+
+    <div>
+      <div class="carte">
+        <h2>Rack — le son de chaque voix</h2>
+        <div class="puces" id="voix"></div>
+        <p class="note" id="aideVoix">&nbsp;</p>
+        <hr class="sep">
+        <div class="lig" style="margin-bottom:8px">
+          <strong style="font:600 10.5px/1 var(--sans); letter-spacing:.14em; text-transform:uppercase; color:var(--brass)">Sons de départ</strong>
+          <button id="hasard" class="mince">Tirer un rack au hasard</button>
+        </div>
+        <div class="puces" id="machines"></div>
+        <p class="note" id="aideMachine">&nbsp;</p>
+        <div class="lig" style="margin:10px 0 2px">
+          <button id="solo" aria-pressed="false" class="mince">Solo</button>
+          <button id="muet" aria-pressed="false" class="mince">Muet</button>
+          <button id="essai" class="mince">Faire sonner</button>
+        </div>
+        <hr class="sep">
+        <div id="patch"></div>
+      </div>
+
+      <div id="groupes"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./src/studio.js"></script>
