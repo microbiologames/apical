@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Coloniser — le jeu</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;450;600&display=swap">
+<style>
+:root{
+  --encre:#e8e6ef; --encre-2:#9a97a8; --encre-3:#6d6a7a;
+  --fond:#0b0b0f; --panneau:#141419; --trait:#26262e; --accent:#c9b98a;
+  --alerte:#c98a8a;
+  --sans:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--fond);color:var(--encre);font:13px/1.45 var(--sans);
+  display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
+
+#vue{flex:1 1 auto;min-height:0;display:grid;place-items:center;position:relative;overflow:hidden}
+canvas{image-rendering:pixelated;display:block;touch-action:none;cursor:crosshair}
+
+/* --- le bandeau : trois chiffres, pas un de plus ----------------------- */
+#bandeau{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;
+  gap:12px;align-items:baseline;pointer-events:none;padding:10px 14px;
+  font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--encre-2);text-shadow:0 1px 3px rgba(0,0,0,.75);
+  transition:opacity .9s ease}
+#bandeau b{color:var(--accent);font-weight:600}
+#droite{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+#chrono.pressant{color:var(--alerte)}
+#mot{position:absolute;left:0;right:0;bottom:12px;text-align:center;pointer-events:none;
+  font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--encre-2);
+  text-shadow:0 1px 3px rgba(0,0,0,.8);transition:opacity .9s ease}
+
+/* --- le panneau, qui s'efface tout seul -------------------------------- */
+#panneau{flex:0 0 auto;background:var(--panneau);border-top:1px solid var(--trait);
+  padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+  transition:opacity .9s ease, transform .9s ease}
+body.repos #panneau{opacity:0;transform:translateY(8px);pointer-events:none}
+body.repos #bandeau{opacity:.30}
+body.repos #mot{opacity:0}
+body.repos canvas{cursor:none}
+
+.rangee{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center}
+.rangee+.rangee{margin-top:8px}
+.groupe{display:flex;align-items:center;gap:6px}
+.groupe>span{color:var(--encre-3);font-family:var(--mono);font-size:10.5px;
+  letter-spacing:.08em;text-transform:uppercase}
+button{font:inherit;font-size:12px;color:var(--encre);background:#1d1d24;
+  border:1px solid var(--trait);border-radius:6px;padding:4px 10px;cursor:pointer}
+button:hover:not([disabled]){background:#26262f}
+button[aria-pressed="true"]{background:var(--accent);color:#17140c;border-color:var(--accent)}
+button[disabled]{opacity:.34;cursor:default}
+kbd{font-family:var(--mono);font-size:10px;color:var(--encre-3);
+  border:1px solid var(--trait);border-radius:3px;padding:0 3px;margin-left:5px}
+
+/* --- la fin ------------------------------------------------------------ */
+#fin{position:absolute;inset:0;display:grid;place-items:center;
+  background:rgba(11,11,15,.82);backdrop-filter:blur(2px);text-align:center;padding:24px}
+#fin[hidden]{display:none}
+#fin h2{font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 10px}
+#fin p{margin:0 0 18px;color:var(--encre-2);max-width:44ch}
+</style>
+</head>
+<body>
+
+<div id="vue">
+  <canvas id="toile"></canvas>
+  <div id="bandeau">
+    <span>on regarde — <i id="ou" style="font-style:normal"></i></span>
+    <span id="droite">
+      <span id="chrono"></span> ·
+      spores <b id="spores">0</b> ·
+      sporocyste <b id="sporo">—</b> ·
+      <b id="pointes">0</b> pointes ·
+      <b id="mm">0 mm</b>
+    </span>
+  </div>
+  <div id="mot"></div>
+  <div id="fin" hidden>
+    <div>
+      <h2 id="finTitre"></h2>
+      <p id="finTexte"></p>
+      <button id="bRejouer">Une autre matrice</button>
+    </div>
+  </div>
+</div>
+
+<div id="panneau">
+  <div class="rangee">
+    <div class="groupe">
+      <button id="bRemonter" disabled>Remonter<kbd>échap</kbd></button>
+      <button id="bBrancher" disabled>Ramifier<kbd>b</kbd></button>
+      <button id="bSporuler" disabled>Sporuler<kbd>s</kbd></button>
+    </div>
+    <div class="groupe">
+      <span>calque</span>
+      <button data-cal="aucun" aria-pressed="true">Aucun</button>
+      <button data-cal="substrat" aria-pressed="false">Substrat</button>
+      <button data-cal="reserve" aria-pressed="false">Réserve</button>
+      <button data-cal="menace" aria-pressed="false">Menace</button>
+    </div>
+  </div>
+  <div class="rangee">
+    <div class="groupe">
+      <button id="bPause" aria-pressed="false">Pause<kbd>espace</kbd></button>
+      <span>vitesse</span>
+      <button data-vit="60" aria-pressed="false">×60</button>
+      <button data-vit="300" aria-pressed="true">×300</button>
+      <button data-vit="900" aria-pressed="false">×900</button>
+    </div>
+    <div class="groupe">
+      <span>optique</span>
+      <button data-pal="phase" aria-pressed="true">Phase</button>
+      <button data-pal="noir" aria-pressed="false">Fond noir</button>
+      <button data-pal="met" aria-pressed="false">MET</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { AppJeu, brancherJeu } from './src/jeu.js';
+const app = new AppJeu(document.getElementById('toile'), document.getElementById('vue'));
+globalThis.apical = app;
+brancherJeu(app);
+</script>
+</body>
+</html>

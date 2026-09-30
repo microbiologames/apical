@@ -57,6 +57,36 @@ export class VueSporange extends Scene {
   }
 
   /**
+   * NETTETE CONTINUE, entre 0 et 1, la ou `plan3` est quantifie.
+   *
+   * Le flou, lui, n'a que quatre degres : c'est la structure des calques et
+   * elle ne se negocie pas. Mais un flou de boite etale un trait d'un pixel
+   * sur (2r+1) colonnes et `BLUR_GAIN` ne le rattrape qu'a moitie — le
+   * rapport de pic vaut 1 / 0,60 / 0,56 / 0,47 du plus net au plus flou.
+   * Un lisere de paroi tire a pleine force ressort donc ENTIER sur la bande
+   * nette et quasiment invisible sur les voisines : au fut du
+   * sporangiophore, 246 de luminance sur la bande au point, rien du tout
+   * vingt pixels plus bas. On lisait un trait vertical clair borde de deux
+   * coutures, exactement aux frontieres de calques.
+   *
+   * On COMPENSE donc, et dans l'autre sens que l'intuition : ce n'est pas
+   * la bande floue qu'il faut eteindre, c'est la bande nette qu'il faut
+   * retenir, puisqu'elle est la seule a ne rien perdre au flou. Le facteur
+   * vaut 0,62 au point et remonte a 1 des qu'on est franchement flou —
+   * c'est le meme 0,62 que le coefficient de profondeur du rendu apical,
+   * et pour la meme raison.
+   *
+   * Et il est CONTINU la ou les calques sont quantifies : `trait`
+   * l'interpole le long de chaque bande, les bandes partagent leurs
+   * extremites, donc traverser une frontiere ne fait plus de marche. Il ne
+   * reste que le changement de rayon de flou, qui est ce qu'on veut voir.
+   */
+  compense(z) {
+    const dz = Math.abs((this.zF - z) / (this.dof || DOF));
+    return lerp(0.62, 1, smoothstep(0.30, 1.0, dz));
+  }
+
+  /**
    * @param {Sporange} sp
    * @param {number}   zF   plan de mise au point, en um
    */
@@ -263,6 +293,46 @@ export class VueSporange extends Scene {
     const qC = sp.qCompact;
     if (qC > 0.3) while (iCol < A.length - 1 && A[iCol].q < qC) iCol++;
 
+    /* LA SECTION SE CALCULE SUR L'AXE ENTIER, UNE FOIS, ET PAS PAR BANDE.
+       C'est la correction du defaut le plus visible de la tige, et la cause
+       etait dans la normale : elle se prend sur la difference centree des
+       voisins, mais AUX EXTREMITES D'UNE BANDE il n'y a pas de voisin, et
+       le code retombait sur une difference d'un seul cote. Le dernier point
+       d'une bande et le premier de la suivante sont le MEME point de l'axe,
+       et pourtant ils recevaient deux normales differentes — l'une en
+       arriere, l'autre en avant.
+
+       Les deux sections ne coincidaient donc pas : entre deux bandes il
+       restait un coin de tube non couvert d'un cote — la couture
+       horizontale en travers du fut — et un recouvrement de l'autre, ou le
+       halo, qui est translucide, se posait deux fois. Au pas fin, pres de
+       la pointe, les bandes ne font que quelques points : les deux defauts
+       se repetaient tous les trois pixels et on lisait un trait clair en
+       pointilles le long du flanc.
+
+       Calculee sur l'axe entier, la section d'un point est la meme quelle
+       que soit la bande qui la dessine, et les bandes se raccordent
+       exactement. Rien d'autre ne change. */
+    const NA = A.length;
+    if (!this._bw || this._bw.length < NA) {
+      this._bw = new Float32Array(NA + 64); this._bnx = new Float32Array(NA + 64);
+      this._bny = new Float32Array(NA + 64); this._bpx = new Float32Array(NA + 64);
+      this._bpy = new Float32Array(NA + 64);
+    }
+    const W = this._bw, NX = this._bnx, NY = this._bny, PX = this._bpx, PY = this._bpy;
+    for (let k = 0; k < NA; k++) {
+      const a = A[k];
+      PX[k] = this.px3(a.x, a.y, a.z); PY[k] = this.py3(a.x, a.y, a.z);
+      W[k] = sp.profil(a.q) * this.pxUm;
+    }
+    for (let k = 0; k < NA; k++) {
+      const p = PX[Math.max(0, k - 1)], q = PX[Math.min(NA - 1, k + 1)];
+      const r = PY[Math.max(0, k - 1)], t = PY[Math.min(NA - 1, k + 1)];
+      let dx = q - p, dy = t - r;
+      const l = Math.hypot(dx, dy) || 1e-6;
+      NX[k] = -dy / l; NY[k] = dx / l;
+    }
+
     let i0 = 0;
     while (i0 < A.length - 1) {
       const fixe = i0 === 0 && iCol > 1;
@@ -276,24 +346,6 @@ export class VueSporange extends Scene {
       }
       const n = i1 - i0 + 1;
       if (n >= 2 && n * 2 + 2 < 2048) {
-        /* demi-largeur ecran et normale image en chaque point */
-        const W = this._bw || (this._bw = new Float32Array(1024));
-        const NX = this._bnx || (this._bnx = new Float32Array(1024));
-        const NY = this._bny || (this._bny = new Float32Array(1024));
-        const PX = this._bpx || (this._bpx = new Float32Array(1024));
-        const PY = this._bpy || (this._bpy = new Float32Array(1024));
-        for (let k = 0; k < n; k++) {
-          const a = A[i0 + k];
-          PX[k] = this.px3(a.x, a.y, a.z); PY[k] = this.py3(a.x, a.y, a.z);
-          W[k] = sp.profil(a.q) * this.pxUm;
-        }
-        for (let k = 0; k < n; k++) {
-          const p = PX[Math.max(0, k - 1)], q = PX[Math.min(n - 1, k + 1)];
-          const r = PY[Math.max(0, k - 1)], t = PY[Math.min(n - 1, k + 1)];
-          let dx = q - p, dy = t - r;
-          const l = Math.hypot(dx, dy) || 1e-6;
-          NX[k] = -dy / l; NY[k] = dx / l;
-        }
         /* LE HALO EST SUR LE MEME CALQUE QUE SA BANDE, dessine juste avant.
            Sur un calque plus flou, il changeait de rang dans l'ordre de
            composition et repassait par-dessus la bande voisine : un lisere
@@ -305,9 +357,24 @@ export class VueSporange extends Scene {
            une lentille blanche posee en travers du sommet. */
         sc.layer(L);
         for (let passe = 0; passe < 2; passe++) {
+          /* DEUX BANDES VOISINES SE RECOUVRENT D'UN POINT, ELLES NE SE
+             TOUCHENT PAS. Elles partagent exactement la meme section — la
+             normale est calculee sur l'axe entier — mais `remplir` arrondit
+             les bornes de chaque ligne de balayage et `plot` tronque : pour
+             une meme arete, les deux bandes peuvent retenir deux colonnes
+             differentes, et il restait alors une colonne que personne ne
+             couvrait. A l'ecran, une encoche sombre d'un pixel, repetee a
+             chaque frontiere de calque : l'escalier qu'on voyait descendre
+             le long du flanc.
+
+             Le remplissage deborde donc d'un point sur la bande suivante.
+             Il est opaque, un recouvrement d'un pixel ne se voit pas ; un
+             trou, si. Le HALO, lui, ne deborde pas : il est translucide et
+             se cumulerait. */
+          const nb = passe === 1 ? Math.min(n + 1, NA - i0) : n;
           let m = 0;
-          for (let j = 0; j < 2 * n; j++) {
-            const k = j < n ? j : 2 * n - 1 - j, sg = j < n ? 1 : -1;
+          for (let j = 0; j < 2 * nb; j++) {
+            const k = i0 + (j < nb ? j : 2 * nb - 1 - j), sg = j < nb ? 1 : -1;
             const e = W[k] + (passe === 0 ? Math.min(2.2, 0.35 * W[k] + 0.35) : 0);
             xs[m] = PX[k] + NX[k] * sg * e; ys[m] = PY[k] + NY[k] * sg * e; m++;
           }
@@ -341,10 +408,18 @@ export class VueSporange extends Scene {
              avec `rCol`, c'est-a-dire avec la paroi qui se forme du cote
              interne de la cavite. */
           const cB = fInt < 1 ? fade32(cP, fInt) : cP;
-          for (let k = 1; k < n; k++) {
-            sc.line(xs[k - 1], ys[k - 1], xs[k], ys[k], cB);
-            sc.line(xs[m - k], ys[m - k], xs[m - k - 1], ys[m - k - 1], cB);
-          }
+          /* UNE POLYLIGNE PAR FLANC, ET PAS UN SEGMENT PAR POINT. L'axe est
+             echantillonne tous les 0,5 um pres de la pointe, soit moins
+             d'un pixel a l'ecran une fois le raccourci de la projection
+             applique : segment par segment, `line` reposait le sommet
+             commun a chaque fois et le lisere, qui est translucide,
+             s'accumulait. `trait` pose chaque pixel une seule fois. */
+          /* Le lisere, lui, s'arrete a la bande : il est translucide, un
+             recouvrement le doublerait. Le flanc « aller » occupe les n
+             premiers points, le flanc « retour » les n derniers. */
+          const q0 = this.compense(A[i0].z), q1 = this.compense(A[i1].z);
+          sc.trait(xs, ys, n, cB, 0, q0, q1);
+          sc.trait(xs, ys, n, cB, 2 * nb - n, q1, q0);
         }
       }
       i0 = i1;

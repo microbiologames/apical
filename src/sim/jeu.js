@@ -334,6 +334,51 @@ export class Jeu {
     return s;
   }
 
+  /** Le meme, SANS MEMORISER : le rendu lit le plateau, il ne le peuple pas.
+      Un calque echantillonne dix mille cellules par image, dont la colonie
+      n'a jamais approche aucune. */
+  resteVu(x, y) {
+    const s = this.stock.get(this.cle(x, y));
+    return s === undefined ? STOCK_PLEIN * this.th.matrice(x, y) : s;
+  }
+
+  /**
+   * INTERPOLATION BILINEAIRE, POUR LE RENDU SEULEMENT.
+   *
+   * Une grille de simulation lue telle quelle au rendu se voit comme un
+   * damier : on lit une structure de donnees, pas un substrat. Le piege est
+   * deja paye une fois sur la densite du thalle, et le calque substrat l'a
+   * refait a l'identique — des carres de soixante micrometres, francs, la ou
+   * la colonie avait mange.
+   *
+   * La simulation, elle, continue de lire la maille brute : c'est la que le
+   * nutriment est stocke, et l'adoucir la fausserait.
+   */
+  champLisse(x, y, brut) {
+    const m = MAILLE_DENS;
+    const fx = x / m - 0.5, fy = y / m - 0.5;
+    const i = Math.floor(fx), j = Math.floor(fy);
+    const u = fx - i, v = fy - j;
+    const a = brut((i + 0.5) * m, (j + 0.5) * m), b = brut((i + 1.5) * m, (j + 0.5) * m);
+    const c = brut((i + 0.5) * m, (j + 1.5) * m), d = brut((i + 1.5) * m, (j + 1.5) * m);
+    return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+  }
+
+  /** Le substrat tel qu'on le VOIT : lisse, et sans rien memoriser. */
+  substratVu(x, y) { return this.champLisse(x, y, (a, b) => this.resteVu(a, b)); }
+
+  /** La reserve telle qu'on la VOIT. Sa maille fait 600 um : lue brute, le
+      calque est un damier de dix carres de cote. */
+  reserveVue(x, y) {
+    const m = MAILLE_RES;
+    const fx = x / m - 0.5, fy = y / m - 0.5;
+    const i = Math.floor(fx), j = Math.floor(fy);
+    const u = fx - i, v = fy - j;
+    const g = (p, q) => this.reserveLocale((p + 0.5) * m, (q + 0.5) * m);
+    const a = g(i, j), b = g(i + 1, j), c = g(i, j + 1), d = g(i + 1, j + 1);
+    return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+  }
+
   /* --- le graphe ----------------------------------------------------------- */
 
   /**
@@ -423,10 +468,17 @@ export class Jeu {
     this.t += dt;
     const th = this.th;
 
-    /* 1. La colonie pousse, avec sa loi et pas une autre. On releve ce que
-          chaque pointe a construit pour le lui facturer : `Thalle` ne connait
-          pas la reserve, et il n'a pas a la connaitre. */
-    for (const p of th.pointes) p.lAv = p.l;
+    /* 1. La colonie pousse, avec sa loi et pas une autre. On facture ensuite
+          a chaque pointe ce qu'elle a construit : `Thalle` ne connait pas la
+          reserve, et il n'a pas a la connaitre.
+
+          LE RELEVE SE FAIT A LA FIN DU PAS, PAS AU DEBUT. Pris au debut, il
+          ne voyait que ce que `th.maj` venait de construire — ce qui suffit
+          tant que le jeu tourne seul. Mais des qu'une pointe est VISITEE, sa
+          croissance ne vient plus de `th.maj` : c'est la simulation apicale
+          qui l'avance entre deux appels, par `Thalle.inscrire`. Releve au
+          debut, ce materiau-la etait construit gratuitement. Releve a la
+          fin, il est facture au pas suivant, et l'ecart est d'une image. */
     th.maj(dt);
     this.majGraphe();
 
@@ -605,6 +657,8 @@ export class Jeu {
       else if (this.t >= T_MAX) this.fin = 'temps';
     }
     if (this.tenue) this.tempsTenu += dt; else this.tempsHaut += dt;
+    /* Le releve pour le pas suivant. Voir 1. */
+    for (const p of th.pointes) p.lAv = p.l;
   }
 
   /* --- ce que le joueur peut faire ----------------------------------------- */

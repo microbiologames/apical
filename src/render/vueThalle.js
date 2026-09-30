@@ -36,6 +36,12 @@ export class VueThalle extends Scene {
 
     this.substrat(th, P, opts);
     this.mycelium(th, P, opts);
+    /* UN CALQUE EST UN FILTRE, DONC IL EST DANS LE TRAJET OPTIQUE : il passe
+       avant la composition des calques de profondeur et avant le grain de
+       capteur. Pose sur l'image finie, on lirait une peinture par-dessus la
+       photo — et le grain se retrouverait dessous, ce qui n'a aucun sens.
+       Hors du jeu personne ne passe ce crochet et rien ne change. */
+    opts.calque?.();
 
     sc.composite(P.dither);
     if (opts.grain !== false) this.grainCapteur(P, t);

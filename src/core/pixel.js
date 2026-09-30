@@ -282,6 +282,54 @@ export class Screen {
   }
 
   /**
+   * POLYLIGNE OUVERTE QUI NE POSE JAMAIS DEUX FOIS LE MEME PIXEL.
+   *
+   * `line` pose `n+1` points, extremites comprises, avec n >= 1 : un
+   * segment plus court qu'un pixel pose donc deux fois le meme, et deux
+   * segments qui se suivent reposent toujours leur sommet commun. En
+   * src-over, un lisere translucide s'y accumule — 1-(1-a)^2 — et le trait
+   * sort plus clair que lui-meme.
+   *
+   * Mesure sur le fut du sporangiophore, dont l'axe est echantillonne plus
+   * fin que le pixel : 1 158 appels a `line` pour 578 pixels, dont 197
+   * poses une seule fois, 247 deux fois et 134 trois fois ou plus. A
+   * l'ecran, un trait vertical trop clair sur les deux flancs, en
+   * pointilles la ou le compte retombait a un.
+   *
+   * C'est le meme piege que les traits sous-pixel empiles du rendu macro :
+   * baisser l'opacite ne corrige rien, ca ne fait que deplacer le seuil.
+   * Ce qu'il faut, c'est poser chaque pixel une fois.
+   */
+  trait(xs, ys, n, c, o = 0, a0 = 1, a1 = 1) {
+    if (n < 2) return;
+    const A0 = (c >>> 24) & 255, rgb = c & 0xffffff;
+    let ax = 0x7fffffff, ay = 0x7fffffff;
+    for (let k = 1; k < n; k++) {
+      const x0 = xs[o + k - 1], y0 = ys[o + k - 1], x1 = xs[o + k], y1 = ys[o + k];
+      const dx = x1 - x0, dy = y1 - y0;
+      const m = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy))));
+      for (let i = 0; i <= m; i++) {
+        const u = i / m;
+        /* ON ARRONDIT, parce que `remplir` arrondit. Le remplissage couvre
+           [round(xa), round(xb)] ; un lisere tronque au lieu d'arrondir
+           tombait jusqu'a un pixel EN DEDANS de la derniere colonne
+           remplie, et cette colonne-la, pleine de cytoplasme, restait a
+           l'air libre : une encoche sombre d'un pixel juste a l'exterieur
+           de la paroi. Un contour et son remplissage doivent rasteriser
+           avec la meme regle, sinon ils se manquent d'un pixel. */
+        const x = Math.round(x0 + dx * u), y = Math.round(y0 + dy * u);
+        if (x === ax && y === ay) continue;
+        /* Opacite interpolee le long du trait : c'est ce qui permet a un
+           lisere de traverser une frontiere de calque sans marche. */
+        const f = a0 + (a1 - a0) * ((k - 1 + u) / (n - 1));
+        const a = (A0 * f) | 0;
+        if (a > 0) this.plot(x, y, (a << 24) | rgb);
+        ax = x; ay = y;
+      }
+    }
+  }
+
+  /**
    * Arc d'ellipse parametrique, de t0 a t1 (radians, dans le repere de
    * l'ellipse : t = 0 est l'extremite du demi-axe `a`).
    *

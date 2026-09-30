@@ -21,6 +21,7 @@ les captures de contrôle.
 | `npm run visuel:sporange` | captures de la sporulation |
 | `npm run visuel:germination` | captures de la germination |
 | `npm run visuel:cycle` | captures du cycle complet |
+| `npm run visuel:jeu` | captures de la page de jeu |
 
 ---
 
@@ -579,6 +580,35 @@ sporocyste — et c'était deux fautes : la mesure ne distinguait plus « à pei
 de « largement », et il n'y avait plus d'arbitrage puisque sporuler tôt était
 gratuitement meilleur.
 
+**La page, c'est `jeu.html` + `src/jeu.js`, et elle ne simule RIEN.** La
+colonie vient de `sim/thalle.js`, le nutriment et la réserve de
+`sim/jeu.js`, le pont entre les échelles de `monde.js`, l'apex de
+`main.js`. Elle n'ajoute que de quoi voir et de quoi agir. On clique une
+pointe, on descend dessus par le fondu du pont, on la conduit en déplaçant
+la consigne du gradient de Ca²⁺ — avec les 10,7 s d'inertie mesurées, pas
+une télécommande —, on ramifie, on monte un sporangiophore, on remonte.
+
+**Une pointe tenue reste soumise à sa réserve.** `Thalle.pas` l'ignore
+puisque la micro la pilote, mais rien ne justifie qu'une pointe affamée
+pousse à plein régime parce qu'on la regarde : `pasVisite` applique la même
+modulation que la colonie. Et le relevé d'extension de `Jeu.pas` se fait
+désormais **à la fin du pas**, sinon tout ce que la micro construit entre
+deux appels serait construit gratuitement.
+
+**L'ESTHÉTIQUE NE PERD RIEN, et ça se code.** Les trois optiques restent.
+Le panneau s'efface tout seul après six secondes sans geste — on regarde
+pousser une moisissure, le HUD n'a aucune raison de rester en travers — et
+le moindre mouvement le ramène. Ce qu'il faut savoir se lit **sur
+l'organisme**, par des calques qu'on allume **un à la fois** : superposés,
+ils redeviennent un tableau de bord.
+
+**Un calque est un FILTRE, un marqueur est un RÉTICULE, et les deux ne
+vivent pas au même endroit.** Le filtre est dans le trajet optique : il
+passe avant la composition des calques de profondeur et avant le grain de
+capteur (crochet `opts.calque` de `VueThalle`). Le réticule — le front, le
+sporocyste, la pointe visée — est sur le verre de l'oculaire : après tout,
+en `direct`. Il n'y en a que trois, et pas un de plus.
+
 **Et le verdict 20 est un demi-résultat, dit comme tel dans la sortie du
 banc.** L'emplacement décide (2,35 spores contre 0,45 posé du mauvais côté,
 un facteur cinq) et c'est un geste qui n'existe qu'en haut. Mais une politique
@@ -1007,6 +1037,58 @@ partie du travail**, pas après, pendant.
   hostiles grossissaient à 0,35 µm/s sans rayon final : 3,8 mm après trois
   heures, cinq disques couvrent le plateau, et toutes les politiques tombaient
   de 2,55 à 1,05 d'un coup. Une croûte de sel est une tache, pas une fatalité.
+- **`line` repose toujours son sommet commun, et un liseré translucide s'y
+  accumule.** Elle pose `n+1` points, extrémités comprises, avec n ≥ 1 : un
+  segment plus court qu'un pixel en pose deux fois le même. Mesuré sur le
+  fût du sporangiophore, dont l'axe est échantillonné plus fin que le
+  pixel : **1 158 appels pour 578 pixels, dont 197 posés une fois, 247 deux
+  fois et 134 trois fois ou plus.** D'où `Screen.trait`, une polyligne
+  ouverte qui ne pose jamais deux fois le même pixel.
+- **Un contour et son remplissage doivent rastériser avec la MÊME règle.**
+  `remplir` couvre `[round(xa), round(xb)]` ; `plot` tronque. Un liseré
+  tronqué tombait jusqu'à un pixel **en dedans** de la dernière colonne
+  remplie, et cette colonne-là, pleine de cytoplasme, restait à l'air
+  libre : une encoche sombre d'un pixel, répétée à chaque frontière de
+  calque — l'escalier qu'on voyait descendre le long du fût.
+- **Deux bandes voisines se recouvrent d'un point, elles ne se touchent
+  pas.** Le remplissage est opaque : un recouvrement d'un pixel ne se voit
+  pas, un trou si. Le halo, lui, ne déborde pas — il est translucide et se
+  cumulerait.
+- **Un flou de boîte ne conserve pas le pic d'un TRAIT, et `BLUR_GAIN` est
+  calibré pour des aires.** Le rapport de pic vaut 1 / 0,60 / 0,56 / 0,47 du
+  plus net au plus flou : un liseré tiré à pleine force ressortait entier
+  sur la bande au point et invisible sur les voisines — 246 de luminance
+  puis rien vingt pixels plus bas, soit un trait vertical clair bordé de
+  deux coutures, exactement aux frontières de calques. Ce n'est pas la bande
+  floue qu'il faut éteindre, c'est **la bande nette qu'il faut retenir** :
+  0,62 au point, 1 dès qu'on est franchement flou, et **continu**, parce que
+  les bandes partagent leurs extrémités.
+- **La normale d'une section se calcule sur l'axe entier, pas par bande.**
+  Aux extrémités d'une bande il n'y a pas de voisin et le code retombait sur
+  une différence d'un seul côté : le dernier point d'une bande et le premier
+  de la suivante sont le MÊME point de l'axe et recevaient pourtant deux
+  normales différentes.
+- **Un calque dessiné après `composite` n'existe pas.** `VueThalle.dessiner`
+  aplatit ses calques de profondeur avant de rendre la main : tout ce qui
+  est posé ensuite sur un `layer` n'est jamais composité. Le premier calque
+  substrat était rigoureusement invisible, et rien ne le disait.
+- **Les couleurs d'un calque ne sont pas celles de l'organisme.** Tirées de
+  la palette, elles étaient pâles sur un fond pâle : ambre, bleu froid,
+  rouge éteint — un filtre a sa teinte à lui, et celles-là se lisent sur les
+  trois optiques.
+- **Le damier, une deuxième fois.** La grille de nutriment lue telle quelle
+  au rendu redonnait des carrés francs de soixante micromètres là où la
+  colonie avait mangé. Interpolation bilinéaire **au rendu**, maille brute
+  pour la simulation — c'est exactement ce que la densité du thalle avait
+  déjà coûté.
+- **Le rendu ne peuple pas le modèle.** `reste` mémorise la cellule qu'on
+  lui demande ; un calque en échantillonne dix mille par image, dont la
+  colonie n'a jamais approché aucune. D'où `resteVu`, qui lit sans écrire.
+- **Une vue ne se déduit pas d'un mode.** `Jeu.vue()` rend la carte ou une
+  pointe selon qu'une pointe est TENUE — et elle l'est dès le début de la
+  descente, bien avant que le mode ne bascule au sommet du flou. Déduit du
+  mode, le panneau lisait `tetes` sur une vue qui n'en avait pas, pendant
+  tout le fondu.
 - **Une capture prise N millisecondes après un changement de phase ne montre
   pas ce qu'on croit.** L'éclatement dure 1,6 s simulée, soit 0,4 s réelle à
   ×4 : la capture arrivait régulièrement quatre images après le basculement en
