@@ -15,7 +15,7 @@
    l'active mais place son sporocyste du mauvais cote. Si elle fait aussi
    bien, c'est que l'emplacement ne compte pas, et le jeu n'existe pas. */
 import { mulberry32 } from '../src/core/util.js';
-import { CONFORT, T_MAX, V_FRONT } from '../src/sim/jeu.js';
+import { CONFORT, T_MAX } from '../src/sim/jeu.js';
 
 /* Temps de remplissage a prevoir. C'est une ESTIMATION DE JOUEUR, pas une
    lecture du modele : on ne connait pas le debit futur, on a juste appris
@@ -23,7 +23,7 @@ import { CONFORT, T_MAX, V_FRONT } from '../src/sim/jeu.js';
 const ATTENDU = 1500;
 
 /* Combien de secondes le front laisse-t-il a ce noeud ? */
-const sursis = (t, v) => (t.porteur.x - v.front) / V_FRONT;
+const sursis = (t, v) => (t.porteur.x - v.front) / v.vFront;
 
 /* On choisit sur le NOEUD PORTEUR : c'est lui qui portera le
    sporangiophore, et c'est lui que le front tuera. La pointe, elle, est six
@@ -56,7 +56,7 @@ function surLeGras(v) {
    pendant le remplissage y sera passe avant la fin. */
 function menacee(v, q) {
   for (const m of v.menaces) {
-    if (Math.hypot(q.x - m.x, q.y - m.y) < m.r + 0.35 * ATTENDU) return true;
+    if (Math.hypot(q.x - m.x, q.y - m.y) < m.r + v.vMenace * ATTENDU) return true;
   }
   return false;
 }

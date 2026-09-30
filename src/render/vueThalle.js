@@ -59,6 +59,12 @@ export class VueThalle extends Scene {
     const sc = this.sc, w = this.w, h = this.h;
     const c0 = hexToRgba(P.fond), c1 = hexToRgba(P.fondBord);
     const cEp = hexToRgba(P.cytoBord);
+    /* LE PLATEAU SE VOIT : sa teinte et sa microstructure. La gelose n'a ni
+       l'une ni l'autre (`teinteForce` a 0, `struct` a 0 partout), donc les
+       pages qui existaient ne voient rien changer. */
+    const tf = th.mat?.teinteForce || 0;
+    const cT = tf > 0 ? hexToRgba(th.mat.teinte) : 0;
+    const cSt = hexToRgba(P.milieuDebris);
     const inv = 1 / this.pxUm;
     const ox = this.cam.x - (w * 0.5) * inv, oy = this.cam.y - (h * 0.5) * inv;
     const vg = this.vign;
@@ -68,7 +74,7 @@ export class VueThalle extends Scene {
     const B = 2;
     const nx = Math.ceil(w / B) + 1;
     let cache = this._sub;
-    if (!cache || cache.length !== nx * 2) cache = this._sub = new Float32Array(nx * 2);
+    if (!cache || cache.length !== nx * 3) cache = this._sub = new Float32Array(nx * 3);
 
     for (let y = 0; y < h; y++) {
       const row = y * w;
@@ -78,6 +84,7 @@ export class VueThalle extends Scene {
           const wx = ox + i * B * inv;
           cache[i] = th.matrice(wx, wy);
           cache[nx + i] = clamp(this.densLisse(th, wx, wy) / DENS_SAT, 0, 1);
+          cache[2 * nx + i] = th.struct(wx, wy);
         }
       }
       for (let x = 0; x < w; x++) {
@@ -86,6 +93,13 @@ export class VueThalle extends Scene {
            matrice est un fond de lecture, pas une carte de chaleur. */
         let c = mix32(c1, c0, smoothstep(0.35, 1.25, cache[i]));
         c = shade32(c, (cache[i] - 0.8) * 0.22);
+        if (tf > 0) c = mix32(c, cT, tf);
+        /* Ce qui bloque est plus dense, donc plus contraste : une alveole,
+           un globule gras, une cloison de parenchyme. On le melange au grain
+           du milieu plutot qu'a une couleur a part — c'est le milieu, pas un
+           objet pose dedans. */
+        const st = cache[2 * nx + i];
+        if (st > 0.02) c = shade32(mix32(c, cSt, st * 0.46), -st * 0.08);
         const ep = cache[nx + i];
         if (ep > 0.02) c = mix32(c, cEp, ep * 0.55);
         c = mix32(c, c1, vg[row + x]);

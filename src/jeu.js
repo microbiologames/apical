@@ -33,7 +33,9 @@ import { depuisMacro } from './sim/hyphe.js';
 import { Contenu } from './sim/contenu.js';
 import { pasMicro } from './main.js';
 import { flouEcran } from './monde.js';
-import { Jeu, T_MAX, MAILLE_RES, STOCK_PLEIN, CONFORT, V_FRONT } from './sim/jeu.js';
+import { Jeu, T_MAX, STOCK_PLEIN, CONFORT, GENOME_BASE, TRAITS, troisSpores } from './sim/jeu.js';
+import { MATRICES } from './sim/matrices.js';
+import { mulberry32 } from './core/util.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -96,15 +98,56 @@ export class AppJeu {
     this.layout();
   }
 
+  /**
+   * UNE NOUVELLE PARTIE : un parcours, pas un plateau. On repart d'une spore
+   * sauvage et on enchaine les aliments.
+   */
   reset(graine = (Math.random() * 1e6) | 0) {
-    this.graine = graine;
-    this.jeu = new Jeu({ graine });
+    this.rngP = mulberry32((graine ^ 0x3c6ef35f) >>> 0);
+    this.genome = { ...GENOME_BASE };
+    this.tour = 0;
+    this.parcours = [];
+    this.candidates = null;
+    /* L'ORDRE DES PLATEAUX EST TIRE UNE FOIS, PAS A CHAQUE FOIS. Tire a
+       chaque passage, on retombait sur le meme aliment deux fois de suite et
+       le parcours n'avait plus de forme. */
+    this.ordre = MATRICES.map((_, i) => i);
+    for (let i = this.ordre.length - 1; i > 0; i--) {
+      const j = (this.rngP() * (i + 1)) | 0;
+      [this.ordre[i], this.ordre[j]] = [this.ordre[j], this.ordre[i]];
+    }
+    this.nouveauPlateau();
+  }
+
+  /** Le plateau suivant, avec le genome qu'on a emporte. */
+  nouveauPlateau() {
+    this.mat = MATRICES[this.ordre[this.tour % MATRICES.length]];
+    this.tour++;
+    this.graine = (this.rngP() * 1e6) | 0;
+    this.jeu = new Jeu({ graine: this.graine, matrice: this.mat, genome: this.genome });
     this.th = this.jeu.th;
     this.mode = 'macro'; this.tr = 0; this.pointe = null;
+    this.candidates = null;
     this.vueT.cam.x = 0; this.vueT.cam.y = 0;
     this.pxMacro = 0;
-    this.message = ''; this.tMot = 0;
+    this.dire(this.mat.nom + ' — ' + this.mat.strategie);
     this.marquer();
+  }
+
+  /**
+   * LE GESTE DE FIN, et il etait deja dessine. A l'eclatement, `Sporange`
+   * choisit une spore et la camera la suit ; ici le joueur en choisit une
+   * parmi trois, chacune avec son genome mute, et il la regarde partir. Le
+   * plus beau moment du moteur devient le moment de decision.
+   */
+  choisir(i) {
+    if (!this.candidates || !this.candidates[i]) return;
+    this.genome = this.candidates[i].genome;
+    this.parcours.push({
+      plateau: this.mat.cle, spores: this.jeu.spores,
+      trait: this.candidates[i].dominante,
+    });
+    this.nouveauPlateau();
   }
 
   marquer() { this.geste = performance.now(); }
@@ -253,6 +296,13 @@ export class AppJeu {
     this.fps += (1 / Math.max(dt0, 1e-3) - this.fps) * 0.05;
     const sc = this.screen;
     if (!this.pause) this.t += dt0;
+
+    /* La partie est finie : on propose trois spores, une seule fois. Sans
+       sporocyste mene a terme il n'y a rien a emporter — c'est tout l'objet
+       du jeu, et le parcours s'arrete la. */
+    if (this.jeu.fin && !this.candidates && this.jeu.spores > 0) {
+      this.candidates = troisSpores(this.genome, this.rngP);
+    }
 
     if (!this.pause && !this.jeu.fin) {
       if (this.mode === 'macro') {
@@ -475,6 +525,19 @@ export class AppJeu {
     return {
       mode: this.mode,
       fin: j.fin,
+      tour: this.tour,
+      plateau: this.mat.nom,
+      note: this.mat.note,
+      strategie: this.mat.strategie,
+      genome: this.genome,
+      candidates: this.candidates && this.candidates.map((c) => ({
+        trait: TRAITS[c.dominante].nom,
+        pour: TRAITS[c.dominante].pour,
+        contre: TRAITS[c.dominante].contre,
+        valeur: c.genome[c.dominante],
+        sens: c.sens,
+      })),
+      parcours: this.parcours.length,
       spores: j.spores,
       avancement: j.sporocyste ? j.sporocyste.masse / 10000 : 0,
       pointes: this.th.vives,
@@ -483,7 +546,7 @@ export class AppJeu {
       pressant: reste < 1800,
       /* Ce que le front laisse au noeud porteur de la pointe visee. */
       sursis: v && v.tetes.length
-        ? Math.max(0, ...v.tetes.filter((t) => t.porteur).map((t) => (t.porteur.x - v.front) / V_FRONT))
+        ? Math.max(0, ...v.tetes.filter((t) => t.porteur).map((t) => (t.porteur.x - v.front) / v.vFront))
         : 0,
       reserve: v ? 0 : w.reserve,
       message: this.tMot && performance.now() - this.tMot < 4000 ? this.message : '',
@@ -520,6 +583,7 @@ export function brancherJeu(app) {
   presse('#bBrancher', () => app.ramifier());
   presse('#bSporuler', () => app.sporuler());
   presse('#bRejouer', () => app.reset());
+  presse('[data-spore]', (b) => app.choisir(+b.dataset.spore));
   presse('#bPause', (b) => { app.pause = !app.pause; b.setAttribute('aria-pressed', String(app.pause)); });
 
   addEventListener('keydown', (e) => {
@@ -548,12 +612,27 @@ export function brancherJeu(app) {
     $('#bBrancher').disabled = !bas;
     $('#bSporuler').disabled = !bas || !!app.jeu.sporocyste;
     $('#mot').textContent = e.message || '';
+    $('#plateau').textContent = e.plateau;
+    $('#tour').textContent = e.tour;
     $('#fin').hidden = !e.fin;
     if (e.fin) {
-      $('#finTitre').textContent = e.spores > 0 ? 'La colonie a essaimé' : 'La colonie s’est éteinte';
-      $('#finTexte').textContent = e.spores > 0
-        ? `${e.spores} sporocyste${e.spores > 1 ? 's' : ''} mené${e.spores > 1 ? 's' : ''} à terme sur ${e.mycelium.toFixed(0)} mm de mycélium.`
-        : `Aucun sporocyste n’a été rempli. ${e.fin === 'eteint' ? 'Plus une pointe vivante.' : 'Le temps a manqué.'}`;
+      const gagne = e.spores > 0;
+      $('#finTitre').textContent = gagne ? 'La colonie a essaimé' : 'La colonie s’est éteinte';
+      $('#finTexte').textContent = gagne
+        ? `${e.spores} sporocyste${e.spores > 1 ? 's' : ''} mené${e.spores > 1 ? 's' : ''} à terme sur ${e.mycelium.toFixed(0)} mm de mycélium. Une seule spore repartira — choisissez laquelle.`
+        : `Aucun sporocyste n’a été rempli, donc rien n’est emporté. ${e.fin === 'eteint' ? 'Plus une pointe vivante.' : 'Le temps a manqué.'}`;
+      $('#spores3').hidden = !gagne;
+      $('#bRejouer').hidden = gagne;
+      if (gagne && e.candidates) {
+        e.candidates.forEach((c, i) => {
+          const el = $(`[data-spore="${i}"]`);
+          el.querySelector('.tr').textContent = c.trait;
+          el.querySelector('.va').textContent =
+            (c.valeur >= 1 ? '×' : '×') + c.valeur.toFixed(2);
+          el.querySelector('.va').className = 'va ' + (c.sens > 0 ? 'plus' : 'moins');
+          el.querySelector('.po').textContent = c.sens > 0 ? c.pour : c.contre === '—' ? 'moins fort' : c.contre;
+        });
+      }
     }
   }
 

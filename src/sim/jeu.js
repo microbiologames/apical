@@ -32,6 +32,7 @@
 
 import { clamp, mulberry32, noise1 } from '../core/util.js';
 import { Thalle, V_MICRO, MAILLE_DENS } from './thalle.js';
+import { MATRICE_NEUTRE } from './matrices.js';
 
 /* --- le graphe de transport ------------------------------------------------ */
 
@@ -192,53 +193,18 @@ const MAILLE_RES = 600;
    reserve et ou le front arrive en dernier. */
 const RECUL_SPORE = 6;
 
-/* --- les stress ------------------------------------------------------------ */
+/* --- les stress ------------------------------------------------------------
 
-/* Front de dessechement : une bande qui traverse le plateau. Il est LENT et
-   VISIBLE — c'est le stress qu'on anticipe. 0,42 um/s traverse quatre
-   millimetres en deux heures et demie de colonie. */
-const V_FRONT = 0.42;
-/* Le front part d'assez loin pour qu'on ait le temps de s'installer. */
-const FRONT_DEPART = -2600;
+   LES VALEURS SONT CELLES DU PLATEAU, PAS DE CE FICHIER. Front, taches
+   hostiles et stock viennent de `sim/matrices.js` ; ce qui reste ici est ce
+   qui ne depend pas de l'aliment. Les chiffres mesures aux verdicts 19 a 21
+   sont ceux de la gelose neutre et sont justifies la-bas, avec elle. */
+
+/* Rayon d'une tache a l'instant ou elle apparait. */
+const R_MENACE0 = 120;
 /* Derriere le front : le stock est mort, les pointes meurent, et la reserve
    deja stockee fuit. C'est elle qu'il faut avoir rapatriee. */
 const FUITE = 0.030;
-
-/* --- les menaces : le stress du milieu, et le prix de l'attention ---------
-
-   LE FRONT NE SUFFIT PAS. Il est lent, rectiligne et connu d'avance : on
-   peut le deduire d'une horloge, donc on n'a pas besoin de le regarder.
-   Mesure : une politique qui ne remonte JAMAIS et sporule sur la pointe
-   qu'elle tient emportait 2,60 spores contre 2,55 pour une politique qui
-   alterne, sur vingt graines — elle gagnait. Tenir une pointe ne coutait
-   rien, et l'alternance que le jeu demande de regarder n'etait qu'une
-   decoration.
-
-   Une menace est locale, elle apparait quelque part, elle S'ETEND, et elle
-   ne se lit que d'en haut : dans une matrice alimentaire c'est une croute
-   de sel, une goutte de saumure, une tache de moisissure concurrente. Rien
-   ne l'annonce a l'echelle de l'apex — une hyphe ne voit pas a un
-   millimetre —, et c'est exactement ce qui fait le cout de l'attention :
-   PENDANT QU'ON EST EN BAS, ELLE S'ETEND.
-
-   QUATRE, ET LE CHIFFRE N'EST PAS CHOISI SUR LE VERDICT 20 — il l'est sur
-   la lisibilite du plateau et sur le fait de ne pas ecraser la partie. Sur
-   vingt graines : a quatre taches de 0,4 a 1,1 mm, la colonie livree a
-   elle-meme emporte 1,10 spore, c'est-a-dire ce qu'elle emportait sans
-   menaces du tout (1,15) ; a sept elle tombe a 0,65, a dix a 0,70, et avec
-   des taches jusqu'a 1,5 mm a 0,15. Une matrice hostile doit se contourner,
-   pas condamner. */
-const N_MENACE = 4;
-const R_MENACE0 = 120;
-/* 0,35 um/s : deux fois plus lent qu'une pointe, donc on peut lui echapper,
-   mais elle double son rayon en six minutes. */
-const V_MENACE = 0.35;
-/* ET ELLE S'ARRETE. Sans rayon final elle grossissait pendant trois heures,
-   soit 3,8 mm : cinq disques de cette taille couvrent le plateau entier et
-   tout le monde tombe a zero — mesure, 2,55 spores pour l'active avant,
-   1,05 apres, et toujours pas d'ecart sur la collee. Une croute de sel est
-   une tache, pas une fatalite. */
-const R_MENACE = [400, 1100];
 
 /* Duree maximale d'un plateau, en secondes de colonie. */
 export const T_MAX = 3 * 3600;
@@ -248,11 +214,105 @@ export const T_MAX = 3 * 3600;
 /* Les traits SONT des constantes du moteur. C'est ce qui rend l'heritage
    presque gratuit, et ce qui garantit qu'un trait herite se VOIT. */
 export const GENOME_BASE = {
-  vitesse: 1,        // x V_MICRO
+  vitesse: 1,        // x V_MICRO : etendue rapide contre cout par um
   uch: 1,            // x UCH : ramifier dense ou filer loin
   calibre: 1,        // x R : debit de transport contre cout de construction
   tolerance: 1,      // resistance au front
+  sac: 1,            // x MASSE_SPORE : un gros sporocyste emporte plus, et
+                     //   met plus longtemps a se remplir
+  reserve: 1,        // x RESERVE_SPORE : germer vite contre germer riche
 };
+
+/* CE QUE LA SPORE APPORTE EN ARRIVANT, reparti sur ses premieres pointes.
+   Une spore ne demarre pas a zero : elle a des globules lipidiques, et c'est
+   precisement ce qui lui permet de germer avant d'avoir mange.
+
+   220 — deux fois le confort d'un noeud, reparti sur les trois premieres
+   pointes —, et c'est un chiffre balaye, pas suppose. Sur huit graines, la
+   reserve change l'OUVERTURE, donc tout le reste :
+
+     reserve    passive  active  devant  collee  frontale
+        0         1,13    2,13    3/8     2,63     0,50
+      120         1,75    2,13    3/8     3,00     1,00
+      220         0,88    2,38    6/8     1,88     0,25
+      330         1,50    1,63    4/8     2,00     0,38
+
+   A zero et a 120, la colonie livree a elle-meme s'en sort aussi bien qu'une
+   colonie jouee : l'ouverture est si contrainte qu'aucune decision precoce
+   ne porte. A 330 elle est si confortable que le debut ne se joue plus non
+   plus. A 220 l'active gagne sur six graines sur huit, elle passe devant la
+   politique collee, et poser son sporocyste du mauvais cote coute un facteur
+   neuf. C'est la que l'ouverture est une decision.
+
+   C'est aussi le trait `reserve` du genome, et l'arbitrage est reel : une
+   grosse reserve part mieux, une petite laisse de la masse au sporocyste. */
+const RESERVE_SPORE = 220;
+
+/* --- l'heritage ------------------------------------------------------------
+
+   LES TRAITS SONT DEJA DES CONSTANTES DU MOTEUR, et c'est ce qui rend cette
+   partie presque gratuite — et ce qui garantit qu'un trait herite SE VOIT :
+
+     vitesse    V_MICRO            etendue rapide contre cout par um
+     uch        UCH                ramifier dense ou filer loin
+     calibre    D_TRANS, COUT_EXT  debit de transport contre cout de construction
+     tolerance  marge sur le front survivre au sec contre rendement
+     sac        MASSE_SPORE        combien on emporte contre le temps de remplir
+     reserve    RESERVE_SPORE      germer vite contre germer riche
+
+   Il n'y a rien a inventer : on propose trois candidates mutees, le joueur en
+   choisit une, et il la regarde partir. Le plus beau moment du moteur devient
+   le moment de decision du roguelite.
+
+   Chaque candidate porte UNE mutation dominante en plus de la derive de fond.
+   Sans elle, trois tirages gaussiens sur six traits se ressemblent tous, et
+   le choix n'en est pas un : on veut pouvoir dire « celle-la est la rapide ».
+*/
+export const TRAITS = {
+  vitesse:   { nom: 'Vitesse de pointe',   pour: 'pousse plus vite',        contre: 'coûte plus cher au micromètre' },
+  uch:       { nom: 'Unité de croissance', pour: 'file plus loin',          contre: 'ramifie moins' },
+  calibre:   { nom: 'Calibre du tube',     pour: 'transporte mieux',        contre: 'coûte plus cher à construire' },
+  tolerance: { nom: 'Tolérance au sec',    pour: 'résiste au front',        contre: '—' },
+  sac:       { nom: 'Taille du sporocyste', pour: 'emporte plus de spores', contre: 'met plus longtemps à se remplir' },
+  reserve:   { nom: 'Réserve de la spore', pour: 'germe mieux',             contre: 'autant de moins pour le sporocyste' },
+};
+
+const CLES_TRAITS = Object.keys(GENOME_BASE);
+/* Derive de fond, ecart type. */
+const DERIVE = 0.07;
+/* Ce que la mutation dominante ajoute, en plus. */
+const DOMINANTE = 0.22;
+/* Bornes : au-dela, un trait cesse d'etre un arbitrage et devient un
+   interrupteur. */
+const TRAIT_MIN = 0.55, TRAIT_MAX = 1.70;
+
+/** Une spore mutee, et le trait qui la caracterise. */
+export function muter(genome, rng, cle = null) {
+  const g = { ...GENOME_BASE, ...genome };
+  const dom = cle || CLES_TRAITS[(rng() * CLES_TRAITS.length) | 0];
+  for (const k of CLES_TRAITS) {
+    /* Box-Muller : une derive gaussienne, pas uniforme — une mutation est
+       le plus souvent petite. */
+    const u = Math.max(1e-9, rng()), v = rng();
+    const n = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+    let x = g[k] * (1 + n * DERIVE);
+    if (k === dom) x *= 1 + (rng() < 0.5 ? -DOMINANTE : DOMINANTE);
+    g[k] = clamp(x, TRAIT_MIN, TRAIT_MAX);
+  }
+  return { genome: g, dominante: dom, sens: g[dom] >= (genome[dom] ?? 1) ? 1 : -1 };
+}
+
+/** Trois candidates, chacune avec une dominante DIFFERENTE : sans ca, deux
+    des trois portaient reguliairement le meme trait et le choix se reduisait
+    a deux. */
+export function troisSpores(genome, rng) {
+  const cles = [...CLES_TRAITS];
+  for (let i = cles.length - 1; i > 0; i--) {
+    const j = (rng() * (i + 1)) | 0;
+    [cles[i], cles[j]] = [cles[j], cles[i]];
+  }
+  return [0, 1, 2].map((i) => muter(genome, rng, cles[i]));
+}
 
 export class Jeu {
   constructor(opts = {}) {
@@ -260,7 +320,15 @@ export class Jeu {
     this.rng = mulberry32(graine ^ 0x9e3779b9);
     this.genome = { ...GENOME_BASE, ...(opts.genome || {}) };
 
-    this.th = new Thalle({ graine, vMicro: V_MICRO * this.genome.vitesse });
+    /* LE PLATEAU. Tout ce qui suit — stock, front, taches hostiles — en
+       vient : voir `sim/matrices.js`. Les constantes gardees ici sont celles
+       de la gelose neutre, c'est-a-dire les valeurs calibrees aux verdicts
+       19 a 21 ; une matrice les module, elle ne les remplace pas. */
+    this.mat = opts.matrice || MATRICE_NEUTRE;
+    this.th = new Thalle({
+      graine, vMicro: V_MICRO * this.genome.vitesse, matrice: this.mat,
+      uch: this.genome.uch,
+    });
     this.th.modul = (p) => this.modulation(p);
     this.th.consigne = (p) => (p === this.tenue ? this.capForce : null);
 
@@ -289,23 +357,33 @@ export class Jeu {
     this.absorbe = 0; this.depense = 0; this.perdu = 0;
     this.entretien = 0; this.autolyses = 0;
     this.tRef = 0; this.totRef = 0; this.resRef = 0;
-    this.tuesParMenace = 0;
+    this.tuesParMenace = 0; this.lysees = 0;
     this.branchesForcees = 0; this.tempsTenu = 0; this.tempsHaut = 0;
 
     /* Les menaces sont tirees a la construction : le plateau est le meme a
        chaque partie de la meme graine, sinon il se re-tirerait dans le dos
        du joueur pendant qu'il est ailleurs, et ca se verrait. */
     this.menaces = [];
-    for (let i = 0; i < N_MENACE; i++) {
+    const M = this.mat.menaces;
+    for (let i = 0; i < M.n; i++) {
       const a = this.rng() * Math.PI * 2, d = 400 + this.rng() * 1800;
+      const rMax = M.r0 + this.rng() * (M.r1 - M.r0);
+      /* UNE TACHE `fixe` EST LA DEPUIS LE DEBUT ET NE GRANDIT PAS. Les
+         vesicules a huile d'un zeste sont des mines : elles n'arrivent pas,
+         elles sont la, et c'est le seul plateau qu'on puisse lire en entier
+         avant d'y aller — le seul ou lire sert vraiment. La concurrence d'un
+         compost, elle, gagne du terrain aussi vite qu'on en gagne. */
       this.menaces.push({
         x: Math.cos(a) * d, y: Math.sin(a) * d,
-        t0: 1200 + this.rng() * 7800, r: 0,
-        rMax: R_MENACE[0] + this.rng() * (R_MENACE[1] - R_MENACE[0]),
+        t0: M.fixe ? 0 : 1200 + this.rng() * 7800,
+        r: M.fixe ? rMax : 0, rMax,
       });
     }
 
     this.majGraphe();
+    /* La reserve de la spore, versee aux premiers noeuds. */
+    const r0 = RESERVE_SPORE * this.genome.reserve / Math.max(1, this.noeuds.length);
+    for (const nd of this.noeuds) nd.res = r0;
   }
 
   /* --- le plateau ---------------------------------------------------------- */
@@ -319,8 +397,21 @@ export class Jeu {
     return 0;
   }
 
+  /** Ce qu'il faut rassembler pour un sporocyste, avec le trait `sac`. Un
+      gros sac emporte plus de spores et met plus longtemps a se remplir. */
+  get masseSac() { return MASSE_SPORE * this.genome.sac; }
+
+  /** Vitesse du front sur ce plateau, um/s. Une mie seche deux fois plus
+      vite qu'un fromage, et c'est toute la difference de strategie. */
+  get vFront() { return this.mat.front.v; }
+
   /** Abscisse du front de dessechement a l'instant courant. */
-  get front() { return FRONT_DEPART + V_FRONT * this.t; }
+  get front() { return this.mat.front.depart + this.mat.front.v * this.t; }
+
+  /** Ce que contient une cellule PLEINE sur ce plateau. Le riz plafonne
+      parce qu'il n'y a presque pas d'azote a prendre, pas parce qu'on y
+      pousse lentement : vitesse et stock sont deux choses. */
+  get plein() { return STOCK_PLEIN * this.mat.stock; }
 
   /** Ce qui reste a manger dans la cellule d'un point. */
   cle(x, y) {
@@ -330,7 +421,7 @@ export class Jeu {
   reste(x, y) {
     const k = this.cle(x, y);
     let s = this.stock.get(k);
-    if (s === undefined) { s = STOCK_PLEIN * this.th.matrice(x, y); this.stock.set(k, s); }
+    if (s === undefined) { s = this.plein * this.th.matrice(x, y); this.stock.set(k, s); }
     return s;
   }
 
@@ -339,7 +430,7 @@ export class Jeu {
       n'a jamais approche aucune. */
   resteVu(x, y) {
     const s = this.stock.get(this.cle(x, y));
-    return s === undefined ? STOCK_PLEIN * this.th.matrice(x, y) : s;
+    return s === undefined ? this.plein * this.th.matrice(x, y) : s;
   }
 
   /**
@@ -500,7 +591,7 @@ export class Jeu {
               Elles ne se lisent que d'en haut : voir `vue()`. */
     for (const m of this.menaces) {
       if (this.t < m.t0) continue;
-      m.r = Math.min(m.rMax, R_MENACE0 + V_MENACE * (this.t - m.t0));
+      m.r = Math.min(m.rMax, R_MENACE0 + this.mat.menaces.v * (this.t - m.t0));
     }
     if (this.menaces.some((m) => m.r > 0)) {
       for (const nd of N) {
@@ -517,8 +608,17 @@ export class Jeu {
       if (nd.mort) continue;
       const k = this.cle(nd.x, nd.y);
       let s = this.stock.get(k);
-      if (s === undefined) { s = STOCK_PLEIN * th.matrice(nd.x, nd.y); }
+      if (s === undefined) { s = this.plein * th.matrice(nd.x, nd.y); }
       if (s <= 0) { this.stock.set(k, 0); continue; }
+      /* LE RENDEMENT SUIT LA CONCENTRATION ABSOLUE, pas le remplissage
+         relatif de la cellule. Rapporte a `plein`, une cellule de riz
+         donnait autant par seconde qu'une cellule de fromage et se vidait
+         deux fois et demie plus vite : la colonie n'avait pas le temps
+         d'atteindre du frais et mourait a la cinq-centieme seconde — 0,1 mm
+         de mycelium, trois noeuds autolyses, cinq plateaux sur sept morts
+         au demarrage. Rapporte a STOCK_PLEIN, une cellule pauvre donne
+         moins et met le MEME temps a se vider : un riz plafonne, il ne tue
+         pas. C'est exactement ce que le doc demandait. */
       const q = Math.min(s, ABS * dt * (s / STOCK_PLEIN + ABS_PLANCHER));
       this.stock.set(k, s - q);
       nd.res += q;
@@ -550,6 +650,20 @@ export class Jeu {
       } else if (nd.dette) nd.dette = 0;
     }
 
+    /* 3 ter. UNE POINTE DONT LE MYCELIUM EST MORT EST MORTE. Elle tire sa
+              reserve de son noeud de tete ; si celui-ci s'est autolyse, il
+              n'y a plus rien derriere elle. Sans cette ligne, `modulation`
+              rendait 0 pour toujours et la partie continuait avec des
+              pointes vivantes qui n'avancaient plus : sur un plateau pauvre,
+              trois heures de rien, et `fin` ne se declenchait jamais parce
+              que `vive` restait vrai. Une colonie qui ne peut plus pousser
+              n'est pas une colonie qui attend. */
+    for (const p of th.pointes) {
+      if (!p.vive) continue;
+      const n = this.noeudDe(p);
+      if (n >= 0 && N[n].mort) { p.vive = false; p.lysee = true; this.lysees++; }
+    }
+
     /* 4. Facturation de l'extension, au noeud de tete. */
     for (const p of th.pointes) {
       const da = p.l - (p.lAv ?? p.l);
@@ -566,7 +680,12 @@ export class Jeu {
           pauvre comme hydraulique et c'est assume — ce n'est pas un modele
           de pression, c'est un gradient qui coule. */
     const E = this.aretes;
-    const aTot = D_TRANS * dt / (PAS_NOEUD * PAS_NOEUD);
+    /* LE CALIBRE EST UN ARBITRAGE, ET C'EST LE PLUS BEL ARBITRAGE DU LOT :
+       une section double transporte deux fois mieux et coute deux fois plus
+       cher au micrometre. Les deux sont deja dans le moteur — la diffusivite
+       ici, `COUT_EXT` a l'etape 4 —, il n'y a qu'a les brancher au meme
+       trait. */
+    const aTot = D_TRANS * this.genome.calibre * dt / (PAS_NOEUD * PAS_NOEUD);
     const K = Math.max(1, Math.ceil(aTot / ALPHA_MAX));
     const al = aTot / K;
     for (let k = 0; k < K; k++) {
@@ -602,7 +721,7 @@ export class Jeu {
       else {
         const q = Math.min(nd.res, DEBIT_SPORE * dt);
         nd.res -= q; sp.masse += q;
-        if (sp.masse >= MASSE_SPORE) {
+        if (sp.masse >= this.masseSac) {
           this.spores++; this.tSpores.push(this.t); this.sporocyste = null;
         }
       }
@@ -772,6 +891,9 @@ export class Jeu {
     return {
       ou: 'macro', t: this.t,
       front: this.front, vives, reserveTotale: res, tetes,
+      /* Le plateau se lit AVEC la carte : sa vitesse de front et celle de
+         ses taches sont ce qui dit combien de temps on a. */
+      vFront: this.vFront, vMenace: this.mat.menaces.v, plateau: this.mat.cle,
       /* LE CALQUE MENACE, et il n'existe QU'ICI. Une hyphe ne voit pas a un
          millimetre : la vue micro n'en dit rien, et c'est ce qui fait qu'on
          paie de rester en bas. */
@@ -799,8 +921,8 @@ export class Jeu {
 
   /** Avancement du sporocyste, pour le diagnostic du banc. */
   get avancement() {
-    return this.sporocyste ? this.sporocyste.masse / MASSE_SPORE : 0;
+    return this.sporocyste ? this.sporocyste.masse / this.masseSac : 0;
   }
 }
 
-export { MASSE_SPORE, CONFORT, STOCK_PLEIN, V_FRONT, FRONT_DEPART, MAILLE_RES };
+export { MASSE_SPORE, CONFORT, STOCK_PLEIN, MAILLE_RES };

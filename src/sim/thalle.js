@@ -21,6 +21,7 @@
 --------------------------------------------------------------------------- */
 
 import { clamp, lerp, smoothstep, mulberry32, fbm2, noise1, TAU } from '../core/util.js';
+import { MATRICE_NEUTRE } from './matrices.js';
 
 /* Unite de croissance hyphale, Trinci : longueur totale / nombre de pointes.
    Quand le quota est depasse, la colonie ramifie. C'est LA regle — une
@@ -51,6 +52,20 @@ const PAS_GEO = 6;
 
 /* Force de l'autotropisme negatif, sans dimension. */
 const K_REPULSE = 0.85;
+
+/* CE QU'UNE STRUCTURE COUTE, ET CE N'EST PAS LA MORT. Une hyphe qui rencontre
+   un globule gras le contourne ou le traverse lentement ; elle n'en meurt
+   pas. A 1 — structure retranchee en plein — le facteur tombait sous le seuil
+   de famine des qu'on touchait une cloison, et les sept plateaux mouraient au
+   demarrage : 0,1 a 4,2 mm de mycelium contre 69 sur la gelose, zero pointe
+   vivante partout. A 0,75, une pointe prise dans une structure pleine pousse
+   au quart de sa vitesse — elle peine, elle cherche, elle sort. Ce qui
+   l'oriente, c'est le tropisme de matrice, qui lit deja `facteur` a gauche et
+   a droite du cap : il n'y a pas de second mecanisme. */
+const K_STRUCT = 0.75;
+
+/* En dessous, on considere qu'une spore peut germer la. */
+const SEUIL_PASSAGE = 0.12;
 
 /* Distance de fusion, um. L'anastomose est ce qui fait un RESEAU et non un
    arbre : derriere le front, les hyphes se rejoignent. Une pointe qui touche
@@ -103,6 +118,14 @@ export class Thalle {
     this.graine = opts.graine ?? 20260928;
     this.rng = mulberry32(this.graine);
     this.vMicro = opts.vMicro ?? 19.4;     // um/min
+    /* LE PLATEAU. Par defaut la gelose sur laquelle le macro a ete calibre :
+       une matrice de jeu ne doit pas pouvoir changer ce qui a ete mesure
+       ailleurs. Voir `sim/matrices.js`. */
+    this.mat = opts.matrice || MATRICE_NEUTRE;
+    /* L'UNITE DE CROISSANCE HYPHALE EST UN TRAIT DU GENOME : ramifier dense
+       ou filer loin. 110 um est la valeur de Trinci, et c'est la valeur par
+       defaut ; le jeu la module, personne d'autre. */
+    this.uch = UCH * (opts.uch ?? 1);
     this.v0 = this.vMicro / 60;            // um/s
     this.omMax = this.v0 / R_VIRAGE;       // rad/s a consigne pleine
     this.maxPointes = opts.maxPointes ?? 1400;
@@ -135,7 +158,14 @@ export class Thalle {
     /* Une spore germe par trois tubes germinatifs, repartis. Un seul donnerait
        une colonie qui pousse d'un cote pendant dix minutes. */
     const th0 = this.rng() * TAU;
-    for (let i = 0; i < 3; i++) this.semer(0, 0, th0 + (i / 3) * TAU, 0);
+    /* OU LA SPORE EST TOMBEE. Sur la gelose, a l'origine. Sur un aliment, la
+       ou il y a de quoi : une spore tombee au fond d'une alveole de mie ne
+       germe pas, et faire demarrer toutes les parties sur un point mort
+       n'apprend rien au joueur. On cherche donc un depart praticable, en
+       spirale autour de l'origine — c'est aussi ce que fait une spore, qui
+       tombe par milliers et dont une seule s'en sort. */
+    const [dx, dy] = this.depart();
+    for (let i = 0; i < 3; i++) this.semer(dx, dy, th0 + (i / 3) * TAU, 0);
   }
 
   /**
@@ -179,6 +209,29 @@ export class Thalle {
     return p;
   }
 
+  /**
+   * Un point de depart praticable : peu de structure et de quoi manger.
+   * Sur la matrice neutre, `struct` vaut 0 partout et on rend (0, 0) du
+   * premier coup — rien ne change pour les pages qui existaient.
+   */
+  depart() {
+    /* ON NE CHERCHE QUE CE QUI BLOQUE, PAS CE QUI NOURRIT, et la nuance
+       n'est pas mineure : en cherchant le point le plus RICHE, la gelose
+       elle-meme demarrait 107 um a cote de l'origine, sur un maximum du
+       bruit — et toute la calibration bougeait avec. Mesure : 447 pointes a
+       quatre heures au lieu de 386, et les verdicts 14, 19 et 20 tombaient.
+       Une spore ne choisit pas ou elle tombe ; elle tombe, et ou il y a un
+       mur elle ne germe pas. On ne cherche donc qu'un point PRATICABLE, et
+       sur une matrice sans structure c'est l'origine, du premier coup. */
+    if (this.struct(0, 0) < SEUIL_PASSAGE) return [0, 0];
+    for (let k = 1; k < 200; k++) {
+      const a = k * 2.399963, r = 26 * Math.sqrt(k);
+      const x = Math.cos(a) * r, y = Math.sin(a) * r;
+      if (this.struct(x, y) < SEUIL_PASSAGE) return [x, y];
+    }
+    return [0, 0];
+  }
+
   /* --- la matrice : le plateau de jeu ------------------------------------ */
 
   /**
@@ -191,11 +244,22 @@ export class Thalle {
    * la colonie file en etoile vers les zones riches et on ne lit plus un
    * front, on lit un oursin.
    */
-  matrice(x, y) {
-    const a = fbm2(x / 900, y / 900, 71);
-    const b = fbm2(x / 250, y / 250, 113);
-    return clamp(0.35 + 1.15 * (0.68 * a + 0.32 * b), 0.35, 1.25);
-  }
+  matrice(x, y) { return this.mat.nut(x, y); }
+
+  /**
+   * CE QUI BLOQUE : 0 libre, 1 infranchissable. Alveoles d'une mie, globules
+   * gras d'un fromage, cloisons d'un parenchyme, fibres d'une charcuterie.
+   *
+   * Elle entre dans `facteur`, donc une pointe qui s'y enfonce meurt de
+   * faim — et comme le tropisme de matrice echantillonne `facteur` a gauche
+   * et a droite du cap, UNE HYPHE SUIT LES INTERSTICES SANS QU'ON AIT RIEN
+   * AJOUTE. C'est le meme terme qui orientait deja le front vers le riche :
+   * il n'y a pas de second mecanisme, et c'est tout l'interet.
+   *
+   * La matrice neutre rend 0 partout : `thalle.html`, `monde.html` et
+   * `cycle.html` ne voient aucune difference, et le verdict 13 non plus.
+   */
+  struct(x, y) { return this.mat.struct(x, y); }
 
   /**
    * Facteur de croissance REELLEMENT vu par une pointe : la matrice, moins
@@ -203,7 +267,8 @@ export class Thalle {
    * deja colonisee n'y trouve plus rien.
    */
   facteur(x, y) {
-    return this.matrice(x, y) * Math.max(0, 1 - this.densite(x, y) / DENS_SAT);
+    return this.matrice(x, y) * Math.max(0, 1 - this.densite(x, y) / DENS_SAT)
+         * (1 - K_STRUCT * this.struct(x, y));
   }
 
   /* --- grilles ------------------------------------------------------------ */
@@ -383,7 +448,7 @@ export class Thalle {
           regle est stable par construction. */
     let quota = 0;
     for (const p of vives) quota += p.l - (p.lBranche ?? 0);
-    if (vives.length && vives.length < this.maxPointes && quota / vives.length > UCH) {
+    if (vives.length && vives.length < this.maxPointes && quota / vives.length > this.uch) {
       this.ramifier(vives);
     }
   }
@@ -455,5 +520,5 @@ export class Thalle {
   }
 
   /** Unite de croissance hyphale effective : longueur totale / pointes. */
-  get uch() { const n = this.vives; return n ? this.total / n : 0; }
+  get uchMesuree() { const n = this.vives; return n ? this.total / n : 0; }
 }

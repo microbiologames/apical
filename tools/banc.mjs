@@ -14,6 +14,7 @@ import { viserSporangiophore, PENTE, KZ, CAP_MAX } from '../src/sim/sporange.js'
 import { pasMicro } from '../src/main.js';
 import { Jeu } from '../src/sim/jeu.js';
 import * as politiques from './politiques.mjs';
+import { MATRICES } from '../src/sim/matrices.js';
 
 const KOM = 0.016, TAU_OM = 3.5;
 
@@ -840,6 +841,64 @@ function dire(ok, titre, detail) { R.push({ ok, titre, detail }); }
     + `de 1 600 um2/s le reseau est un bac commun (contraste de reserve 1,1 `
     + `entre l'interieur et le front) et l'active se met a PERDRE contre la `
     + `passive \u2014 c'est le 243 contre 223 du prototype mort`);
+}
+
+/* 22. CHAQUE PLATEAU EST UN ALIMENT, ET DEUX ALIMENTS NE DONNENT PAS LA MEME
+       PARTIE. Si deux matrices donnent la meme, il n'y en a qu'une.
+
+   On fait tourner la colonie EN AUTONOMIE sur chacune — ce qu'on mesure est
+   le plateau, pas le joueur — et on compare cinq grandeurs : le mycelium
+   construit, les pointes vivantes a la fin, la densite au front, les spores
+   emportees et la date du premier sporocyste. Chacune est ramenee a [0, 1]
+   sur l'etendue observee, et on regarde la distance de la paire la plus
+   PROCHE : c'est elle qui dit si deux plateaux se confondent. */
+{
+  const DT = 4, G = 3;
+  const profils = [];
+  for (const M of MATRICES) {
+    let mm = 0, np = 0, dens = 0, sp = 0, t1 = 0, n1 = 0;
+    for (let g = 1; g <= G; g++) {
+      const j = new Jeu({ graine: g, matrice: M });
+      while (!j.fin) j.pas(DT);
+      mm += j.th.total / 1000; np += j.th.vives; sp += j.spores;
+      const r = j.th.diametre / 2000;
+      dens += r > 0.1 ? (j.th.total / 1000) / (Math.PI * r * r) : 0;
+      if (j.tSpores.length) { t1 += j.tSpores[0] / 60; n1++; }
+    }
+    profils.push({
+      cle: M.cle, v: [mm / G, np / G, dens / G, sp / G, n1 ? t1 / n1 : 180],
+    });
+  }
+  /* Normalisation par grandeur, sur l'etendue observee. */
+  const n = profils[0].v.length;
+  const lo = [], hi = [];
+  for (let k = 0; k < n; k++) {
+    lo[k] = Math.min(...profils.map((p) => p.v[k]));
+    hi[k] = Math.max(...profils.map((p) => p.v[k]));
+  }
+  const u = (p) => p.v.map((x, k) => (hi[k] - lo[k] > 1e-9 ? (x - lo[k]) / (hi[k] - lo[k]) : 0));
+  let dMin = Infinity, paire = '';
+  for (let i = 0; i < profils.length; i++) {
+    for (let j = i + 1; j < profils.length; j++) {
+      const a = u(profils[i]), b = u(profils[j]);
+      let d = 0;
+      for (let k = 0; k < n; k++) d += (a[k] - b[k]) ** 2;
+      d = Math.sqrt(d / n);
+      if (d < dMin) { dMin = d; paire = `${profils[i].cle}/${profils[j].cle}`; }
+    }
+  }
+  const vivants = profils.filter((p) => p.v[0] > 8).length;
+  const ordre = [...profils].sort((a, b) => b.v[3] - a.v[3]);
+  dire(dMin > 0.15 && vivants === profils.length,
+    'deux aliments ne donnent pas la meme partie',
+    `${profils.length} plateaux, colonie en autonomie, ${G} graines de 3 h. `
+    + `Paire la plus proche : ${paire}, distance ${dMin.toFixed(2)} sur un `
+    + `profil normalise de 5 grandeurs (mycelium, pointes, densite, spores, `
+    + `date du premier sporocyste) ; ${vivants}/${profils.length} plateaux `
+    + `colonisables. Du plus genereux au plus avare : `
+    + ordre.map((p) => `${p.cle} ${p.v[3].toFixed(1)}`).join(', ')
+    + ` spore(s) ; mycelium de ${Math.min(...profils.map((p) => p.v[0])).toFixed(0)} `
+    + `a ${Math.max(...profils.map((p) => p.v[0])).toFixed(0)} mm`);
 }
 
 /* 7. budget */

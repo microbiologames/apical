@@ -192,6 +192,33 @@ en choisit une parmi trois**, chacune avec son génome muté — et il la regard
 partir. Le plus beau moment du moteur devient le moment de décision du
 roguelite. Il n'y a rien à inventer, juste à proposer trois candidates.
 
+**C'est écrit** (`GENOME_BASE`, `muter`, `troisSpores`). Six traits, chacun
+branché sur la constante qui le porte : `vitesse` → `V_MICRO`, `uch` → `UCH`,
+`calibre` → la diffusivité de transport **et** le coût d'extension,
+`tolerance` → la marge sur le front, `sac` → `MASSE_SPORE`, `reserve` → ce que
+la spore apporte en arrivant.
+
+Chaque candidate porte **une mutation dominante** en plus de la dérive de fond,
+et les trois dominantes sont toujours différentes. Sans ça, trois tirages
+gaussiens sur six traits se ressemblent tous et le choix n'en est pas un : on
+veut pouvoir dire « celle-là est la rapide ».
+
+**La réserve de la spore a dû être mesurée, pas choisie**, parce qu'elle change
+l'*ouverture*, donc tout le reste — sur huit graines :
+
+| réserve | passive | active | devant | collée | frontale |
+|---|---|---|---|---|---|
+| 0 | 1,13 | 2,13 | 3/8 | 2,63 | 0,50 |
+| 120 | 1,75 | 2,13 | 3/8 | 3,00 | 1,00 |
+| **220** | **0,88** | **2,38** | **6/8** | **1,88** | **0,25** |
+| 330 | 1,50 | 1,63 | 4/8 | 2,00 | 0,38 |
+
+À zéro et à 120, la colonie livrée à elle-même s'en sort aussi bien qu'une
+colonie jouée : l'ouverture est si contrainte qu'aucune décision précoce ne
+porte. À 330 elle est si confortable que le début ne se joue plus non plus.
+**À 220 l'ouverture est une décision** — et c'est aussi le seul réglage où la
+politique active passe devant la politique collée.
+
 ---
 
 ## 7. La forme d'une partie
@@ -411,16 +438,84 @@ avant d'y aller. Un riz est confortable et plafonne : on n'y fera jamais un gros
 sporocyste, autant repartir vite. **Le plateau dicte la stratégie de sortie**,
 et c'est ce qui donne envie d'en voir un nouveau.
 
-**Comment c'est produit.** Une matrice est une fonction de bruit et un jeu de
-constantes, pas une image. Les structures — alvéoles, cellules, globules,
-fibres — sont des champs de distance sur des cellules hachées en coordonnées
-monde, exactement comme le grain de gélose actuel. C'est la même technique que
-la silhouette de l'hyphe, à une autre échelle.
+**Comment c'est produit.** `src/sim/matrices.js`. Une matrice est une fonction
+de bruit et un jeu de constantes, pas une image. Les structures — alvéoles,
+cellules, globules, fibres — sont des champs de distance sur des cellules
+hachées en coordonnées monde, exactement comme le grain de gélose. C'est la
+même technique que la silhouette de l'hyphe, à une autre échelle.
 
-**Comment ça se vérifie.** Un verdict par famille de matrice : la colonie doit
-s'y comporter différemment — vitesse d'extension, densité au front, date de
-sporulation optimale. Si deux matrices donnent la même partie, il n'y en a
-qu'une.
+Chaque plateau donne quatre choses : un **champ nutritif** (la vitesse), un
+**stock** (le rendement — ce n'est pas la même chose), une **structure**
+(0 libre, 1 infranchissable) et un **danger propre** (front et taches).
+
+### La fenêtre de viabilité est étroite, et elle est mesurée
+
+Premier jeu de valeurs : **cinq plateaux sur sept mouraient au démarrage**,
+0,1 à 4 mm de mycélium. On a donc balayé les deux variables une à une, sur une
+matrice neutre par ailleurs, cinq graines chacune :
+
+| stock | 0,50 | 0,65 | 0,80 | 0,95 | 1,10 | 1,25 | 1,40 |
+|---|---|---|---|---|---|---|---|
+| mycélium (mm) | 0,4 | 1,3 | 14,7 | 79,7 | 114,4 | 151,8 | 165,0 |
+| spores | 0,00 | 0,00 | 0,00 | 2,00 | 4,60 | 7,40 | 9,40 |
+| éteintes | 5/5 | 5/5 | 4/5 | 0/5 | 0/5 | 0/5 | 0/5 |
+
+| structure (uniforme) | 0,00 | 0,15 | 0,30 | 0,45 | 0,60 |
+|---|---|---|---|---|---|
+| mycélium (mm) | 86,3 | 86,5 | 40,8 | 27,3 | 10,3 |
+| éteintes | 0/5 | 0/5 | 3/5 | 4/5 | 5/5 |
+
+En dessous de 0,8 de stock le compte ne tombe jamais juste : un nœud absorbe
+moins que son entretien avant que la colonie n'ait atteint du frais. **La
+bonne nouvelle est que la fenêtre utile, 0,95 à 1,40, suffit largement** :
+elle va de 2,0 à 9,4 spores, soit un facteur près de cinq. Une petite
+différence de rendement se compose.
+
+Trois corrections sont sorties de là, et les trois étaient des erreurs de
+modèle, pas de réglage :
+
+1. **le rendement suit la concentration, pas le remplissage relatif.** Rapporté
+   au plein de *sa* cellule, un riz donnait autant par seconde qu'un fromage et
+   se vidait deux fois et demie plus vite — la colonie mourait à la
+   cinq-centième seconde. Rapporté à une référence absolue, une cellule pauvre
+   donne moins et met le **même** temps à se vider : un riz plafonne, il ne tue
+   pas ;
+2. **une structure n'est pas une condamnation.** Retranchée en plein, elle
+   faisait tomber le facteur sous le seuil de famine dès qu'on touchait une
+   cloison. À 0,75, une pointe prise dans une structure pleine pousse au quart
+   de sa vitesse : elle peine, elle cherche, elle sort ;
+3. **une colonie dont tous les nœuds sont morts était encore « vivante ».**
+   Elle ne poussait plus, mais `fin` ne se déclenchait jamais. Une pointe dont
+   le mycélium est autolysé est morte.
+
+### Ce que les sept plateaux donnent
+
+Mesuré, politique active, 8 graines de 3 h :
+
+| plateau | mycélium | pointes | densité | spores | 1er sporocyste |
+|---|---|---|---|---|---|
+| **riz** | 118 mm | 73 | 4,7 | 3,0 | 63 min |
+| **fromage** | 79 mm | 53 | 4,2 | **8,1** | 61 min |
+| **fruit** | 70 mm | 40 | 3,4 | 5,5 | 55 min |
+| **charcuterie** | 43 mm | 28 | 1,5 | 2,9 | **104 min** |
+| **compost** | 29 mm | 5 | 1,5 | 2,4 | 61 min |
+| **zeste** | 26 mm | 0 | — | **0,4** | 62 min |
+| **mie** | 19 mm | 0 | — | 1,3 | 61 min |
+
+Chacun tient son identité. Le **riz** fait la plus grosse colonie et le plus
+petit sporocyste — on s'y étend sans accumuler, exactement ce qu'on voulait.
+La **charcuterie** est la seule à avoir une *direction* : la colonie s'y étale
+dans le sens du grain au lieu de faire un disque, et sa densité le dit (1,5
+contre 4,7). La **mie** meurt avant la fin mais emporte quand même quelque
+chose, parce qu'elle sporule tôt. Le **zeste** est le plateau dur.
+
+### Verdict 22 — « deux aliments ne donnent pas la même partie »
+
+Colonie **en autonomie** sur chacun des sept — ce qu'on mesure est le plateau,
+pas le joueur — et on compare cinq grandeurs normalisées : mycélium, pointes,
+densité, spores, date du premier sporocyste. **La paire la plus proche
+(charcuterie/compost) est à 0,20**, et les sept sont colonisables. La marge
+sur le seuil (0,15) n'est pas énorme, et c'est dit.
 
 ---
 

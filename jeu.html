@@ -62,7 +62,22 @@ kbd{font-family:var(--mono);font-size:10px;color:var(--encre-3);
 #fin[hidden]{display:none}
 #fin h2{font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:.16em;
   text-transform:uppercase;color:var(--accent);margin:0 0 10px}
-#fin p{margin:0 0 18px;color:var(--encre-2);max-width:44ch}
+#fin p{margin:0 auto 20px;color:var(--encre-2);max-width:46ch}
+#spores3{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
+#spores3[hidden]{display:none}
+.spore{display:flex;flex-direction:column;align-items:flex-start;gap:3px;
+  width:172px;padding:11px 12px;text-align:left;border-radius:8px;line-height:1.35}
+.spore .tr{font-size:12.5px;color:var(--encre)}
+.spore .va{font-family:var(--mono);font-size:15px;font-variant-numeric:tabular-nums}
+/* UNE MUTATION A LA BAISSE N'EST PAS UN DANGER, C'EST UN ARBITRAGE : un
+   calibre plus fin coute moins cher a construire. Le rouge disait « perdu »
+   alors que la carte dit juste « autre chose ». Ambre pour ce qui monte,
+   bleu froid pour ce qui descend — et les deux se distinguent, ce que
+   #c9b98a et #c98a8a ne faisaient pas. */
+.spore .va.plus{color:var(--accent)}
+.spore .va.moins{color:#8fa8c4}
+.spore .po{font-size:11px;color:var(--encre-2)}
+.spore:hover .po,.spore:hover .tr{color:var(--encre)}
 </style>
 </head>
 <body>
@@ -70,7 +85,7 @@ kbd{font-family:var(--mono);font-size:10px;color:var(--encre-3);
 <div id="vue">
   <canvas id="toile"></canvas>
   <div id="bandeau">
-    <span>on regarde — <i id="ou" style="font-style:normal"></i></span>
+    <span>plateau <b id="tour">1</b> — <i id="plateau" style="font-style:normal"></i> · <i id="ou" style="font-style:normal"></i></span>
     <span id="droite">
       <span id="chrono"></span> ·
       spores <b id="spores">0</b> ·
@@ -84,7 +99,12 @@ kbd{font-family:var(--mono);font-size:10px;color:var(--encre-3);
     <div>
       <h2 id="finTitre"></h2>
       <p id="finTexte"></p>
-      <button id="bRejouer">Une autre matrice</button>
+      <div id="spores3" hidden>
+        <button class="spore" data-spore="0"><span class="tr"></span><span class="va"></span><span class="po"></span></button>
+        <button class="spore" data-spore="1"><span class="tr"></span><span class="va"></span><span class="po"></span></button>
+        <button class="spore" data-spore="2"><span class="tr"></span><span class="va"></span><span class="po"></span></button>
+      </div>
+      <button id="bRejouer">Repartir d’une spore sauvage</button>
     </div>
   </div>
 </div>

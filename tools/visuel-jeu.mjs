@@ -51,6 +51,47 @@ await p.evaluate(()=>{ globalThis.apical.remonter(); });
 await p.waitForFunction(()=>globalThis.apical.mode==='macro',null,{timeout:30000,polling:32});
 await p.waitForTimeout(600); await tirer('6-remonte');
 
+/* LES SEPT PLATEAUX. Ce que le banc mesure, on le regarde aussi : une mie
+   n'a pas la meme tete qu'un fromage, et si elle en a une, il n'y en a
+   qu'un. */
+const cles = await p.evaluate(async () => {
+  const { MATRICES } = await import('/src/sim/matrices.js');
+  return MATRICES.map((m) => m.cle);
+});
+for (const c of cles) {
+  await p.evaluate((k) => {
+    const a = globalThis.apical;
+    a.reset(11);
+    const i = a.ordre.findIndex((j) => j >= 0);
+    /* on force le plateau demande */
+    a.tour = 0; a.ordre = [k];
+    a.nouveauPlateau();
+  }, cles.indexOf(c));
+  await p.waitForFunction(() => globalThis.apical.jeu.t > 2700, null, { timeout: 120000, polling: 32 });
+  await tirer('p-' + c);
+}
+
+/* LE CHOIX DES TROIS SPORES. On force une fin gagnante : le geste de fin du
+   roguelite est ce qui se regarde le plus dans une partie. */
+await p.evaluate(() => {
+  const a = globalThis.apical;
+  a.reset(5); a.jeu.spores = 3; a.jeu.fin = 'temps';
+});
+await p.waitForTimeout(700);
+await (await p.$('#vue')).screenshot({ path: '/tmp/apical-shots/jeu-9-spores.png' });
+console.log('spores', await p.evaluate(() => {
+  const c = globalThis.apical.etat().candidates;
+  return c ? c.map((x) => x.trait + ' ' + x.valeur.toFixed(2)).join(' | ') : 'aucune';
+}));
+/* et on en choisit une : le plateau doit changer */
+await p.click('[data-spore="1"]');
+await p.waitForTimeout(500);
+console.log('apres choix', await p.evaluate(() => {
+  const a = globalThis.apical, e = a.etat();
+  return JSON.stringify({ tour: e.tour, plateau: e.plateau,
+    genome: Object.fromEntries(Object.entries(e.genome).map(([k, v]) => [k, +v.toFixed(2)])) });
+}));
+
 /* le HUD au repos : on ne touche plus a rien pendant huit secondes */
 await p.evaluate(()=>{ globalThis.apical.geste = performance.now() - 20000; });
 await p.waitForTimeout(1400);

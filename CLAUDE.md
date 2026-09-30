@@ -13,7 +13,7 @@ les captures de contrôle.
 | Commande | Ce qu'elle fait |
 |---|---|
 | `npm run serve` | sert le dépôt tel quel |
-| `npm run banc` | 21 verdicts de mesure, sans rendu, en node |
+| `npm run banc` | 22 verdicts de mesure, sans rendu, en node |
 | `npm run visuel` | captures dans `/tmp/apical-shots` (Playwright) |
 | `npm run visuel:branche` | captures de la page ramification |
 | `npm run visuel:thalle` | captures de la page colonie |
@@ -609,6 +609,40 @@ capteur (crochet `opts.calque` de `VueThalle`). Le réticule — le front, le
 sporocyste, la pointe visée — est sur le verre de l'oculaire : après tout,
 en `direct`. Il n'y en a que trois, et pas un de plus.
 
+**CHAQUE PLATEAU EST UN ALIMENT** — `src/sim/matrices.js`, verdict 22. Une
+moisissure alimentaire ne pousse pas sur du bruit de Perlin : elle pousse
+dans une mie, une pâte, un parenchyme. Chaque matrice donne quatre choses,
+et les quatre sont des paramètres du moteur existant : un **champ nutritif**
+(la vitesse), un **stock** (le rendement — ce n'est pas la même chose), une
+**structure** (0 libre, 1 infranchissable) et un **danger propre** (front et
+taches). La gélose neutre n'a ni structure ni teinte : `thalle.html`,
+`monde.html` et `cycle.html` ne voient rien changer, et le verdict 13 non
+plus.
+
+**Une hyphe suit les interstices sans qu'on ait rien ajouté.** La structure
+entre dans `facteur`, et le tropisme de matrice échantillonne déjà `facteur`
+à gauche et à droite du cap : il n'y a pas de second mécanisme. Ça se voit —
+sur une mie les hyphes courent sur les parois des alvéoles, et sur une
+charcuterie la colonie s'étale **dans le sens du grain** au lieu de faire un
+disque (densité 1,5 contre 4,7).
+
+**La fenêtre de viabilité est étroite et elle est mesurée.** Le premier jeu de
+valeurs tuait cinq plateaux sur sept au démarrage. Stock en dessous de 0,8 :
+mort ; de 0,95 à 1,40 : de 2,0 à 9,4 spores, soit un facteur près de cinq.
+Structure uniforme au-delà de 0,3 : mort. Trois erreurs de **modèle** en sont
+sorties — le rendement suit la concentration et non le remplissage relatif de
+la cellule, une structure ralentit au lieu de condamner, et une colonie dont
+tous les nœuds sont autolysés n'est pas une colonie qui attend.
+
+**L'HÉRITAGE EST PRESQUE GRATUIT, parce que les traits SONT des constantes du
+moteur** : `vitesse` → `V_MICRO`, `uch` → `UCH`, `calibre` → la diffusivité
+de transport **et** le coût d'extension, `tolerance` → la marge sur le front,
+`sac` → `MASSE_SPORE`, `reserve` → ce que la spore apporte en arrivant. À la
+fin d'un plateau le joueur choisit **une spore parmi trois**, chacune avec sa
+mutation dominante — et les trois dominantes sont toujours différentes, sinon
+trois tirages gaussiens sur six traits se ressemblent tous et le choix n'en
+est pas un.
+
 **Et le verdict 20 est un demi-résultat, dit comme tel dans la sortie du
 banc.** L'emplacement décide (2,35 spores contre 0,45 posé du mauvais côté,
 un facteur cinq) et c'est un geste qui n'existe qu'en haut. Mais une politique
@@ -732,6 +766,19 @@ Et pour le jeu (20 graines de 3 h, `src/sim/jeu.js`) :
 | débit livré à un puits | 2,1 u/s à 11 pointes, 9,4 à 49 | — |
 | budget d'une partie | 62 % entretien, 14 % extension, 18 % perdu | 7 % disponible |
 | indépendance au pas d'intégration | 2,88 / 2,75 / 3,00 à dt = 1, 2, 4 | égalité |
+
+Et pour les sept plateaux (politique active, 8 graines de 3 h) :
+
+| plateau | mycélium | pointes | densité | spores | 1er sporocyste |
+|---|---|---|---|---|---|
+| riz | 118 mm | 73 | 4,7 | 3,0 | 63 min |
+| fromage | 79 mm | 53 | 4,2 | 8,1 | 61 min |
+| fruit | 70 mm | 40 | 3,4 | 5,5 | 55 min |
+| charcuterie | 43 mm | 28 | 1,5 | 2,9 | 104 min |
+| compost | 29 mm | 5 | 1,5 | 2,4 | 61 min |
+| zeste | 26 mm | 0 | — | 0,4 | 62 min |
+| mie | 19 mm | 0 | — | 1,3 | 61 min |
+| paire la plus proche | charcuterie/compost | | | 0,20 | > 0,15 |
 
 Un chiffre documenté sans avoir été mesuré est un chiffre qu'on croit seulement
 avoir. Ça s'est déjà payé.
@@ -1089,6 +1136,40 @@ partie du travail**, pas après, pendant.
   descente, bien avant que le mode ne bascule au sommet du flou. Déduit du
   mode, le panneau lisait `tetes` sur une vue qui n'en avait pas, pendant
   tout le fondu.
+- **Un rendement rapporté au plein de SA cellule n'est pas un rendement.**
+  Une cellule pauvre donnait autant par seconde qu'une riche et se vidait
+  deux fois et demie plus vite : la colonie mourait avant d'avoir atteint du
+  frais, 0,1 mm de mycélium, cinq plateaux sur sept morts au démarrage.
+  Rapporté à une référence absolue, une cellule pauvre donne moins et met le
+  **même** temps à se vider. Un plateau pauvre doit plafonner, pas tuer.
+- **Un obstacle n'est pas une condamnation.** La structure retranchée en
+  plein faisait tomber le facteur sous le seuil de famine dès qu'on touchait
+  une cloison. Une hyphe qui rencontre un globule gras le contourne ou le
+  traverse lentement ; elle n'en meurt pas.
+- **Une colonie dont tous les nœuds sont morts était encore « vivante ».**
+  `modulation` rendait 0 pour toujours et la partie continuait trois heures
+  avec des pointes qui n'avançaient plus, parce que `vive` restait vrai. Une
+  pointe dont le mycélium est autolysé est morte.
+- **Chercher le point de départ le plus RICHE déplace la calibration.** En
+  cherchant un départ praticable, la gélose elle-même démarrait 107 µm à côté
+  de l'origine, sur un maximum du bruit : 447 pointes à quatre heures au lieu
+  de 386, et les verdicts 14, 19 et 20 tombaient. Une spore ne choisit pas où
+  elle tombe ; elle tombe, et là où il y a un mur elle ne germe pas. **On ne
+  cherche donc qu'un point passable**, et sur une matrice sans structure
+  c'est l'origine, du premier coup.
+- **Une constante qui touche l'OUVERTURE touche tout le reste.** La réserve de
+  la spore a été balayée, pas choisie : à 0 et à 120 la colonie livrée à
+  elle-même s'en sort aussi bien qu'une colonie jouée — l'ouverture est si
+  contrainte qu'aucune décision précoce ne porte — et à 330 elle est si
+  confortable que le début ne se joue plus. À 220 l'active gagne sur six
+  graines sur huit.
+- **Un champ qui sert au moteur ne se règle pas pour l'œil.** Les alvéoles
+  d'une mie paraissaient un peu dures ; en adoucissant leur bord de 0,80 à
+  0,55 du rayon, la structure moyenne de tous les plateaux à poches a baissé,
+  **le fromage est passé de 8,1 spores à 1,0**, les sept se sont mis à se
+  ressembler et le verdict 22 est tombé — paire la plus proche de 0,20 à
+  0,08. C'est la contrepartie d'avoir une seule source de vérité : ce qui se
+  règle pour l'apparence se règle **dans le rendu**, jamais dans le champ.
 - **Une capture prise N millisecondes après un changement de phase ne montre
   pas ce qu'on croit.** L'éclatement dure 1,6 s simulée, soit 0,4 s réelle à
   ×4 : la capture arrivait régulièrement quatre images après le basculement en
